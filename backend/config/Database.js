@@ -1,6 +1,6 @@
 import { Sequelize } from "sequelize";
 
-const db = new Sequelize('order_db','root','',{
+const db = new Sequelize('siops_db','root','',{
     host: 'localhost',
     dialect: 'mysql'
 });

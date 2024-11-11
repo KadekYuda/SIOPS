@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
-import { Search } from 'lucide-react'; // Import ikon Search dari Lucide
+import { FilePlus, Search, Trash2 } from 'lucide-react'; // Import ikon Search dari Lucide
+import Trash from '../../Button/Trash';
+import CosButton from '../../Button/CosButton';
 
 const OrderStock = () => {
   const [orders, setOrders] = useState([]);
@@ -218,8 +220,22 @@ const OrderStock = () => {
               <td className="border px-4 py-2">{order.hargaBeli}</td>
               <td className="border px-4 py-2">{order.jumlahBeli}</td>
               <td className="border px-4 py-2">
-                <button onClick={() => handleEditOrder(order.id)} className="bg-yellow-500 text-white p-2 mr-2">Edit</button>
-                <button onClick={() => handleDeleteOrder(order.id)} className="bg-red-500 text-white p-2">Delete</button>
+              <CosButton 
+  icon={FilePlus} 
+  label="Edit" 
+  onClick={() => handleEditOrder(order.id)} 
+  actionType="edit" // Tidak ada modal konfirmasi untuk edit
+  buttonStyle="btn btn-primary"
+/>
+<CosButton 
+  icon={Trash2} 
+  label="Delete" 
+  onConfirm={() => handleDeleteOrder(order.id)} 
+  confirmMessage="Apakah Anda yakin ingin menghapus Stok ini?" 
+  title="Hapus Stok"
+  actionType="delete" // Mengaktifkan modal konfirmasi hanya untuk delete
+  buttonStyle="btn btn-danger" // Style khusus untuk tombol delete
+/>
               </td>
             </tr>
           ))}

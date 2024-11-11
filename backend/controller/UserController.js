@@ -1,6 +1,7 @@
 import User from "../models/UserModel.js"
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
+import sendEmail from "../utils/mail.js";
 
 export const getUsers = async(req, res) => {
     try {
@@ -113,7 +114,7 @@ export const loginUser = async (req, res) => {
       const token = jwt.sign(
         { id: user.id, email: user.email, role: user.role }, // Tambahkan informasi lain jika diperlukan
         process.env.ACCESS_TOKEN_SECRET, // Gunakan variabel lingkungan untuk secret key
-        { expiresIn: '1h' } // Token berlaku selama 1 jam
+        { expiresIn: '24h' } // Token berlaku selama 1 jam
       );
   
       res.status(200).json({ msg: "Login berhasil", token, role: user.role });
@@ -124,4 +125,3 @@ export const loginUser = async (req, res) => {
   };    
   
 
-  

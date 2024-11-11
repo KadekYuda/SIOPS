@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { Link } from "react-router-dom";
-import { FilePlus, Edit, Trash } from 'lucide-react';
+import { FilePlus, Edit,  } from 'lucide-react';
+import Trash from '../../Button/Trash';
 
 const UserList = () => {
   const [users, setUsers] = useState([]);
@@ -108,9 +109,14 @@ const UserList = () => {
                     <Link to={`/edit/${user.id}`} className="bg-blue-500 text-white p-2 rounded-md hover:bg-blue-600">
                       <Edit className="w-4 h-4" />
                     </Link>
-                    <button onClick={() => deleteUser(user.id)} className="bg-red-500 text-white p-2 rounded-md hover:bg-red-600">
-                      <Trash className="w-4 h-4" />
-                    </button>
+                    {/* <button onClick={() => deleteUser(user.id)} className="bg-red-500 text-white p-2 rounded-md hover:bg-red-600">
+                      <Trash2 className="w-4 h-4" /> delete
+                    </button> */}
+                    <Trash 
+                    onConfirm={() => deleteUser(user.id)} 
+                    confirmMessage="Apakah Anda yakin ingin menghapus pengguna ini?" 
+                    title="Hapus Pengguna" 
+                  />
                   </td>
                 )}
               </tr>
