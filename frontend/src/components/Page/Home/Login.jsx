@@ -70,6 +70,7 @@ const Login = () => {
                   type="email"
                   placeholder="Enter your Email"
                   value={email}
+                   autoComplete='username'
                   onChange={(e) => setEmail(e.target.value)}
                   className="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
                 />
@@ -77,9 +78,10 @@ const Login = () => {
                   type="password"
                   placeholder="Password"
                   value={password}
+                  autoComplete='current-password'
                   onChange={(e) => setPassword(e.target.value)}
                   className="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
-                />
+                />    
                 {error && <p className="text-red-500">{error}</p>}
                 <button
                   type="submit"

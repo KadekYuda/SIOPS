@@ -1,13 +1,14 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate  } from 'react-router-dom';
 import axios from 'axios';
-import { Link } from "react-router-dom";
-import { FilePlus, Edit,  } from 'lucide-react';
-import Trash from '../../Button/Trash';
+import { FilePlus, Edit, Trash2  } from 'lucide-react';
+import CrudButton from '../../Button/CrudButton';
 
 const UserList = () => {
   const [users, setUsers] = useState([]);
   const [history, setHistory] = useState([]);
   const [role, setRole] = useState(''); // Menyimpan role pengguna
+  const navigate = useNavigate();
 
   useEffect(() => {
     getUsers();
@@ -39,6 +40,10 @@ const UserList = () => {
     }
   };
 
+  const handleEdit = (userId) => {
+    navigate(`/edit/${userId}`)
+  }
+
   const deleteUser = async (id) => {
     try {
       const token = localStorage.getItem('token'); // Mendapatkan token dari localStorage
@@ -66,13 +71,13 @@ const UserList = () => {
 
         {/* Hanya tampilkan tombol tambah user jika role adalah admin */}
         {role === 'admin' && (
-          <Link
-            to="/add"
-            className="bg-green-500 text-white font-bold py-2 px-4 rounded flex items-center space-x-2 hover:bg-green-600"
-          >
-            <FilePlus className="w-5 h-5" />
-            <span>Tambah User</span>
-          </Link>
+            <CrudButton
+            icon={FilePlus} 
+            label="Tambah User" 
+            onClick={() => navigate("/add")} 
+            buttonStyle="secondary" 
+            className="p-2 rounded-md" 
+          />
         )}
       </div>
 
@@ -106,17 +111,23 @@ const UserList = () => {
                 {/* Hanya tampilkan action buttons jika role adalah admin */}
                 {role === 'admin' && (
                   <td className="py-3 px-4 flex space-x-2">
-                    <Link to={`/edit/${user.id}`} className="bg-blue-500 text-white p-2 rounded-md hover:bg-blue-600">
-                      <Edit className="w-4 h-4" />
-                    </Link>
-                    {/* <button onClick={() => deleteUser(user.id)} className="bg-red-500 text-white p-2 rounded-md hover:bg-red-600">
-                      <Trash2 className="w-4 h-4" /> delete
-                    </button> */}
-                    <Trash 
-                    onConfirm={() => deleteUser(user.id)} 
-                    confirmMessage="Apakah Anda yakin ingin menghapus pengguna ini?" 
-                    title="Hapus Pengguna" 
+                    <CrudButton
+                    icon={Edit} 
+                    label="Edit" 
+                    onClick={() => handleEdit(user.id)} 
+                    actionType="edit" 
+                    buttonStyle="primary" 
+                    className="p-2 rounded-md" 
                   />
+                   <CrudButton
+                  icon={Trash2}
+                  label="Delete"
+                  onConfirm={() => deleteUser(user.id)}
+                  confirmMessage="Apakah Anda yakin ingin menghapus User ini?"
+                  title="Hapus User"
+                  actionType="delete"
+                  buttonStyle="danger" 
+                />
                   </td>
                 )}
               </tr>

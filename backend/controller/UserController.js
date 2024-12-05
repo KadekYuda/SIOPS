@@ -1,7 +1,6 @@
 import User from "../models/UserModel.js"
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
-import sendEmail from "../utils/mail.js";
 
 export const getUsers = async(req, res) => {
     try {
@@ -29,12 +28,13 @@ export const createUser = async (req, res) => {
   const { name, email, password, role} = req.body;
   try {
     
-
     const existingUser = await User.findOne({ where: { email } });
     if (existingUser) {
       return res.status(400).json({ msg: "User dengan email ini sudah ada" });
     }
-    const newUser = await User.create({ name, email, password, role });
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    const newUser = await User.create({ name, email, password:hashedPassword, role });
     res.status(201).json({ msg: "User berhasil dibuat", user: newUser  });
   } catch (error) {
     console.log("Error saat membuat user:", error);

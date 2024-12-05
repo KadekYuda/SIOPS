@@ -6,10 +6,8 @@ import {
     EyeOff,
     User,
     UserPlus,
-    LogIn,
-    LogOut,
     Users,
-    UserPen,
+    PackageSearch,
     Target,
     PieChart,
     LineChart
@@ -49,18 +47,8 @@ import {
   
     {
       href: "",
-      icon: UserPen ,
-      text: "Profile",
-    },
-    {
-      href: "#",
-      icon: LogIn,
-      text: "Sign In",
-    },
-    {
-      href: "/",
-      icon: LogOut,
-      text: "Log Out",
+      icon: PackageSearch ,
+      text: "Opname",
     },
   ];
   
