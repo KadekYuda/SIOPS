@@ -15,19 +15,19 @@ const DashboardLayout = () => {
   const toggleSidebar = () => {
     setIsSidebarOpen((prev) => !prev);
   };
+
   const toggleDarkMode = () => {
     setDarkMode(!darkMode);
   };
 
   return (
     <div className="flex min-h-screen bg-gray-100">
-      {/* Sidebar */}
       <div
         className={clsx(
           "fixed z-40 inset-y-0 left-0 bg-white dark:bg-gray-800 shadow-lg transition-transform duration-300 ease-in-out",
-          isSidebarOpen ? "translate-x-0" : "-translate-x-full", 
+          isSidebarOpen ? "translate-x-0 w-64" : "-translate-x-full", // Mobile
           "lg:translate-x-0 lg:w-64", // Desktop: Sidebar default terbuka
-          !isSidebarOpen && "lg:w-0" // Jika tertutup di desktop
+          !isSidebarOpen && "hidden lg:w-0" // Jika tertutup di desktop
         )}
       >
         <SidebarComponent
@@ -39,6 +39,7 @@ const DashboardLayout = () => {
 
       {/* Mobile Header with Hamburger Menu */}
       <div className={`${darkMode && "dark"}`}>
+        a
         <Headers
           toggleDarkMode={toggleDarkMode}
           darkMode={darkMode}
@@ -54,7 +55,7 @@ const DashboardLayout = () => {
         )}
       >
         {/* Main Content */}
-        <main className="flex-1 p-4">
+        <main className="flex-1 p-4 ">
           <Outlet />
         </main>
       </div>

@@ -7,8 +7,8 @@ const User = db.define('users', {
     email: DataTypes.STRING,
     password: DataTypes.STRING,
     role: {
-        type: DataTypes.ENUM('admin', 'user', 'staff'),
-        defaultValue: 'user' 
+        type: DataTypes.ENUM('admin', 'staff'),
+        defaultValue: 'staff' 
     }
 }, {
     freezeTableName: true

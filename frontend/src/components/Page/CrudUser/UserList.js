@@ -53,16 +53,12 @@ const UserList = () => {
         },
       });
       getUsers();
-      addToHistory(id, 'Deleted');
     } catch (error) {
       console.log(error.response ? error.response.data : error.message);
     }
   };
 
-  const addToHistory = (userId, action) => {
-    const user = users.find(u => u.id === userId);
-    setHistory([...history, { userId, action, userName: user.name, timestamp: new Date().toLocaleString() }]);
-  };
+ 
   
   return (
     <div className="container mx-auto p-6 mt-20">
@@ -107,7 +103,7 @@ const UserList = () => {
                 <td className="py-3 px-4">{new Date(user.createdAt).toLocaleString()}</td>
                 <td className="py-3 px-4">{new Date(user.updatedAt).toLocaleString()}</td>
                 <td className="py-3 px-4">{user.role}</td>
-
+              
                 {/* Hanya tampilkan action buttons jika role adalah admin */}
                 {role === 'admin' && (
                   <td className="py-3 px-4 flex space-x-2">
@@ -136,31 +132,6 @@ const UserList = () => {
         </table>
       </div>
 
-      <div className="mt-10">
-        <h2 className="text-2xl font-bold mb-4">Histori Perubahan</h2>
-        <div className="overflow-x-auto bg-white shadow-md rounded-lg">
-          <table className="min-w-full bg-white">
-            <thead className="bg-gray-100">
-              <tr>
-                <th className="text-left py-3 px-4 font-semibold text-sm">No</th>
-                <th className="text-left py-3 px-4 font-semibold text-sm">Nama User</th>
-                <th className="text-left py-3 px-4 font-semibold text-sm">Aksi</th>
-                <th className="text-left py-3 px-4 font-semibold text-sm">Timestamp</th>
-              </tr>
-            </thead>
-            <tbody>
-              {history.map((entry, index) => (
-                <tr key={index} className="hover:bg-gray-50 transition-colors">
-                  <td className="py-3 px-4">{index + 1}</td>
-                  <td className="py-3 px-4">{entry.userName}</td>
-                  <td className="py-3 px-4">{entry.action}</td>
-                  <td className="py-3 px-4">{entry.timestamp}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
     </div>
   );
 };

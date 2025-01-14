@@ -106,7 +106,6 @@ const EditUser = () => {
           value={role}
           onChange={(e) => setRole(e.target.value)}
        >
-          <option value="user">User</option>
           <option value="staff">Staff</option>
        </select>
       </div>
