@@ -6,7 +6,6 @@ import CrudButton from '../../Button/CrudButton';
 
 const UserList = () => {
   const [users, setUsers] = useState([]);
-  const [history, setHistory] = useState([]);
   const [role, setRole] = useState(''); // Menyimpan role pengguna
   const navigate = useNavigate();
 
@@ -84,8 +83,8 @@ const UserList = () => {
               <th className="text-left py-3 px-4 font-semibold text-sm">No</th>
               <th className="text-left py-3 px-4 font-semibold text-sm">Name</th>
               <th className="text-left py-3 px-4 font-semibold text-sm">Email</th>
-              <th className="text-left py-3 px-4 font-semibold text-sm">Created At</th>
-              <th className="text-left py-3 px-4 font-semibold text-sm">Updated At</th>
+              {/* <th className="text-left py-3 px-4 font-semibold text-sm">Created At</th>
+              <th className="text-left py-3 px-4 font-semibold text-sm">Updated At</th> */}
               <th className="text-left py-3 px-4 font-semibold text-sm">Role</th>
 
               {/* Hanya tampilkan kolom Actions jika role adalah admin */}
@@ -100,8 +99,8 @@ const UserList = () => {
                 <td className="py-3 px-4">{index + 1}</td>
                 <td className="py-3 px-4">{user.name}</td>
                 <td className="py-3 px-4">{user.email}</td>
-                <td className="py-3 px-4">{new Date(user.createdAt).toLocaleString()}</td>
-                <td className="py-3 px-4">{new Date(user.updatedAt).toLocaleString()}</td>
+                {/* <td className="py-3 px-4">{new Date(user.createdAt).toLocaleString()}</td>
+                <td className="py-3 px-4">{new Date(user.updatedAt).toLocaleString()}</td> */}
                 <td className="py-3 px-4">{user.role}</td>
               
                 {/* Hanya tampilkan action buttons jika role adalah admin */}

@@ -1,12 +1,9 @@
 import clsx from "clsx";
 import {
-  BarChart,
+  LayoutDashboard,
   Package,
   ShoppingCart,
   Settings,
-  EyeOff,
-  User,
-  UserPlus,
   Users,
   PackageSearch,
   Target,
@@ -19,7 +16,7 @@ const SidebarAdmin = ({ isSidebarOpen }) => {
   const Fiturs = [
     {
       href: "/DashboardAdmin",
-      icon: BarChart,
+      icon: LayoutDashboard,
       text: "Dashboard",
     },
     {
@@ -43,7 +40,6 @@ const SidebarAdmin = ({ isSidebarOpen }) => {
       text: "Opname",
     },
   ];
-
 
   const shortcutLink = [
     {
@@ -77,8 +73,8 @@ const SidebarAdmin = ({ isSidebarOpen }) => {
     >
       {/* Menu */}
       <div className="flex-1 px-4 py-4 overflow-y-auto mt-20">
-      <h2 className="px-4 text-sm font-semibold text-gray-600 dark:text-gray-400">
-          Menu
+        <h2 className="px-4 text-sm -mx-3 mb-3 font-semibold text-gray-500 dark:text-gray-400">
+          MENU
         </h2>
         <ul className="space-y-2 font-medium">
           {Fiturs.map((item, index) => (
@@ -96,8 +92,8 @@ const SidebarAdmin = ({ isSidebarOpen }) => {
       </div>
 
       {/* Shortcuts */}
-      <div className="py-4 border-t border-gray-200 dark:border-gray-700">
-        <h2 className="px-4 text-sm font-semibold text-gray-600 dark:text-gray-400">
+      <div className="px-4 py-4 border-t border-gray-200 dark:border-gray-700">
+        <h2 className="px-4 text-sm -mx-3 mb-3 font-semibold text-gray-500 dark:text-gray-400">
           Shortcuts
         </h2>
         <ul className="mt-2 space-y-2">
@@ -111,7 +107,6 @@ const SidebarAdmin = ({ isSidebarOpen }) => {
           ))}
         </ul>
       </div>
-
     </aside>
   );
 };

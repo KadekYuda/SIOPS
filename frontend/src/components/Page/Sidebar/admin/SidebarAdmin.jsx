@@ -11,12 +11,12 @@ import {
   LineChart,
 } from "lucide-react";
 
-const SidebarAdmin = ({ isSidebarOpen }) => {
+const SidebarAdmin = ({ isSidebarOpen, isDesktopSidebarOpen }) => {
   // Data untuk Sidebar
   const Fiturs = [
     {
       href: "/DashboardAdmin",
-      icon: LayoutDashboard ,
+      icon: LayoutDashboard,
       text: "Dashboard",
     },
     {
@@ -40,7 +40,6 @@ const SidebarAdmin = ({ isSidebarOpen }) => {
       text: "Opname",
     },
   ];
-
 
   const shortcutLink = [
     {
@@ -67,14 +66,14 @@ const SidebarAdmin = ({ isSidebarOpen }) => {
         "fixed top-0 left-0 z-40 w-64 h-screen bg-white border-r border-gray-200",
         "dark:bg-gray-800 dark:border-gray-700 transition-transform",
         {
-          "translate-x-0": isSidebarOpen,
-          "-translate-x-full": !isSidebarOpen,
+          "translate-x-0": isSidebarOpen || isDesktopSidebarOpen,
+          "-translate-x-full": !isSidebarOpen && !isDesktopSidebarOpen,
         }
       )}
     >
       {/* Menu */}
       <div className="flex-1 px-4 py-4 overflow-y-auto mt-20">
-      <h2 className="px-4 text-sm -mx-3 mb-3 font-semibold text-gray-500 dark:text-gray-400">
+        <h2 className="px-4 text-sm -mx-3 mb-3 font-semibold text-gray-500 dark:text-gray-400">
           MENU
         </h2>
         <ul className="space-y-2 font-medium">
@@ -108,7 +107,6 @@ const SidebarAdmin = ({ isSidebarOpen }) => {
           ))}
         </ul>
       </div>
-
     </aside>
   );
 };

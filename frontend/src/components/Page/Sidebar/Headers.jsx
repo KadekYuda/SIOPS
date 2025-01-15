@@ -3,7 +3,7 @@ import clsx from "clsx";
 import { Moon, Sun, Menu, User } from "lucide-react";
 import Logo2 from "../../../assets/Logo2.png";
 
-const Headers = ({ darkMode, toggleDarkMode, toggleSidebar }) => {
+const Headers = ({ darkMode, toggleDarkMode, toggleSidebar, toggleDesktopSidebar }) => {
   const [menuActive, setMenuActive] = useState(false);
 
   return (
@@ -44,7 +44,7 @@ const Headers = ({ darkMode, toggleDarkMode, toggleSidebar }) => {
                 "dark:text-gray-400 dark:hover:bg-gray-700 dark:focus:ring-gray-600"
               )}
               onClick={() => {
-                toggleSidebar(); // Fungsi untuk toggle sidebar
+                toggleDesktopSidebar(); // Fungsi untuk toggle sidebar
                 setMenuActive(!menuActive); // Toggle state margin
               }}
             >
