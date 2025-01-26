@@ -3,6 +3,8 @@ import axios from 'axios';
 import { FilePlus, Edit, Trash2 } from 'lucide-react';
 import CrudButton from '../../Button/CrudButton';
 import UserModal from '../../modal/UserModal';
+import SuccessModal from '../../modal/SuccessModal';
+import AlertModal from '../../modal/AlertModal';
 
 const UserList = () => {
   const [users, setUsers] = useState([]);
@@ -10,6 +12,11 @@ const UserList = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedUser, setSelectedUser] = useState(null);
   const [modalMode, setModalMode] = useState('add');
+  
+  // Modal state for feedback
+  const [successModalOpen, setSuccessModalOpen] = useState(false);
+  const [errorModalOpen, setErrorModalOpen] = useState(false);
+  const [modalMessage, setModalMessage] = useState('');
 
   useEffect(() => {
     getUsers();
@@ -37,6 +44,8 @@ const UserList = () => {
       setUsers(staffUsers);
     } catch (error) {
       console.error('Error fetching users:', error.response ? error.response.data : error.message);
+      setModalMessage('Gagal mengambil data staff');
+      setErrorModalOpen(true);
     }
   };
 
@@ -50,9 +59,14 @@ const UserList = () => {
       });
       setIsModalOpen(false);
       getUsers();
+      // Show success modal
+      setModalMessage('Staff berhasil ditambahkan');
+      setSuccessModalOpen(true);
     } catch (error) {
       console.error('Error adding user:', error.response ? error.response.data : error.message);
-      alert(error.response?.data?.msg || 'Error adding user');
+      // Show error modal
+      setModalMessage(error.response?.data?.msg || 'Gagal menambahkan staff');
+      setErrorModalOpen(true);
     }
   };
 
@@ -70,9 +84,14 @@ const UserList = () => {
       });
       setIsModalOpen(false);
       getUsers();
+      // Show success modal
+      setModalMessage('Staff berhasil diperbarui');
+      setSuccessModalOpen(true);
     } catch (error) {
       console.error('Error updating user:', error.response ? error.response.data : error.message);
-      alert(error.response?.data?.msg || 'Error updating user');
+      // Show error modal
+      setModalMessage(error.response?.data?.msg || 'Gagal memperbarui staff');
+      setErrorModalOpen(true);
     }
   };
 
@@ -85,9 +104,14 @@ const UserList = () => {
         },
       });
       getUsers();
+      // Show success modal
+      setModalMessage('Staff berhasil dihapus');
+      setSuccessModalOpen(true);
     } catch (error) {
       console.log(error.response ? error.response.data : error.message);
-      alert(error.response?.data?.msg || 'Error deleting user');
+      // Show error modal
+      setModalMessage(error.response?.data?.msg || 'Gagal menghapus staff');
+      setErrorModalOpen(true);
     }
   };
 
@@ -174,6 +198,18 @@ const UserList = () => {
         user={selectedUser}
         title={modalMode === 'add' ? 'Add Staff' : 'Edit Staff'}
         mode={modalMode}
+      />
+
+      <SuccessModal
+        open={successModalOpen}
+        onClose={() => setSuccessModalOpen(false)}
+        message={modalMessage}
+      />
+
+      <AlertModal
+        show={errorModalOpen}
+        onClose={() => setErrorModalOpen(false)}
+        message={modalMessage}
       />
     </div>
   );
