@@ -1,23 +1,21 @@
 import React from 'react';
-import { Check } from 'lucide-react';
+import { CheckCircle } from 'lucide-react';
 
-const SuccessModal = ({ open, onClose, message }) => {
+const SuccessModal = ({ isOpen, onClose, message }) => {
+  if (!isOpen) return null;
+
   return (
-    <div onClick={onClose} className={`fixed inset-0 flex justify-center items-center transition-colors ${open ? "visible bg-black/20" : "invisible"}`}>
-      <div 
-        onClick={(e) => e.stopPropagation()}
-        className={`bg-white rounded-xl shadow p-6 transition-all ${open ? "scale-100 opacity-100" : "scale-125 opacity-0"}`}
-      >
-        <div className="text-center">
-          <div className="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-green-100 mb-4">
-            <Check className="h-6 w-6 text-green-600" />
-          </div>
-          <h3 className="text-lg font-medium text-gray-900 mb-4">
-            {message}
-          </h3>
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+      <div className="bg-white p-6 rounded-lg shadow-lg max-w-sm w-full">
+        <div className="flex items-center justify-center mb-4">
+          <CheckCircle className="text-green-500" size={48} />
+        </div>
+        <h3 className="text-lg font-semibold text-center mb-4">Success</h3>
+        <p className="text-gray-600 text-center mb-6">{message}</p>
+        <div className="flex justify-center">
           <button
             onClick={onClose}
-            className="w-full bg-green-500 text-white px-4 py-2 rounded-md hover:bg-green-600 focus:outline-none"
+            className="px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors"
           >
             OK
           </button>

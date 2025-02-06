@@ -1,44 +1,58 @@
 import { Sequelize } from "sequelize";
 import db from "../config/Database.js";
+import Products from "./ProductModel.js";
+import Users from "./UserModel.js";
 
 const { DataTypes } = Sequelize;
 
 const Order = db.define('orders', {
-    noPembelian: {
-        type: DataTypes.INTEGER,
-        allowNull: false
+    order_id: { 
+        type: DataTypes.INTEGER, 
+        autoIncrement: true, 
+        primaryKey: true 
     },
-    date: {
-        type: DataTypes.DATE,
-        defaultValue: Sequelize.NOW
+    kdbar: { 
+        type: DataTypes.STRING(13), 
+        allowNull: false,
+        references: {
+            model: Products,
+            key: 'kdbar'
+        }
     },
-    kodebarang: {
-        type: DataTypes.STRING,
-        allowNull: false
+    jumlah: { 
+        type: DataTypes.INTEGER, 
+        allowNull: false 
     },
-    barcode: {
-        type: DataTypes.INTEGER,
-        allowNull: false
+    harga: { 
+        type: DataTypes.DECIMAL(12,2), 
+        allowNull: false 
     },
-    namaBarang: {
-        type: DataTypes.STRING,
-        allowNull: false
+    tipe_order: { 
+        type: DataTypes.ENUM('Masuk', 'Keluar'), 
+        allowNull: false 
     },
-    hargaBeli: {
-        type: DataTypes.INTEGER,
-        allowNull: false
+    tgl_order: { 
+        type: DataTypes.DATE, 
+        allowNull: false, 
+        defaultValue: Sequelize.NOW 
     },
-    jumlahBeli: {
-        type: DataTypes.STRING,
-        allowNull: false
-    },
-}, {
-    freezeTableName: true
+    users_id: { 
+        type: DataTypes.INTEGER, 
+        allowNull: false,
+        references: {
+            model: Users,
+            key: 'user_id'
+        }
+    }
+}, { 
+    freezeTableName: true 
 });
-db.sync({ alter: true });
-// Export the model
-export default Order;
 
-(async()=>{
-    await db.sync();
-})()
+// Define associations
+Order.belongsTo(Products, { foreignKey: 'kdbar' });
+Products.hasMany(Order, { foreignKey: 'kdbar' });
+
+Order.belongsTo(Users, { foreignKey: 'users_id' });
+Users.hasMany(Order, { foreignKey: 'users_id' });
+
+export default Order;

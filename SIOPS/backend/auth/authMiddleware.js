@@ -16,7 +16,7 @@ export const authenticateToken = (req, res, next) => {
     return res.status(401).json({ msg: "Token has been invalidated" });
   }
 
-  jwt.verify(token, process.env.ACCESS_TOKEN_SECRET, (err, user) => {
+  jwt.verify(token,  process.env.JWT_SECRET, (err, user) => {
     if (err) {
       console.log("Token verification error:", err);
       return res.status(403).json({ msg: "Invalid token" });
@@ -70,17 +70,26 @@ export const verifyToken = (req, res) => {
     return res.status(401).json({ valid: false, msg: "Token has been invalidated" });
   }
 
-  jwt.verify(token, process.env.ACCESS_TOKEN_SECRET, (err, user) => {
+  jwt.verify(token,  process.env.JWT_SECRET, (err, user) => {
     if (err) {
       return res.status(403).json({ valid: false, msg: "Invalid token" });
     }
-
+ 
     // Check token expiration
     const currentTimestamp = Math.floor(Date.now() / 1000);
     if (user.exp && user.exp < currentTimestamp) {
       return res.status(401).json({ valid: false, msg: "Token has expired" });
     }
 
-    res.json({ valid: true, user });
+    res.status(200).json({
+      valid: true,
+      user: {
+        user_id: user.user_id,
+        name: user.name,
+        email: user.email,
+        role: user.role
+      }
+    });
+
   });
 };

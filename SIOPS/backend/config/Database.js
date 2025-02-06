@@ -1,29 +1,54 @@
 import { Sequelize } from "sequelize";
-import mysql from "mysql2";
+import mysql from "mysql2/promise";
 
-// Nama database yang ingin Anda buat
-const dbName = "siops_db"; // Ganti dengan nama database yang sesuai
+const dbConfig = {
+    name: "siops_db",
+    username: "root",
+    password: "",
+    host: "localhost",
+    dialect: "mysql",
+    logging: false // Set to true if you want to see SQL queries
+};
 
-// Membuat koneksi untuk MySQL menggunakan mysql2
-const connection = mysql.createConnection({
-  host: "localhost",
-  user: "root",   // ganti dengan user yang sesuai
-  password: "",   // ganti dengan password yang sesuai
-});
+// Function to initialize database
+export const initDB = async () => {
+    try {
+        // Create connection to MySQL server
+        const connection = await mysql.createConnection({
+            host: dbConfig.host,
+            user: dbConfig.username,
+            password: dbConfig.password
+        });
 
-// Membuat database jika belum ada
-connection.query(`CREATE DATABASE IF NOT EXISTS ${dbName}`, (err) => {
-  if (err) {
-    console.error("Error creating database:", err);
-  } else {
-    console.log(`Database ${dbName} created or already exists.`);
-  }
-});
+        // Create database if it doesn't exist
+        await connection.query(`CREATE DATABASE IF NOT EXISTS ${dbConfig.name}`);
+        console.log(`Database ${dbConfig.name} checked/created successfully`);
+        
+        // Close the connection
+        await connection.end();
+        
+        return true;
+    } catch (error) {
+        console.error("Database initialization error:", error);
+        return false;
+    }
+};
 
-// Setelah memastikan database ada, buat koneksi Sequelize ke database tersebut
-const db = new Sequelize(dbName, 'root', '', {
-  host: 'localhost',
-  dialect: 'mysql',  // Sesuaikan jika menggunakan database lain
+// Create Sequelize instance with connection pool
+const db = new Sequelize(dbConfig.name, dbConfig.username, dbConfig.password, {
+    host: dbConfig.host,
+    dialect: dbConfig.dialect,
+    logging: dbConfig.logging,
+    pool: {
+        max: 5,
+        min: 0,
+        acquire: 30000,
+        idle: 10000
+    },
+    define: {
+        freezeTableName: true,
+        timestamps: true
+    }
 });
 
 export default db;

@@ -5,7 +5,7 @@ const UserModal = ({ isOpen, onClose, onSubmit, user, title, mode }) => {
   const [formData, setFormData] = useState({
     name: '',
     email: '',
-    password: ''
+    password: '',
   });
   const [showPassword, setShowPassword] = useState(false);
 
@@ -14,13 +14,13 @@ const UserModal = ({ isOpen, onClose, onSubmit, user, title, mode }) => {
       setFormData({
         name: user.name || '',
         email: user.email || '',
-        password: user.password || ''
+        password: '',
       });
     } else {
       setFormData({
         name: '',
         email: '',
-        password: ''
+        password: '',
       });
     }
   }, [user]);
@@ -31,18 +31,14 @@ const UserModal = ({ isOpen, onClose, onSubmit, user, title, mode }) => {
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    const submitData = { ...formData };
-    if (mode === 'edit' && !submitData.password) {
-      delete submitData.password;
-    }
-    onSubmit(submitData);
+    onSubmit(formData);
   };
 
   if (!isOpen) return null;
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg p-8 w-full max-w-md">
+      <div className="bg-white p-8 rounded-lg w-full max-w-md">
         <h2 className="text-2xl font-bold mb-6">{title}</h2>
         <form onSubmit={handleSubmit}>
           <div className="mb-4">
@@ -56,6 +52,7 @@ const UserModal = ({ isOpen, onClose, onSubmit, user, title, mode }) => {
               onChange={handleChange}
               className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:border-blue-500"
               required
+              autoComplete="name"
             />
           </div>
           <div className="mb-4">
@@ -69,6 +66,7 @@ const UserModal = ({ isOpen, onClose, onSubmit, user, title, mode }) => {
               onChange={handleChange}
               className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:border-blue-500"
               required
+              autoComplete="email"
             />
           </div>
           <div className="mb-4">
@@ -83,6 +81,7 @@ const UserModal = ({ isOpen, onClose, onSubmit, user, title, mode }) => {
                 onChange={handleChange}
                 className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:border-blue-500"
                 {...(mode === 'add' ? { required: true } : {})}
+                autoComplete={mode === 'add' ? 'new-password' : 'current-password'}
               />
               <button
                 type="button"
@@ -93,6 +92,7 @@ const UserModal = ({ isOpen, onClose, onSubmit, user, title, mode }) => {
               </button>
             </div>
           </div>
+          
           <div className="flex justify-end gap-4">
             <button
               type="button"

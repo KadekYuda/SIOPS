@@ -5,7 +5,6 @@ import {
   Package,
   ShoppingCart,
   Settings,
-  Users,
   PackageSearch,
   ClipboardList ,
   LogOut ,
@@ -19,15 +18,11 @@ const SidebarAdmin = ({ isSidebarOpen, isDesktopSidebarOpen }) => {
       icon: LayoutDashboard,
       text: "Dashboard",
     },
+    
     {
-      href: "users",
-      icon: Users,
-      text: "Users",
-    },
-    {
-      href: "#",
+      href: "/product",
       icon: Package,
-      text: "Stok",
+      text: "Product",
     },
     {
       href: "order",
@@ -38,6 +33,11 @@ const SidebarAdmin = ({ isSidebarOpen, isDesktopSidebarOpen }) => {
       href: "",
       icon: PackageSearch,
       text: "Opname",
+    },
+    {
+      href: "report",
+      icon:ClipboardList,
+      text: "Report",
     },
   ];
 

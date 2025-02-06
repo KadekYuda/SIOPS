@@ -4,20 +4,21 @@ import Logo2 from "../../../assets/Logo2.png";
 import { motion } from 'framer-motion';
 import axios from 'axios';  // Tambahkan ini
 import { jwtDecode } from 'jwt-decode';
-
+import { Eye, EyeOff } from 'lucide-react';
 
 const Login = () => {
   const [isLogin, setIsLogin] = useState(true);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const navigate = useNavigate(); // Untuk navigasi
 
   const handleLogin = async (e) => {
     e.preventDefault();
     
     try {
-      const response = await axios.post('http://localhost:5000/login', {
+      const response = await axios.post('http://localhost:5000/users/login', {
         email,
         password
       });
@@ -45,6 +46,7 @@ const Login = () => {
       } else {
         setError('Terjadi kesalahan pada server.');
       }
+      console.error('Login error:', error);
     }
   };
 
@@ -74,14 +76,27 @@ const Login = () => {
                   onChange={(e) => setEmail(e.target.value)}
                   className="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
                 />
-                <input
-                  type="password"
-                  placeholder="Password"
-                  value={password}
-                  autoComplete='current-password'
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
-                />    
+                <div className="relative">
+                  <input
+                    type={showPassword ? "text" : "password"}
+                    placeholder="Password"
+                    value={password}
+                    autoComplete='current-password'
+                    onChange={(e) => setPassword(e.target.value)}
+                    className="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-500 hover:text-black"
+                  >
+                    {showPassword ? (
+                      <EyeOff size={20} />
+                    ) : (
+                      <Eye size={20} />
+                    )}
+                  </button>
+                </div>
                 {error && <p className="text-red-500">{error}</p>}
                 <button
                   type="submit"
@@ -134,19 +149,3 @@ const Login = () => {
 };
 
 export default Login;
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
