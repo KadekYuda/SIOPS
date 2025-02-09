@@ -1,10 +1,10 @@
     import { Routes, Route, Navigate } from "react-router-dom";
  
-import Login from "../components/Page/Home/Login";
+import Login from "../components/Page/Login/Login";
 import OrderStock from "../components/Page/Order/OrderStock";
 import DashboardAdmin from "../components/Page/Sidebar/admin/DashboardAdmin";
 import DashboardStaff from "../components/Page/Sidebar/staff/DashboardStaff";
-import DashboardLayout from "../components/Page/Home/DashboardLayout";
+import DashboardLayout from "../components/Page/Login/DashboardLayout";
 import UserProfile from "../components/Page/Profile/UserProfile";
 import Product from "../components/Page/Product/Product"
 

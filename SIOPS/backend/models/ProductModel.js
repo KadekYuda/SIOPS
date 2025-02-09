@@ -1,4 +1,4 @@
-// File: models/Barang.js
+
 import { Sequelize } from "sequelize";
 import db from "../config/Database.js";
 

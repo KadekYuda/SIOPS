@@ -33,6 +33,7 @@ const Product = () => {
   });
   const [editingProduct, setEditingProduct] = useState(null);
   const [editingCategory, setEditingCategory] = useState(null);
+  const [error, setError] = useState('');
   const navigate = useNavigate();
 
   // Fetch products with search and pagination
@@ -76,20 +77,38 @@ const Product = () => {
     fetchCategories();
   }, [search, page, limit, selectedCategory]);
 
-  // Handle product form submission
-  const handleProductSubmit = async (e) => {
+  // Handle form submission
+  const handleSubmit = async (e) => {
     e.preventDefault();
+    setError('');
     try {
       const token = localStorage.getItem('token');
-      if (modalMode === 'add') {
-        await axios.post('http://localhost:5000/products', formData, {
-          headers: { Authorization: `Bearer ${token}` }
-        });
-      } else {
-        await axios.patch(`http://localhost:5000/products/${editingProduct.kdbar}`, formData, {
-          headers: { Authorization: `Bearer ${token}` }
-        });
+      if (!token) {
+        throw new Error('No authentication token found');
       }
+
+      const config = {
+        headers: { 
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      };
+
+      // Validate required fields
+      if (!formData.kdbar || !formData.nmbar || !formData.hjual) {
+        throw new Error('Please fill in all required fields');
+      }
+
+      console.log('Submitting product data:', formData);
+      
+      if (modalMode === 'add') {
+        const response = await axios.post('http://localhost:5000/products', formData, config);
+        console.log('Product added successfully:', response.data);
+      } else {
+        const response = await axios.patch(`http://localhost:5000/products/${editingProduct.kdbar}`, formData, config);
+        console.log('Product updated successfully:', response.data);
+      }
+      
       setShowModal(false);
       setFormData({
         kdbar: '',
@@ -103,31 +122,53 @@ const Product = () => {
       fetchProducts();
     } catch (error) {
       console.error('Error submitting product:', error);
-      alert(error.response?.data?.message || 'Error submitting product');
+      const errorMessage = error.response?.data?.msg || error.message || 'Error submitting product';
+      setError(errorMessage);
+      alert(errorMessage);
     }
   };
 
   // Handle category form submission
   const handleCategorySubmit = async (e) => {
     e.preventDefault();
+    setError('');
     try {
       const token = localStorage.getItem('token');
-      if (modalMode === 'add') {
-        await axios.post('http://localhost:5000/categories', categoryForm, {
-          headers: { Authorization: `Bearer ${token}` }
-        });
-      } else {
-        await axios.patch(`http://localhost:5000/categories/${editingCategory.kdkel}`, categoryForm, {
-          headers: { Authorization: `Bearer ${token}` }
-        });
+      if (!token) {
+        throw new Error('No authentication token found');
       }
+
+      const config = {
+        headers: { 
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      };
+
+      // Validate required fields
+      if (!categoryForm.kdkel || !categoryForm.nmkel) {
+        throw new Error('Please fill in all required fields');
+      }
+
+      console.log('Submitting category data:', categoryForm);
+
+      if (modalMode === 'add') {
+        const response = await axios.post('http://localhost:5000/categories', categoryForm, config);
+        console.log('Category added successfully:', response.data);
+      } else {
+        const response = await axios.patch(`http://localhost:5000/categories/${editingCategory.kdkel}`, categoryForm, config);
+        console.log('Category updated successfully:', response.data);
+      }
+      
       setShowCategoryModal(false);
       setCategoryForm({ kdkel: '', nmkel: '' });
       setEditingCategory(null);
       fetchCategories();
     } catch (error) {
       console.error('Error submitting category:', error);
-      alert(error.response?.data?.message || 'Error submitting category');
+      const errorMessage = error.response?.data?.msg || error.message || 'Error submitting category';
+      setError(errorMessage);
+      alert(errorMessage);
     }
   };
 
@@ -142,7 +183,7 @@ const Product = () => {
         fetchProducts();
       } catch (error) {
         console.error('Error deleting product:', error);
-        alert(error.response?.data?.message || 'Error deleting product');
+        alert(error.response?.data?.msg || 'Error deleting product');
       }
     }
   };
@@ -158,42 +199,47 @@ const Product = () => {
         fetchCategories();
       } catch (error) {
         console.error('Error deleting category:', error);
-        alert(error.response?.data?.message || 'Error deleting category');
+        alert(error.response?.data?.msg || 'Error deleting category');
       }
     }
   };
 
+  // Handle CSV import
   const handleImportProducts = async (e) => {
     e.preventDefault();
     if (!importFile) {
-        setImportError('Please select a file to upload');
-        return;
+      alert('Please select a file to import');
+      return;
     }
+
+    const formData = new FormData();
+    formData.append('file', importFile);
 
     try {
-        const token = localStorage.getItem('token');
-        const formData = new FormData();
-        formData.append('file', importFile);
-
-        const response = await axios.post('http://localhost:5000/products/import', formData, {
-            headers: {
-                Authorization: `Bearer ${token}`,
-                'Content-Type': 'multipart/form-data'
-            }
-        });
-
-        setImportStatus(`Successfully imported ${response.data.importedRecords} products`);
-        setImportError('');
-        setImportFile(null);
-        fetchProducts(); // Refresh product list
-    } catch (error) {
-        console.error('Error importing products:', error);
-        setImportError(error.response?.data?.msg || 'Error importing products');
-        if (error.response?.data?.details) {
-            setImportError(prev => prev + ': ' + error.response.data.details.join(', '));
+      const token = localStorage.getItem('token');
+      const response = await axios.post('http://localhost:5000/products/import', formData, {
+        headers: { 
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'multipart/form-data'
         }
+      });
+
+      setImportStatus('Import successful');
+      setImportError('');
+      setImportFile(null);
+      fetchProducts();
+
+      // Close modal after successful import
+      setTimeout(() => {
+        setImportModalOpen(false);
+        setImportStatus('');
+      }, 2000);
+    } catch (error) {
+      console.error('Error importing products:', error);
+      setImportError(error.response?.data?.msg || 'Error importing products');
+      setImportStatus('');
     }
-};
+  };
 
   // Handle category selection
   const handleCategoryChange = (e) => {
@@ -372,7 +418,12 @@ const Product = () => {
                 <X size={24} />
               </button>
             </div>
-            <form onSubmit={handleProductSubmit} className="p-6">
+            <form onSubmit={handleSubmit} className="p-6">
+              {error && (
+                <div className="mb-4 p-3 bg-red-100 text-red-700 rounded-lg">
+                  {error}
+                </div>
+              )}
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Product Code</label>
@@ -474,6 +525,11 @@ const Product = () => {
               </button>
             </div>
             <form onSubmit={handleCategorySubmit} className="p-6">
+              {error && (
+                <div className="mb-4 p-3 bg-red-100 text-red-700 rounded-lg">
+                  {error}
+                </div>
+              )}
               <div className="space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Category Code</label>

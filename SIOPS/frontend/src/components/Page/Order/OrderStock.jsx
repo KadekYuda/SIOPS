@@ -26,7 +26,7 @@ const OrderStock = () => {
   const [alert, setAlert] = useState(null);
   const [deleteOrderId, setDeleteOrderId] = useState(null);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
-  const [sortConfig, setSortConfig] = useState({
+  const [sortConfig,] = useState({
     key: 'tgl_order',
     direction: 'desc'
   });
@@ -164,13 +164,7 @@ const OrderStock = () => {
     setTimeout(() => setAlert(null), 5000);
   };
 
-  // Sort orders
-  const handleSort = (key) => {
-    setSortConfig(prev => ({
-      key,
-      direction: prev.key === key && prev.direction === 'asc' ? 'desc' : 'asc'
-    }));
-  };
+  
 
   const sortedOrders = [...orders].sort((a, b) => {
     if (sortConfig.key === 'tgl_order') {

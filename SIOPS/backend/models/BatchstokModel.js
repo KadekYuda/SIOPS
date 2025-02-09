@@ -4,7 +4,7 @@ import db from "../config/Database.js";
 const { DataTypes } = Sequelize;
 
 const BatchStok = db.define('batch_stok', {
-    idBatch: {
+    batch_id: {
         type: DataTypes.INTEGER,
         primaryKey: true,
         autoIncrement: true
@@ -30,7 +30,7 @@ const BatchStok = db.define('batch_stok', {
         defaultValue: 0,
         field: 'Stok'
     },
-    tanggalMasuk: {
+    tgl_masuk: {
         type: DataTypes.DATE,
         allowNull: false,
         field: 'TanggalMasuk'

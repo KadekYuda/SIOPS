@@ -1,148 +1,217 @@
 import Products from "../models/ProductModel.js";
-import { parse } from "csv-parse/sync";
+import { Op } from "sequelize";
 import fs from "fs";
+import csv from "fast-csv";
 
-
-export const importProductsFromCSV = async (req, res) => {
-    try {
-        if (!req.file) {
-            return res.status(400).json({ msg: "No file uploaded" });
-        }
-
-        // Get model attributes
-        const modelAttributes = Object.keys(Products.rawAttributes);
-
-        // Read and parse CSV
-        const filePath = req.file.path;
-        const fileContent = fs.readFileSync(filePath, 'utf8');
-        
-        const records = parse(fileContent, {
-            columns: true,
-            skip_empty_lines: true,
-            trim: true
-        });
-
-        // Validate and filter records
-        const validRecords = records.map(record => {
-            const filteredRecord = {};
-            for (const [key, value] of Object.entries(record)) {
-                const normalizedKey = key.toLowerCase();
-                if (modelAttributes.includes(normalizedKey)) {
-                    filteredRecord[normalizedKey] = value;
-                }
-            }
-            return filteredRecord;
-        });
-
-        // Bulk create valid records
-        const result = await Products.bulkCreate(validRecords, {
-            validate: true,
-            ignoreDuplicates: true
-        });
-
-        // Delete the uploaded file
-        fs.unlinkSync(filePath);
-
-        res.status(201).json({
-            msg: "CSV imported successfully",
-            totalRecords: records.length,
-            importedRecords: result.length,
-            skippedRecords: records.length - result.length
-        });
-
-    } catch (error) {
-        console.error(error);
-        res.status(500).json({ 
-            msg: error.message,
-            details: error.errors?.map(err => err.message) 
-        });
-    }
-};
-
+// Get all products with search and pagination
 export const getProducts = async (req, res) => {
     try {
-        const response = await Products.findAll({
-            order: [['nmbar', 'ASC']]
+        const page = parseInt(req.query.page) || 0;
+        const limit = parseInt(req.query.limit) || 10;
+        const search = req.query.search || "";
+        const kdkel = req.query.kdkel || "";
+        const offset = limit * page;
+
+        const whereClause = {
+            [Op.or]: [
+                {
+                    kdbar: {
+                        [Op.like]: '%' + search.toLowerCase() + '%'
+                    }
+                },
+                {
+                    nmbar: {
+                        [Op.like]: '%' + search.toLowerCase() + '%'
+                    }
+                }
+            ]
+        };
+
+        // Add category filter if provided
+        if (kdkel) {
+            whereClause.kdkel = kdkel;
+        }
+
+        const totalRows = await Products.count({
+            where: whereClause
         });
-        res.status(200).json(response || []); // Return array directly and ensure it's not null
+
+        const totalPage = Math.ceil(totalRows / limit);
+
+        const result = await Products.findAll({
+            where: whereClause,
+            offset: offset,
+            limit: limit,
+            order: [
+                ['kdbar', 'ASC']
+            ]
+        });
+
+        res.json({
+            result: result,
+            page: page,
+            limit: limit,
+            totalRows: totalRows,
+            totalPage: totalPage
+        });
     } catch (error) {
         res.status(500).json({ msg: error.message });
     }
-};
+}
 
+// Get a single product by ID
 export const getProductById = async (req, res) => {
     try {
-        const response = await Products.findOne({
+        const product = await Products.findOne({
             where: {
                 kdbar: req.params.id
             }
         });
-        if (!response) return res.status(404).json({ msg: "Product not found" });
-        res.status(200).json(response);
+        if (!product) return res.status(404).json({ msg: "Product not found" });
+        res.json(product);
     } catch (error) {
         res.status(500).json({ msg: error.message });
     }
-};
+}
 
+// Create a new product
 export const createProduct = async (req, res) => {
-    const { kdbar, barcode, nmbar, kdkel, hjual, markup } = req.body;
     try {
-        await Products.create({
-            kdbar,
-            barcode,
-            nmbar,
-            kdkel,
-            hjual,
-            markup
+        const { kdbar, barcode, nmbar, kdkel, hjual, markup } = req.body;
+        
+        // Check if product already exists
+        const existingProduct = await Products.findOne({
+            where: {
+                kdbar: kdbar
+            }
         });
-        res.status(201).json({ msg: "Product created successfully" });
-    } catch (error) {
-        res.status(400).json({ msg: error.message });
-    }
-};
-
-export const updateProduct = async (req, res) => {
-    const product = await Products.findOne({
-        where: {
-            kdbar: req.params.id
+        
+        if (existingProduct) {
+            return res.status(400).json({ msg: "Product code already exists" });
         }
-    });
-    if (!product) return res.status(404).json({ msg: "Product not found" });
-    const { kdbar, barcode, nmbar, kdkel, hjual, markup } = req.body;
+        if (!kdbar || !nmbar) {
+            return res.status(400).json({ msg: "kdbar and nmbar are required" });
+        }
+        await Products.create({
+            kdbar: kdbar,
+            barcode: barcode,
+            nmbar: nmbar,
+            kdkel: kdkel,
+            hjual: hjual,
+            markup: markup
+        });
+
+        res.json({ msg: "Product created successfully" });
+    } catch (error) {
+        res.status(500).json({ msg: error.message });
+    }
+}
+
+// Update a product
+export const updateProduct = async (req, res) => {
     try {
+        const product = await Products.findOne({
+            where: {
+                kdbar: req.params.id
+            }
+        });
+        
+        if (!product) return res.status(404).json({ msg: "Product not found" });
+
+        const { barcode, nmbar, kdkel, hjual, markup } = req.body;
+
         await Products.update({
-            kdbar,
-            barcode,
-            nmbar,
-            kdkel,
-            hjual,
-            markup
+            barcode: barcode,
+            nmbar: nmbar,
+            kdkel: kdkel,
+            hjual: hjual,
+            markup: markup
         }, {
             where: {
                 kdbar: req.params.id
             }
         });
-        res.status(200).json({ msg: "Product updated successfully" });
-    } catch (error) {
-        res.status(400).json({ msg: error.message });
-    }
-};
 
+        res.json({ msg: "Product updated successfully" });
+    } catch (error) {
+        res.status(500).json({ msg: error.message });
+    }
+}
+
+// Delete a product
 export const deleteProduct = async (req, res) => {
-    const product = await Products.findOne({
-        where: {
-            kdbar: req.params.id
-        }
-    });
-    if (!product) return res.status(404).json({ msg: "Product not found" });
     try {
+        const product = await Products.findOne({
+            where: {
+                kdbar: req.params.id
+            }
+        });
+        
+        if (!product) return res.status(404).json({ msg: "Product not found" });
+
         await Products.destroy({
             where: {
                 kdbar: req.params.id
             }
         });
-        res.status(200).json({ msg: "Product deleted successfully" });
+
+        res.json({ msg: "Product deleted successfully" });
     } catch (error) {
-        res.status(400).json({ msg: error.message });
+        res.status(500).json({ msg: error.message });
     }
-};
+}
+
+// Import products from CSV
+export const importProducts = async (req, res) => {
+    try {
+        if (!req.file) {
+            return res.status(400).json({ msg: "Please upload a CSV file" });
+        }
+
+        const products = [];
+        const errors = [];
+
+        fs.createReadStream(req.file.path)
+            .pipe(csv.parse({ headers: true }))
+            .on('error', error => {
+                throw error.message;
+            })
+            .on('data', row => {
+                products.push({
+                    kdbar: row.kdbar,
+                    barcode: row.barcode,
+                    nmbar: row.nmbar,
+                    kdkel: row.kdkel,
+                    hjual: parseFloat(row.hjual) || 0,
+                    markup: parseFloat(row.markup) || 0
+                });
+            })
+            .on('end', async () => {
+                // Remove uploaded file
+                fs.unlinkSync(req.file.path);
+
+                // Validate and insert products
+                for (let product of products) {
+                    try {
+                        await Products.bulkCreate(products, {
+                            validate: true,
+                            ignoreDuplicates: true
+                        });
+                    } catch (error) {
+                        errors.push(`Error on row ${product.kdbar}: ${error.message}`);
+                    }
+                }
+
+                if (errors.length > 0) {
+                    return res.status(400).json({
+                        msg: "Some products failed to import",
+                        errors: errors
+                    });
+                }
+
+                res.json({ msg: "All products imported successfully" });
+            });
+    } catch (error) {
+        res.status(500).json({ msg: error.message });
+    }
+}
