@@ -7,9 +7,9 @@ export const getOrders = async (req, res) => {
         const response = await Order.findAll({
             include: [{
                 model: Products,
-                attributes: ['kdbar', 'nmbar', 'hjual']
+                attributes: ['code_product', 'name_product', 'sell_price']
             }],
-            order: [['tgl_order', 'DESC']]
+            order: [['order_date', 'DESC']]
         });
         res.status(200).json(response);
     } catch (error) {
@@ -25,7 +25,7 @@ export const getOrderById = async (req, res) => {
             where: { order_id: req.params.order_id },
             include: [{
                 model: Products,
-                attributes: ['kdbar', 'nmbar', 'hjual']
+                attributes: ['code_product', 'name_product', 'sell_price']
             }]
         });
         if (!response) return res.status(404).json({ message: "Order not found" });
@@ -39,37 +39,37 @@ export const getOrderById = async (req, res) => {
 // Create new order
 export const createOrder = async (req, res) => {
     try {
-        const { kdbar, jumlah, harga, tipe_order, users_id } = req.body;
+        const { code_product, quantity, price, user_id } = req.body;
 
-        if (!kdbar || !jumlah || !harga || !tipe_order || !users_id) {
+        if (!code_product || !quantity || !price || !user_id) {
             return res.status(400).json({
                 message: 'Missing required fields',
                 errors: {
-                    kdbar: !kdbar ? 'Product code is required' : undefined,
-                    jumlah: !jumlah ? 'Quantity is required' : undefined,
-                    harga: !harga ? 'Price is required' : undefined,
-                    tipe_order: !tipe_order ? 'Order type is required' : undefined,
-                    users_id: !users_id ? 'User ID is required' : undefined
+                    code_product: !code_product ? 'Product code is required' : undefined,
+                    quantity: !quantity ? 'Quantity is required' : undefined,
+                    price: !price ? 'Price is required' : undefined,
+                    user_id: !user_id ? 'User ID is required' : undefined
                 }
             });
         }
 
-        // Check if product exists
-        const product = await Products.findByPk(kdbar);
-        if (!product) {
-            return res.status(404).json({ message: "Product not found" });
-        }
-
         const order = await Order.create({
-            kdbar,
-            jumlah,
-            harga,
-            tipe_order,
-            users_id,
-            tgl_order: new Date()
+            code_product,
+            quantity,
+            price,
+            user_id,
+            date_order: new Date()
         });
 
-        res.status(201).json(order);
+        const response = await Order.findOne({
+            where: { order_id: order.order_id },
+            include: [{
+                model: Products,
+                attributes: ['code_product', 'name_product', 'sell_price']
+            }]
+        });
+
+        res.status(201).json(response);
     } catch (error) {
         console.log(error.message);
         res.status(500).json({ message: "Error creating order" });
@@ -79,21 +79,30 @@ export const createOrder = async (req, res) => {
 // Update order by ID
 export const updateOrder = async (req, res) => {
     try {
-        const { kdbar, jumlah, harga, tipe_order } = req.body;
-        const order = await Order.findByPk(req.params.order_id);
-        
-        if (!order) {
-            return res.status(404).json({ message: "Order not found" });
-        }
-
-        await order.update({
-            kdbar: kdbar || order.kdbar,
-            jumlah: jumlah || order.jumlah,
-            harga: harga || order.harga,
-            tipe_order: tipe_order || order.tipe_order
+        const { code_product, quantity, price } = req.body;
+        const order = await Order.findOne({
+            where: { order_id: req.params.order_id }
         });
 
-        res.status(200).json({ message: "Order updated successfully" });
+        if (!order) return res.status(404).json({ message: "Order not found" });
+
+        await Order.update({
+            code_product: code_product || order.code_product,
+            quantity: quantity || order.quantity,
+            price: price || order.price
+        }, {
+            where: { order_id: req.params.order_id }
+        });
+
+        const response = await Order.findOne({
+            where: { order_id: req.params.order_id },
+            include: [{
+                model: Products,
+                attributes: ['code_product', 'name_product', 'sell_price']
+            }]
+        });
+
+        res.status(200).json(response);
     } catch (error) {
         console.log(error.message);
         res.status(500).json({ message: "Error updating order" });
@@ -103,13 +112,16 @@ export const updateOrder = async (req, res) => {
 // Delete order by ID
 export const deleteOrder = async (req, res) => {
     try {
-        const order = await Order.findByPk(req.params.order_id);
-        
-        if (!order) {
-            return res.status(404).json({ message: "Order not found" });
-        }
+        const order = await Order.findOne({
+            where: { order_id: req.params.order_id }
+        });
 
-        await order.destroy();
+        if (!order) return res.status(404).json({ message: "Order not found" });
+
+        await Order.destroy({
+            where: { order_id: req.params.order_id }
+        });
+
         res.status(200).json({ message: "Order deleted successfully" });
     } catch (error) {
         console.log(error.message);

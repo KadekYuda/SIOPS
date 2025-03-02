@@ -3,9 +3,8 @@ import db from "../config/Database.js";
 import Users from "./UserModel.js";
 
 const { DataTypes } = Sequelize;
-
-const Order = db.define('orders', {
-    order_id: { 
+const Sales = db.define('sales', {
+    sales_id: { 
         type: DataTypes.INTEGER, 
         autoIncrement: true, 
         primaryKey: true 
@@ -13,20 +12,12 @@ const Order = db.define('orders', {
     user_id: { 
         type: DataTypes.INTEGER, 
         allowNull: false,
-        references: {
-            model: Users,
-            key: 'user_id'
-        }
+        references: { model: Users, key: 'user_id' }
     },
-    order_date: { 
+    sales_date: { 
         type: DataTypes.DATE, 
         allowNull: false, 
         defaultValue: Sequelize.NOW 
-    },
-    order_status: {
-        type: DataTypes.ENUM('pending', 'approved', 'cancelled', 'received'),
-        allowNull: false,
-        defaultValue: 'pending'
     },
     total_amount: { 
         type: DataTypes.DECIMAL(12,2), 
@@ -34,9 +25,6 @@ const Order = db.define('orders', {
     },
     created_at: DataTypes.DATE,
     updated_at: DataTypes.DATE,
-}, { 
-    freezeTableName: true 
-});
+}, { freezeTableName: true });  
 
-
-export default Order;
+export default Sales;

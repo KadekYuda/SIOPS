@@ -7,7 +7,8 @@ import {
   Settings,
   PackageSearch,
   ClipboardList ,
-  LogOut ,
+  LogOut, 
+  ShoppingBag,
 } from "lucide-react";
 
 const SidebarAdmin = ({ isSidebarOpen, isDesktopSidebarOpen }) => {
@@ -26,11 +27,17 @@ const SidebarAdmin = ({ isSidebarOpen, isDesktopSidebarOpen }) => {
     },
     {
       href: "order",
-      icon: ShoppingCart,
+      icon: ShoppingBag,
       text: "Order",
     },
     {
-      href: "",
+      href: "sales",
+      icon: ShoppingCart,
+      text: "Sales",
+    },
+
+    {
+      href: "opname",
       icon: PackageSearch,
       text: "Opname",
     },

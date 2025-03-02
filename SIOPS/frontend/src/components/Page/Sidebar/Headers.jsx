@@ -15,7 +15,7 @@ const Headers = ({ darkMode, toggleDarkMode, toggleSidebar, toggleDesktopSidebar
   const fetchUserProfile = useCallback(async () => {
     try {
       const token = localStorage.getItem('token');
-      console.log('Fetching user profile with token:', token);
+      // console.log('Fetching user profile with token:', token);
 
       if (!token) {
         console.error('No token found');

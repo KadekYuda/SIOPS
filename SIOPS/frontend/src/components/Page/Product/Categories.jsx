@@ -1,0 +1,343 @@
+import { useState, useEffect, useCallback } from "react";
+import { Pencil, Trash2, Plus, X } from "lucide-react";
+import { motion } from "framer-motion";
+import axios from "axios";
+import AlertModal from "../../modal/AlertModal";
+import DeleteModal from "../../modal/DeleteModal";
+import SuccessModal from "../../modal/SuccessModal";
+import CrudButton from "../../Button/CrudButton";
+
+const Categories = ({ onCategoriesChange }) => {
+  const [categories, setCategories] = useState([]);
+  const [name, setName] = useState("");
+  const [code, setCode] = useState("");
+  const [editing, setEditing] = useState(false);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [alertModal, setAlertModal] = useState({ isOpen: false, message: "" });
+  const [deleteModal, setDeleteModal] = useState({
+    isOpen: false,
+    category: null,
+  });
+  const [successModal, setSuccessModal] = useState({
+    isOpen: false,
+    message: "",
+  });
+
+  const fetchCategories = useCallback(async () => {
+    try {
+      const response = await axios.get(`http://localhost:5000/api/categories`);
+      const categoriesData = response.data.result;
+      setCategories(categoriesData);
+
+      if (onCategoriesChange) {
+        onCategoriesChange(categoriesData);
+      }
+    } catch (error) {
+      console.error("Error fetching categories", error);
+    }
+  }, [onCategoriesChange]);
+
+  useEffect(() => {
+    fetchCategories();
+  }, [fetchCategories]);
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+
+    if (code.length > 4) {
+      setAlertModal({
+        isOpen: true,
+        message: "Category code cannot be more than 4 characters",
+      });
+      return;
+    }
+
+    try {
+      if (editing) {
+        await axios.put(`http://localhost:5000/api/categories/${code}`, {
+          name_categories: name,
+        });
+        setSuccessModal({
+          isOpen: true,
+          message: "Category updated successfully!",
+        });
+      } else {
+        await axios.post(`http://localhost:5000/api/categories`, {
+          code_categories: code,
+          name_categories: name,
+        });
+        setSuccessModal({
+          isOpen: true,
+          message: "Category added successfully!",
+        });
+      }
+      setEditing(false);
+      setCode("");
+      setName("");
+      setIsModalOpen(false);
+      await fetchCategories();
+    } catch (error) {
+      setAlertModal({
+        isOpen: true,
+        message: error.response?.data?.message || "Error saving category",
+      });
+    }
+  };
+
+  const handleEdit = (categories) => {
+    setCode(categories.code_categories);
+    setName(categories.name_categories);
+    setEditing(true);
+    setIsModalOpen(true);
+  };
+
+  const handleDelete = async (code) => {
+    try {
+      await axios.delete(`/api/categories/${code}`);
+      await fetchCategories();
+      setDeleteModal({ isOpen: false, category: null });
+      setSuccessModal({
+        isOpen: true,
+        message: "Category deleted successfully!",
+      });
+    } catch (error) {
+      setAlertModal({
+        isOpen: true,
+        message: error.response?.data?.message || "Error deleting category",
+      });
+    }
+  };
+
+  return (
+    <div className="max-w-5xl">
+      <div className="flex justify-between items-center">
+        <CrudButton
+          icon={Plus}
+          label="Add Category"
+          onClick={() => {
+            setEditing(false);
+            setCode("");
+            setName("");
+            setIsModalOpen(true);
+          }}
+          buttonStyle="secondary"
+          className="flex items-center gap-2"
+        />
+      </div>
+
+      {/* Modal Categories - turunkan z-index */}
+      {isModalOpen && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-40">
+          <motion.div
+            initial={{ y: -50, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            exit={{ y: 50, opacity: 0 }}
+            transition={{ type: "spring", duration: 0.5 }}
+            className="bg-white rounded-xl shadow-lg w-[480px] max-w-lg mx-4"
+          >
+            <div className="flex justify-between items-center p-6 border-b border-gray-100">
+              <h2 className="text-xl font-semibold text-gray-800">
+                {editing ? "Edit Category" : "Add New Category"}
+              </h2>
+              <button
+                onClick={() => setIsModalOpen(false)}
+                className="text-gray-500 hover:text-gray-700 transition-colors"
+              >
+                <X size={24} />
+              </button>
+            </div>
+            <form onSubmit={handleSubmit} className="p-6">
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Category Code
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="Enter code"
+                    className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    value={code}
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      if (value.length <= 4) {
+                        setCode(value);
+                      }
+                    }}
+                    maxLength={4}
+                    disabled={editing}
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Category Name
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="Enter name"
+                    className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                  />
+                </div>
+              </div>
+              <div className="flex gap-3 justify-end mt-6">
+                <button
+                  type="button"
+                  onClick={() => setIsModalOpen(false)}
+                  className="px-4 py-2 border border-gray-200 text-gray-600 rounded-lg hover:bg-gray-50 transition-colors duration-200"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 bg-emerald-500 text-white rounded-lg hover:bg-emerald-600 transition-colors duration-200"
+                >
+                  {editing ? "Update Category" : "Add Category"}
+                </button>
+              </div>
+            </form>
+          </motion.div>
+
+          {/* Table dalam Modal */}
+          <motion.div
+            initial={{ y: 50, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            exit={{ y: -50, opacity: 0 }}
+            transition={{ type: "spring", duration: 0.5, delay: 0.2 }}
+            className="bg-white rounded-lg shadow-lg overflow-hidden w-[480px] max-w-lg mx-4 mt-4"
+          >
+            <table className="w-full border-collapse">
+              <thead>
+                <tr className="bg-gray-50">
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-1/4">
+                    Code
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-2/4">
+                    Category Name
+                  </th>
+                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider w-1/4">
+                    Actions
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-200">
+                {categories.map((category) => (
+                  <tr
+                    key={category.code_categories}
+                    className="hover:bg-gray-50"
+                  >
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                      {category.code_categories}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                      {category.name_categories}
+                    </td>
+                    <td className="px-6 py-4 text-right text-sm">
+                      <div className="flex justify-end gap-3">
+                        <CrudButton
+                          icon={Pencil}
+                          onClick={() => handleEdit(category)}
+                          actionType="edit"
+                          buttonStyle="primary"
+                          className="p-1 rounded-full"
+                          buttonType="product"
+                        />
+                        <CrudButton
+                          icon={Trash2}
+                          onConfirm={() =>
+                            setDeleteModal({
+                              isOpen: true,
+                              category: category,
+                            })
+                          }
+                          actionType="delete"
+                          buttonStyle="danger"
+                          className="p-1 rounded-full"
+                          title="Delete Category"
+                          confirmMessage= {<>
+                          Are you sure you want to delete category <b className="text-gray-700">{category.name_categories}</b>?
+                        </>}
+                          buttonType="product"
+                        />
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+                {categories.length === 0 && (
+                  <tr>
+                    <td
+                      colSpan="3"
+                      className="px-6 py-4 text-center text-gray-500"
+                    >
+                      No categories found
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </motion.div>
+        </div>
+      )}
+
+      {/* Alert Modal - naikkan z-index */}
+      <div className="relative z-50">
+        <AlertModal
+          isOpen={alertModal.isOpen}
+          onClose={() => setAlertModal({ isOpen: false, message: "" })}
+          message={alertModal.message}
+        />
+      </div>
+
+      {/* Success Modal */}
+      <div className="relative z-50">
+        <SuccessModal
+          isOpen={successModal.isOpen}
+          onClose={() => setSuccessModal({ isOpen: false, message: "" })}
+          message={successModal.message}
+        />
+      </div>
+
+      {/* Delete Confirmation Modal - naikkan z-index */}
+      <div className="relative z-50">
+        <DeleteModal
+          open={deleteModal.isOpen}
+          onClose={() => setDeleteModal({ isOpen: false, category: null })}
+        >
+          <div className="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-red-100">
+            <Trash2 className="h-6 w-6 text-red-600" />
+          </div>
+          <div className="mt-3 text-center sm:mt-5">
+            <h3 className="text-lg leading-6 font-medium text-gray-900">
+              Are You Sure Want To Delete?
+            </h3>
+            <div className="mt-2">
+              <p className="text-sm text-gray-500 max-w-xs mx-auto whitespace-normal">
+                This action cannot be undone.
+              </p>
+            </div>
+          </div>
+          <div className="mt-5 sm:mt-6 flex gap-3 justify-end">
+            <button
+              type="button"
+              className="inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 sm:text-sm"
+              onClick={() => setDeleteModal({ isOpen: false, category: null })}
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              className="inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-red-600 text-base font-medium text-white hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 sm:text-sm"
+              onClick={() =>
+                handleDelete(deleteModal.category?.code_categories)
+              }
+            >
+              Delete
+            </button>
+          </div>
+        </DeleteModal>
+      </div>
+    </div>
+  );
+};
+
+export default Categories;

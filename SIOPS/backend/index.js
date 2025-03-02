@@ -1,84 +1,82 @@
-import express from "express";
-import cors from "cors";
-import dotenv from "dotenv";
-import db, { initDB } from "./config/Database.js";
-import { initializeDatabase } from "./models/index.js";
-import UserRoute from "./routes/UserRoute.js";
-import OrderRoute from "./routes/OrderRoutes.js";
-import ProductRoute from "./routes/ProductRoute.js";
-import CategoriesRoute from "./routes/CategoriesRoute.js";
-import BatchStokRoute from "./routes/BatchStokRoute.js";
-import OpnameRoute from "./routes/OpnameRoute.js";
-import initializeAdmin from "./utils/initializeAdmin.js";
+    import express from "express";
+    import cors from "cors";
+    import dotenv from "dotenv";
+    import db, { initDB } from "./config/Database.js";
+    import { initializeDatabase } from "./models/index.js";
+    import UserRoute from "./routes/UserRoute.js";
+    import OrderRoute from "./routes/OrderRoutes.js";
+    import ProductCategoriesRoute from "./routes/ProductCategoriesRoute.js";
+    import BatchStockRoute from "./routes/BatchStockRoute.js";
+    import OpnameRoute from "./routes/OpnameRoute.js";
+    import initializeAdmin from "./utils/initializeAdmin.js";
 
-dotenv.config();
+    dotenv.config();
 
-const app = express();
+    const app = express();
 
-// Middleware
-app.use(cors({
-    origin: ['http://localhost:3000', 'http://localhost:5000'],
-    credentials: true,
-    methods: ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization']
-}));
+    // Middleware
+    app.use(cors({
+        origin: ['http://localhost:3000', 'http://localhost:5000'],
+        credentials: true,
+        methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+        allowedHeaders: ['Content-Type', 'Authorization']
+    }));
 
-// Body parser middleware
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+    // Body parser middleware
+    app.use(express.json());
+    app.use(express.urlencoded({ extended: true }));
 
-// Error handling middleware
-app.use((err, req, res, next) => {
-    console.error(err.stack);
-    res.status(500).json({ 
-        msg: 'Something went wrong!',
-        error: process.env.NODE_ENV === 'development' ? err.message : undefined
-    });
-});
-
-// Routes
-app.use('/users', UserRoute);
-app.use('/orders', OrderRoute);
-app.use('/products', ProductRoute);
-app.use('/categories', CategoriesRoute);
-app.use('/batch-stok', BatchStokRoute);
-app.use('/opname', OpnameRoute);
-
-// Create uploads directory if it doesn't exist
-import { mkdirSync } from 'fs';
-try {
-    mkdirSync('./uploads', { recursive: true });
-} catch (err) {
-    if (err.code !== 'EEXIST') {
-        console.error('Error creating uploads directory:', err);
-    }
-}
-
-// Start the application
-(async () => {
-    try {
-        // Initialize database first
-        await initDB();
-        
-        // Test database connection
-        await db.authenticate();
-        console.log('Database connected...');
-
-        // Initialize models and update tables
-        await initializeDatabase();
-        
-        // Initialize admin user
-        await initializeAdmin();
-        console.log('Admin user initialized');
-
-        // Start server
-        const PORT = process.env.PORT || 5000;
-        app.listen(PORT, () => {
-            console.log(`Server running on port ${PORT}`);
-            console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
+    // Error handling middleware
+    app.use((err, req, res, next) => {
+        console.error(err.stack);
+        res.status(500).json({ 
+            msg: 'Something went wrong!',
+            error: process.env.NODE_ENV === 'development' ? err.message : undefined
         });
-    } catch (error) {
-        console.error('Startup failed:', error);
-        process.exit(1);
+    });
+
+    // Routes
+    app.use('/users', UserRoute);
+    app.use('/orders', OrderRoute);
+    app.use('/api', ProductCategoriesRoute);
+    app.use('/batch-stok', BatchStockRoute);
+    app.use('/opname', OpnameRoute);
+
+    // Create uploads directory if it doesn't exist
+    import { mkdirSync } from 'fs';
+    try {
+        mkdirSync('./uploads', { recursive: true });
+    } catch (err) {
+        if (err.code !== 'EEXIST') {
+            console.error('Error creating uploads directory:', err);
+        }
     }
-})();
+
+    // Start the application
+    (async () => {
+        try {
+            // Initialize database first
+            await initDB();
+            
+            // Test database connection
+            await db.authenticate();
+            console.log('Database connected...');
+
+            // Initialize models and update tables
+            await initializeDatabase();
+            
+            // Initialize admin user
+            await initializeAdmin();
+            console.log('Admin user initialized');
+
+            // Start server
+            const PORT = process.env.PORT || 5000;
+            app.listen(PORT, () => {
+                console.log(`Server running on port ${PORT}`);
+                console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
+            });
+        } catch (error) {
+            console.error('Startup failed:', error);
+            process.exit(1);
+        }
+    })();

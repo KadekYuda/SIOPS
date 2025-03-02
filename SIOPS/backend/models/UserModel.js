@@ -14,7 +14,15 @@ const User = db.define('users', {
     role: {
         type: DataTypes.ENUM('admin', 'staff'),
         defaultValue: 'staff' 
-    }
+    },
+    phone_number: DataTypes.STRING,
+    created_at: DataTypes.DATE,
+    updated_at: DataTypes.DATE, 
+    deleted_at: {
+        type: DataTypes.DATE,
+        allowNull: true
+    },
+        
 }, {
     freezeTableName: true
 });

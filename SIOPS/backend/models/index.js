@@ -1,127 +1,74 @@
 'use strict';
 
-import { Sequelize } from "sequelize";
 import db from "../config/Database.js";
 
 // Import models
-import Products from "./ProductModel.js";
-import Users from "./UserModel.js";
+import Product from "./ProductModel.js";
+import User from "./UserModel.js";
 import Order from "./OrderModel.js";
-import Categories from "./CategoriesModel.js";
+import categories from "./CategoriesModel.js";
 import Opname from "./OpnameModel.js";
-import BatchStok from "./BatchStokModel.js";
+import BatchStock from "./BatchstockModel.js";
+import Sales from "./SalesModel.js";
+import SalesDetail from "./SalesDetailModel.js";
+import OrderDetail from "./OrderDetailsModel.js";
 
-// Define associations
 const initializeAssociations = () => {
-    // Products and Categories
-    Products.belongsTo(Categories, {
-        foreignKey: 'kdkel',
-        onDelete: 'SET NULL',
-        onUpdate: 'CASCADE'
-    });
-    Categories.hasMany(Products, {
-        foreignKey: 'kdkel'
-    });
+    // Users associations
+    User.hasMany(Order, { foreignKey: 'user_id' });
+    User.hasMany(Sales, { foreignKey: 'user_id' });
+    User.hasMany(Opname, { foreignKey: 'user_id' });
 
-    // Products and Orders
-    Products.hasMany(Order, {
-        foreignKey: 'kdbar',
-        onDelete: 'CASCADE',
-        onUpdate: 'CASCADE'
-    });
-    Order.belongsTo(Products, {
-        foreignKey: 'kdbar'
-    });
+    Order.belongsTo(User, { foreignKey: 'user_id' });
+    Sales.belongsTo(User, { foreignKey: 'user_id' });
+    Opname.belongsTo(User, { foreignKey: 'user_id' });
 
-    // Users and Orders
-    Users.hasMany(Order, {
-        foreignKey: 'users_id',
-        onDelete: 'CASCADE',
-        onUpdate: 'CASCADE'
-    });
-    Order.belongsTo(Users, {
-        foreignKey: 'users_id'
-    });
+    // categories associations
+    categories.hasMany(Product, { foreignKey: 'code_categories' });
+    Product.belongsTo(categories, { foreignKey: 'code_categories' });
 
-    // Products and Opname
-    Products.hasMany(Opname, {
-        foreignKey: 'kdbar',
-        onDelete: 'CASCADE',
-        onUpdate: 'CASCADE'
-    });
-    Opname.belongsTo(Products, {
-        foreignKey: 'kdbar'
-    });
+    // Products associations
+    Product.hasMany(BatchStock, { foreignKey: 'code_product' });
+    BatchStock.belongsTo(Product, { foreignKey: 'code_product' });
 
-    // Users and Opname
-    Users.hasMany(Opname, {
-        foreignKey: 'users_id',
-        onDelete: 'CASCADE',
-        onUpdate: 'CASCADE'
-    });
-    Opname.belongsTo(Users, {
-        foreignKey: 'users_id'
-    });
+    //  Relasi Many-to-Many Order ↔ Products melalui OrderDetail
+    Order.belongsToMany(Product, { through: OrderDetail, foreignKey: 'order_id', otherKey: 'code_product' });
+    Product.belongsToMany(Order, { through: OrderDetail, foreignKey: 'code_product', otherKey: 'order_id' });
 
-    // Products and BatchStok
-    Products.hasMany(BatchStok, {
-        foreignKey: 'kdbar',
-        onDelete: 'CASCADE',
-        onUpdate: 'CASCADE'
-    });
-    BatchStok.belongsTo(Products, {
-        foreignKey: 'kdbar'
-    });
+    Order.hasMany(OrderDetail, { foreignKey: 'order_id' });
+    OrderDetail.belongsTo(Order, { foreignKey: 'order_id' });
+
+    OrderDetail.belongsTo(Product, { foreignKey: 'code_product' });
+    Product.hasMany(OrderDetail, { foreignKey: 'code_product' });
+
+    OrderDetail.belongsTo(BatchStock, { foreignKey: 'batch_id' });
+    BatchStock.hasMany(OrderDetail, { foreignKey: 'batch_id' });
+
+    // Relasi Many-to-Many Sales ↔ Products melalui SalesDetail
+    Sales.belongsToMany(Product, { through: SalesDetail, foreignKey: 'sales_id', otherKey: 'code_product' });
+    Product.belongsToMany(Sales, { through: SalesDetail, foreignKey: 'code_product', otherKey: 'sales_id' });
+
+    Sales.hasMany(SalesDetail, { foreignKey: 'sales_id' });
+    SalesDetail.belongsTo(Sales, { foreignKey: 'sales_id' });
+
+    SalesDetail.belongsTo(Product, { foreignKey: 'code_product' });
+    Product.hasMany(SalesDetail, { foreignKey: 'code_product' });
+
+    SalesDetail.belongsTo(BatchStock, { foreignKey: 'batch_id' });
+    BatchStock.hasMany(SalesDetail, { foreignKey: 'batch_id' });
+
+    // ✅ Opname dan BatchStock (One-to-Many)
+    Opname.belongsTo(BatchStock, { foreignKey: 'batch_id' });
+    BatchStock.hasMany(Opname, { foreignKey: 'batch_id' });
 };
 
+
 // Initialize database
-const initializeDatabase = async () => {
+export const initializeDatabase = async () => {
     try {
-        // Initialize associations first
         initializeAssociations();
-
-        // Check if tables exist
-        const [results] = await db.query(`
-            SELECT TABLE_NAME 
-            FROM information_schema.TABLES 
-            WHERE TABLE_SCHEMA = 'siops_db'
-        `);
-        const existingTables = results.map(r => r.TABLE_NAME.toLowerCase());
-
-        // Only create/alter tables that don't exist or need updates
-        const syncOptions = { alter: true };
-
-        if (!existingTables.includes('categories')) {
-            await Categories.sync(syncOptions);
-            console.log('Categories table checked/updated');
-        }
-
-        if (!existingTables.includes('products')) {
-            await Products.sync(syncOptions);
-            console.log('Products table checked/updated');
-        }
-
-        if (!existingTables.includes('users')) {
-            await Users.sync(syncOptions);
-            console.log('Users table checked/updated');
-        }
-
-        if (!existingTables.includes('orders')) {
-            await Order.sync(syncOptions);
-            console.log('Orders table checked/updated');
-        }
-
-        if (!existingTables.includes('opnames')) {
-            await Opname.sync(syncOptions);
-            console.log('Opnames table checked/updated');
-        }
-
-        if (!existingTables.includes('batch_stok')) {
-            await BatchStok.sync(syncOptions);
-            console.log('BatchStok table checked/updated');
-        }
-
-        console.log('All tables are up to date!');
+        await db.sync({ force: false, alter: false });
+        console.log('Database models synchronized successfully');
         return true;
     } catch (error) {
         console.error('Error initializing database:', error);
@@ -131,11 +78,14 @@ const initializeDatabase = async () => {
 
 // Export models and initialization function
 export {
-    Products,
-    Users,
+    Product,
+    User,
     Order,
-    Categories,
+    categories,
     Opname,
-    BatchStok,
-    initializeDatabase
+    BatchStock,
+    Sales,
+    SalesDetail,
+    OrderDetail,
+    initializeAssociations
 };

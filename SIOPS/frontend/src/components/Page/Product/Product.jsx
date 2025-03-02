@@ -1,383 +1,406 @@
-import React, { useState, useEffect } from 'react';
-import axios from 'axios';
-import { Plus, Edit2, Trash2, Search, X, Upload } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import React, { useState, useEffect, useCallback } from "react";
+import axios from "axios";
+import { Plus, Edit2, Trash2, Search, X, Upload, Package } from "lucide-react";
+import SuccessModal from "../../modal/SuccessModal";
+import AlertModal from "../../modal/AlertModal";
+import Categories from "./Categories";
+import CrudButton from "../../Button/CrudButton";
 
 const Product = () => {
-  const [products, setProducts] = useState([]); // Initialize with empty array
-  const [categories, setCategories] = useState([]); // Initialize with empty array
+  const [products, setProducts] = useState([]);
+  const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [search, setSearch] = useState('');
+  const [search, setSearch] = useState("");
   const [page, setPage] = useState(0);
   const [limit, setLimit] = useState(10);
   const [totalPages, setTotalPages] = useState(0);
-  const [selectedCategory, setSelectedCategory] = useState('');
   const [showModal, setShowModal] = useState(false);
-  const [showCategoryModal, setShowCategoryModal] = useState(false);
-  const [modalMode, setModalMode] = useState('add'); 
-  const [importModalOpen, setImportModalOpen] = useState(false);
-  const [importFile, setImportFile] = useState(null);
-  const [importStatus, setImportStatus] = useState('');
-  const [importError, setImportError] = useState('');
+  const [modalMode, setModalMode] = useState("add");
   const [formData, setFormData] = useState({
-    kdbar: '',
-    barcode: '',
-    nmbar: '',
-    kdkel: '',
-    hjual: '',
-    markup: ''
+    code_product: "",
+    barcode: "",
+    name_product: "",
+    code_categories: "",
+    sell_price: "",
+    min_stock: "",
   });
-  const [categoryForm, setCategoryForm] = useState({
-    kdkel: '',
-    nmkel: ''
+  const [successModal, setSuccessModal] = useState({
+    isOpen: false,
+    message: "",
   });
-  const [editingProduct, setEditingProduct] = useState(null);
-  const [editingCategory, setEditingCategory] = useState(null);
-  const [error, setError] = useState('');
-  const navigate = useNavigate();
+  const [alertModal, setAlertModal] = useState({ isOpen: false, message: "" });
+  const [deleteConfirmModal, setDeleteConfirmModal] = useState({
+    isOpen: false,
+    product: null,
+  });
+  const [formErrors, setFormErrors] = useState({});
+  const [csvFile, setCsvFile] = useState(null);
+  const [showUploadModal, setShowUploadModal] = useState(false);
+  const [uploadLoading, setUploadLoading] = useState(false);
 
-  // Fetch products with search and pagination
-  const fetchProducts = async () => {
-    try {
-      const token = localStorage.getItem('token');
-      const response = await axios.get(`http://localhost:5000/products?${new URLSearchParams({
-        search,
-        page,
-        limit,
-        kdkel: selectedCategory
-      }).toString()}`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      setProducts(Array.isArray(response.data) ? response.data : []); // Ensure we always have an array
-      setTotalPages(1); // Since pagination is not implemented in backend yet
-      setLoading(false);
-    } catch (error) {
-      console.error('Error fetching products:', error);
-      setProducts([]); // Set empty array on error
-      setLoading(false);
-    }
+  const validateForm = () => {
+    const errors = {};
+    if (!formData.code_product)
+      errors.code_product = "Product code is required";
+    if (!formData.name_product)
+      errors.name_product = "Product name is required";
+    if (!formData.sell_price) errors.sell_price = "Selling price is required";
+    if (!formData.min_stock) errors.min_stock = "Minimum stock is required";
+
+    setFormErrors(errors);
+    return Object.keys(errors).length === 0;
   };
 
-  // Fetch categories
-  const fetchCategories = async () => {
+  const fetchProducts = useCallback(async () => {
     try {
-      const token = localStorage.getItem('token');
-      const response = await axios.get('http://localhost:5000/categories', {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      setCategories(response.data.result || []); // Ensure we always have an array
+      setLoading(true);
+      const token = localStorage.getItem("token");
+
+      const response = await axios.get(
+        `http://localhost:5000/api/products?${new URLSearchParams({
+          search: search,
+          page,
+          limit,
+        })}`,
+        {
+          headers: { Authorization: `Bearer ${token}` },
+        }
+      );
+
+      setProducts(response.data.result || []);
+      setTotalPages(Math.ceil(response.data.totalRows / limit));
+      setLoading(false);
     } catch (error) {
-      console.error('Error fetching categories:', error);
-      setCategories([]); // Set empty array on error
+      console.error("Error fetching products:", error);
+      setAlertModal({
+        isOpen: true,
+        message: error.response?.data?.message || "Failed to fetch products",
+      });
+      setLoading(false);
     }
+  }, [search, page, limit]);
+
+  // Wrap fetchCategories with useCallback
+  const fetchCategories = useCallback(async () => {
+    try {
+      const token = localStorage.getItem("token");
+      if (!token) {
+        throw new Error("No token found");
+      }
+      const response = await axios.get("http://localhost:5000/api/categories", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (response.data && response.data.result) {
+        setCategories(response.data.result);
+      } else {
+        throw new Error("Invalid response format from server");
+      }
+    } catch (error) {
+      console.error("Error fetching categories:", error);
+      setAlertModal({
+        isOpen: true,
+        message: error.message || "Failed to fetch categories",
+      });
+      setCategories([]);
+    }
+  }, []);
+
+  const handleCategoriesChange = (newCategories) => {
+    setCategories(newCategories);
   };
+
+  // Update useEffect to include dependencies
+  useEffect(() => {
+    fetchCategories();
+  }, [fetchCategories]);
 
   useEffect(() => {
     fetchProducts();
-    fetchCategories();
-  }, [search, page, limit, selectedCategory]);
+  }, [fetchProducts]);
 
-  // Handle form submission
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setError('');
-    try {
-      const token = localStorage.getItem('token');
-      if (!token) {
-        throw new Error('No authentication token found');
-      }
+    if (!validateForm()) return;
 
+    try {
+      const token = localStorage.getItem("token");
       const config = {
-        headers: { 
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        }
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
       };
 
-      // Validate required fields
-      if (!formData.kdbar || !formData.nmbar || !formData.hjual) {
-        throw new Error('Please fill in all required fields');
+      if (modalMode === "add") {
+        await axios.post(
+          "http://localhost:5000/api/products",
+          formData,
+          config
+        );
+        setSuccessModal({
+          isOpen: true,
+          message: "Product added successfully",
+        });
+      } else {
+        await axios.put(
+          `http://localhost:5000/api/products/${formData.code_product}`,
+          formData,
+          config
+        );
+        setSuccessModal({
+          isOpen: true,
+          message: "Product updated successfully",
+        });
       }
 
-      console.log('Submitting product data:', formData);
-      
-      if (modalMode === 'add') {
-        const response = await axios.post('http://localhost:5000/products', formData, config);
-        console.log('Product added successfully:', response.data);
-      } else {
-        const response = await axios.patch(`http://localhost:5000/products/${editingProduct.kdbar}`, formData, config);
-        console.log('Product updated successfully:', response.data);
-      }
-      
       setShowModal(false);
-      setFormData({
-        kdbar: '',
-        barcode: '',
-        nmbar: '',
-        kdkel: '',
-        hjual: '',
-        markup: ''
-      });
-      setEditingProduct(null);
+      resetForm();
       fetchProducts();
     } catch (error) {
-      console.error('Error submitting product:', error);
-      const errorMessage = error.response?.data?.msg || error.message || 'Error submitting product';
-      setError(errorMessage);
-      alert(errorMessage);
+      setAlertModal({
+        isOpen: true,
+        message: error.response?.data?.message || "Failed to save product",
+      });
     }
   };
 
-  // Handle category form submission
-  const handleCategorySubmit = async (e) => {
-    e.preventDefault();
-    setError('');
+  const handleDelete = async (code_product) => {
     try {
-      const token = localStorage.getItem('token');
-      if (!token) {
-        throw new Error('No authentication token found');
-      }
-
-      const config = {
-        headers: { 
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        }
-      };
-
-      // Validate required fields
-      if (!categoryForm.kdkel || !categoryForm.nmkel) {
-        throw new Error('Please fill in all required fields');
-      }
-
-      console.log('Submitting category data:', categoryForm);
-
-      if (modalMode === 'add') {
-        const response = await axios.post('http://localhost:5000/categories', categoryForm, config);
-        console.log('Category added successfully:', response.data);
-      } else {
-        const response = await axios.patch(`http://localhost:5000/categories/${editingCategory.kdkel}`, categoryForm, config);
-        console.log('Category updated successfully:', response.data);
-      }
-      
-      setShowCategoryModal(false);
-      setCategoryForm({ kdkel: '', nmkel: '' });
-      setEditingCategory(null);
-      fetchCategories();
+      const token = localStorage.getItem("token");
+      await axios.delete(`http://localhost:5000/api/products/${code_product}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      setSuccessModal({
+        isOpen: true,
+        message: "Product deleted successfully",
+      });
+      fetchProducts();
     } catch (error) {
-      console.error('Error submitting category:', error);
-      const errorMessage = error.response?.data?.msg || error.message || 'Error submitting category';
-      setError(errorMessage);
-      alert(errorMessage);
+      setAlertModal({
+        isOpen: true,
+        message: error.response?.data?.message || "Failed to delete product",
+      });
     }
+    setDeleteConfirmModal({ isOpen: false, product: null });
   };
 
-  // Handle product deletion
-  const handleDeleteProduct = async (kdbar) => {
-    if (window.confirm('Are you sure you want to delete this product?')) {
-      try {
-        const token = localStorage.getItem('token');
-        await axios.delete(`http://localhost:5000/products/${kdbar}`, {
-          headers: { Authorization: `Bearer ${token}` }
-        });
-        fetchProducts();
-      } catch (error) {
-        console.error('Error deleting product:', error);
-        alert(error.response?.data?.msg || 'Error deleting product');
-      }
-    }
+  const handleFileChange = (e) => {
+    setCsvFile(e.target.files[0]);
   };
 
-  // Handle category deletion
-  const handleDeleteCategory = async (kdkel) => {
-    if (window.confirm('Are you sure you want to delete this category? This will affect all products in this category.')) {
-      try {
-        const token = localStorage.getItem('token');
-        await axios.delete(`http://localhost:5000/categories/${kdkel}`, {
-          headers: { Authorization: `Bearer ${token}` }
-        });
-        fetchCategories();
-      } catch (error) {
-        console.error('Error deleting category:', error);
-        alert(error.response?.data?.msg || 'Error deleting category');
-      }
-    }
-  };
-
-  // Handle CSV import
-  const handleImportProducts = async (e) => {
-    e.preventDefault();
-    if (!importFile) {
-      alert('Please select a file to import');
+  const handleCsvUpload = async () => {
+    if (!csvFile) {
+      setAlertModal({ isOpen: true, message: "Please select a CSV file" });
       return;
     }
 
-    const formData = new FormData();
-    formData.append('file', importFile);
+    // Check if file is CSV
+    if (!csvFile.name.endsWith(".csv")) {
+      setAlertModal({ isOpen: true, message: "Only CSV files are allowed" });
+      return;
+    }
 
     try {
-      const token = localStorage.getItem('token');
-      const response = await axios.post('http://localhost:5000/products/import', formData, {
-        headers: { 
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'multipart/form-data'
+      setUploadLoading(true);
+      const token = localStorage.getItem("token");
+      const formData = new FormData();
+      formData.append("file", csvFile); // Pastikan nama field adalah "file"
+
+      const response = await axios.post(
+        "http://localhost:5000/api/products/import",
+        formData,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
         }
+      );
+
+      setUploadLoading(false);
+      setShowUploadModal(false);
+      setCsvFile(null);
+      setSuccessModal({
+        isOpen: true,
+        message: response.data.message || "Products imported successfully",
       });
-
-      setImportStatus('Import successful');
-      setImportError('');
-      setImportFile(null);
       fetchProducts();
-
-      // Close modal after successful import
-      setTimeout(() => {
-        setImportModalOpen(false);
-        setImportStatus('');
-      }, 2000);
     } catch (error) {
-      console.error('Error importing products:', error);
-      setImportError(error.response?.data?.msg || 'Error importing products');
-      setImportStatus('');
+      setUploadLoading(false);
+      setAlertModal({
+        isOpen: true,
+        message: error.response?.data?.message || "Failed to import products",
+      });
     }
   };
 
-  // Handle category selection
-  const handleCategoryChange = (e) => {
-    setSelectedCategory(e.target.value);
-    setPage(0); // Reset to first page when changing category
+  const resetForm = () => {
+    setFormData({
+      code_product: "",
+      barcode: "",
+      name_product: "",
+      code_categories: "",
+      sell_price: "",
+      min_stock: "",
+    });
+    setFormErrors({});
   };
 
   return (
     <div className="container mx-auto px-4 py-8 pt-20">
-      {/* Search and Filters */}
-      <div className="mb-6 flex flex-wrap gap-4 items-center justify-between">
-        <div className="flex-1 min-w-[200px] max-w-xl">
+      {/* Header and Search Section */}
+      <div className="mb-6">
+        <div className="flex justify-between items-center mb-4">
+          <h1 className="text-2xl font-bold text-gray-800 flex items-center gap-2">
+            <Package className="h-6 w-6" />
+            Product Management
+          </h1>
+          <div className="flex gap-2">
+            <CrudButton
+              icon={Upload}
+              label="Import CSV"
+              onClick={() => setShowUploadModal(true)}
+              buttonStyle="secondary"
+              className="flex items-center gap-2"
+            />
+            <CrudButton
+              icon={Plus}
+              label="Add Product"
+              onClick={() => {
+                setModalMode("add");
+                setShowModal(true);
+                resetForm();
+              }}
+              buttonStyle="primary"
+              className="flex items-center gap-2"
+            />
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div className="relative">
             <input
               type="text"
               placeholder="Search products..."
               value={search}
-              onChange={(e) => setSearch(e.target.value)}
+              onChange={(e) => {
+                setSearch(e.target.value);
+                setPage(0);
+              }}
               className="w-full pl-10 pr-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
             />
-            <Search className="absolute left-3 top-2.5 text-gray-400" size={20} />
+            <Search
+              className="absolute left-3 top-2.5 text-gray-400"
+              size={20}
+            />
           </div>
-        </div>
-        
-        <div className="flex gap-4">
-          <select
-            value={selectedCategory}
-            onChange={handleCategoryChange}
-            className="border rounded-lg px-4 py-2 focus:ring-2 focus:ring-blue-500"
-          >
-            <option value="">All Categories</option>
-            {categories.map(cat => (
-              <option key={cat.kdkel} value={cat.kdkel}>{cat.nmkel}</option>
-            ))}
-          </select>
-          
-          <button
-            onClick={() => {
-              setModalMode('add');
-              setShowModal(true);
-            }}
-            className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 flex items-center gap-2"
-          >
-            <Plus size={20} /> Add Product
-          </button>
-
-          <button
-            onClick={() => setImportModalOpen(true)}
-            className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 flex items-center gap-2"
-          >
-            <Upload size={20} /> Import CSV
-          </button>
-          
-          <button
-            onClick={() => {
-              setModalMode('add');
-              setShowCategoryModal(true);
-            }}
-            className="bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 flex items-center gap-2"
-          >
-            <Plus size={20} /> Add Category
-          </button>
+          <Categories onCategoriesChange={handleCategoriesChange} />
         </div>
       </div>
 
       {/* Products Table */}
       <div className="bg-white rounded-lg shadow overflow-hidden">
-        <table className="min-w-full divide-y divide-gray-200">
-          <thead className="bg-gray-50">
-            <tr>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Code</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Barcode</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Category</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Price</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Markup</th>
-              <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
-            </tr>
-          </thead>
-          <tbody className="bg-white divide-y divide-gray-200">
-            {loading ? (
+        <div className="overflow-x-auto">
+          <table className="min-w-full divide-y divide-gray-200">
+            <thead className="bg-gray-50">
               <tr>
-                <td colSpan="7" className="px-6 py-4 text-center">
-                  Loading...
-                </td>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Code
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Barcode
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Name
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  categories
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Price
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Min Stock
+                </th>
+                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Actions
+                </th>
               </tr>
-            ) : products && products.length > 0 ? (
-              products.map((product) => (
-                <tr key={product.kdbar} className="hover:bg-gray-50">
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{product.kdbar}</td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{product.barcode || '-'}</td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{product.nmbar}</td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    {categories.find(c => c.kdkel === product.kdkel)?.nmkel || '-'}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                    Rp {Number(product.hjual).toLocaleString()}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    {product.markup}%
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                    <button
-                      onClick={() => {
-                        setEditingProduct(product);
-                        setFormData({
-                          kdbar: product.kdbar,
-                          barcode: product.barcode || '',
-                          nmbar: product.nmbar,
-                          kdkel: product.kdkel || '',
-                          hjual: product.hjual,
-                          markup: product.markup
-                        });
-                        setModalMode('edit');
-                        setShowModal(true);
-                      }}
-                      className="text-indigo-600 hover:text-indigo-900 mr-4"
-                    >
-                      <Edit2 size={18} />
-                    </button>
-                    <button
-                      onClick={() => handleDeleteProduct(product.kdbar)}
-                      className="text-red-600 hover:text-red-900"
-                    >
-                      <Trash2 size={18} />
-                    </button>
+            </thead>
+            <tbody className="bg-white divide-y divide-gray-200">
+              {loading ? (
+                <tr>
+                  <td colSpan="7" className="px-6 py-4 text-center">
+                    <div className="flex justify-center items-center space-x-2">
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-500"></div>
+                      <span>Loading...</span>
+                    </div>
                   </td>
                 </tr>
-              ))
-            ) : (
-              <tr>
-                <td colSpan="7" className="px-6 py-4 text-center text-gray-500">
-                  No products found
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
+              ) : products.length > 0 ? (
+                products.map((product) => (
+                  <tr key={product.code_product} className="hover:bg-gray-50">
+                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                      {product.code_product}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      {product.barcode || "-"}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                      {product.name_product}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      {categories.find(
+                        (c) => c.code_categories === product.code_categories
+                      )?.name_categories || "-"}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                      Rp {Number(product.sell_price).toLocaleString()}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      {product.min_stock}
+                    </td>
+                    <td className="px-6 py-4  text-right text-sm font-medium">
+                      <div className="flex justify-end gap-3">
+                        <CrudButton
+                          icon={Edit2}
+                          onClick={() => {
+                            setFormData(product);
+                            setModalMode("edit");
+                            setShowModal(true);
+                          }}
+                          actionType="edit"
+                          buttonStyle="primary"
+                          className="p-1 rounded-full"
+                          buttonType="product"
+                        />
+                        <CrudButton
+                          icon={Trash2}
+                          onConfirm={() => handleDelete(product.code_product)}
+                          actionType="delete"
+                          buttonStyle="danger"
+                          className="p-1 rounded-full"
+                          title="Delete Product"
+                          confirmMessage={ <>
+                            Are you sure you want to delete category <b className="text-gray-700">{product.name_product}</b>?
+                          </>}
+                          buttonType="product"
+                        />
+                      </div>
+                    </td>
+                  </tr>
+                ))
+              ) : (
+                <tr>
+                  <td
+                    colSpan="7"
+                    className="px-6 py-4 text-center text-gray-500"
+                  >
+                    No products found
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
 
       {/* Pagination */}
@@ -385,8 +408,11 @@ const Product = () => {
         <div>
           <select
             value={limit}
-            onChange={(e) => setLimit(Number(e.target.value))}
-            className="border rounded px-2 py-1"
+            onChange={(e) => {
+              setLimit(Number(e.target.value));
+              setPage(0);
+            }}
+            className="border rounded px-3 py-1 text-sm"
           >
             <option value={10}>10 per page</option>
             <option value={20}>20 per page</option>
@@ -398,7 +424,11 @@ const Product = () => {
             <button
               key={i}
               onClick={() => setPage(i)}
-              className={`px-3 py-1 rounded ${page === i ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}
+              className={`px-3 py-1 rounded text-sm ${
+                page === i
+                  ? "bg-blue-600 text-white"
+                  : "bg-gray-200 text-gray-700 hover:bg-gray-300"
+              }`}
             >
               {i + 1}
             </button>
@@ -406,96 +436,179 @@ const Product = () => {
         </div>
       </div>
 
-      {/* Product Modal */}
+      {/* Add/Edit Modal */}
       {showModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-lg max-w-2xl w-full">
             <div className="flex justify-between items-center p-6 border-b">
               <h2 className="text-xl font-semibold">
-                {modalMode === 'add' ? 'Add New Product' : 'Edit Product'}
+                {modalMode === "add" ? "Add New Product" : "Edit Product"}
               </h2>
-              <button onClick={() => setShowModal(false)} className="text-gray-500 hover:text-gray-700">
+              <button
+                onClick={() => {
+                  setShowModal(false);
+                  resetForm();
+                }}
+                className="text-gray-500 hover:text-gray-700"
+              >
                 <X size={24} />
               </button>
             </div>
             <form onSubmit={handleSubmit} className="p-6">
-              {error && (
-                <div className="mb-4 p-3 bg-red-100 text-red-700 rounded-lg">
-                  {error}
-                </div>
-              )}
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Product Code</label>
+                  <label
+                    htmlFor="productCode"
+                    className="block text-sm font-medium text-gray-700 mb-1"
+                  >
+                    Product Code*
+                  </label>
                   <input
                     type="text"
-                    value={formData.kdbar}
-                    onChange={(e) => setFormData({ ...formData, kdbar: e.target.value })}
-                    disabled={modalMode === 'edit'}
-                    required
-                    className="w-full border rounded px-3 py-2 disabled:bg-gray-100"
+                    value={formData.code_product}
+                    onChange={(e) =>
+                      setFormData({ ...formData, code_product: e.target.value })
+                    }
+                    disabled={modalMode === "edit"}
+                    className={`w-full px-3 py-2 border rounded ${
+                      formErrors.code_product
+                        ? "border-red-500"
+                        : "border-gray-300"
+                    }`}
                   />
+                  {formErrors.code_product && (
+                    <p className="mt-1 text-sm text-red-500">
+                      {formErrors.code_product}
+                    </p>
+                  )}
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Barcode</label>
+                  <label
+                    htmlFor="barcode"
+                    className="block text-sm font-medium text-gray-700 mb-1"
+                  >
+                    Barcode
+                  </label>
                   <input
                     type="text"
                     value={formData.barcode}
-                    onChange={(e) => setFormData({ ...formData, barcode: e.target.value })}
-                    className="w-full border rounded px-3 py-2"
+                    onChange={(e) =>
+                      setFormData({ ...formData, barcode: e.target.value })
+                    }
+                    className="w-full px-3 py-2 border rounded"
                   />
                 </div>
                 <div className="col-span-2">
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Product Name</label>
+                  <label
+                    htmlFor="productName"
+                    className="block text-sm font-medium text-gray-700 mb-1"
+                  >
+                    Product Name*
+                  </label>
                   <input
                     type="text"
-                    value={formData.nmbar}
-                    onChange={(e) => setFormData({ ...formData, nmbar: e.target.value })}
-                    required
-                    className="w-full border rounded px-3 py-2"
+                    value={formData.name_product}
+                    onChange={(e) =>
+                      setFormData({ ...formData, name_product: e.target.value })
+                    }
+                    className={`w-full px-3 py-2 border rounded ${
+                      formErrors.name_product
+                        ? "border-red-500"
+                        : "border-gray-300"
+                    }`}
                   />
+                  {formErrors.name_product && (
+                    <p className="mt-1 text-sm text-red-500">
+                      {formErrors.name_product}
+                    </p>
+                  )}
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Category</label>
-                  <select
-                    value={formData.kdkel}
-                    onChange={(e) => setFormData({ ...formData, kdkel: e.target.value })}
-                    className="w-full border rounded px-3 py-2"
+                  <label
+                    htmlFor="categories"
+                    className="block text-sm font-medium text-gray-700 mb-1"
                   >
-                    <option value="">Select Category</option>
-                    {categories.map(cat => (
-                      <option key={cat.kdkel} value={cat.kdkel}>{cat.nmkel}</option>
+                    categories
+                  </label>
+                  <select
+                    value={formData.code_categories}
+                    onChange={(e) =>
+                      setFormData({
+                        ...formData,
+                        code_categories: e.target.value,
+                      })
+                    }
+                    className="w-full px-3 py-2 border rounded"
+                  >
+                    <option value="">Select categories</option>
+                    {categories.map((cat) => (
+                      <option
+                        key={cat.code_categories}
+                        value={cat.code_categories}
+                      >
+                        {cat.name_categories}
+                      </option>
                     ))}
                   </select>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Price</label>
+                  <label
+                    htmlFor="sellingPrice"
+                    className="block text-sm font-medium text-gray-700 mb-1"
+                  >
+                    Selling Price*
+                  </label>
                   <input
                     type="number"
-                    value={formData.hjual}
-                    onChange={(e) => setFormData({ ...formData, hjual: e.target.value })}
-                    required
-                    min="0"
-                    step="0.01"
-                    className="w-full border rounded px-3 py-2"
+                    value={formData.sell_price}
+                    onChange={(e) =>
+                      setFormData({ ...formData, sell_price: e.target.value })
+                    }
+                    className={`w-full px-3 py-2 border rounded ${
+                      formErrors.sell_price
+                        ? "border-red-500"
+                        : "border-gray-300"
+                    }`}
                   />
+                  {formErrors.sell_price && (
+                    <p className="mt-1 text-sm text-red-500">
+                      {formErrors.sell_price}
+                    </p>
+                  )}
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Markup (%)</label>
+                  <label
+                    htmlFor="minimumStock"
+                    className="block text-sm font-medium text-gray-700 mb-1"
+                  >
+                    Minimum Stock*
+                  </label>
                   <input
                     type="number"
-                    value={formData.markup}
-                    onChange={(e) => setFormData({ ...formData, markup: e.target.value })}
-                    min="0"
-                    step="0.00001"
-                    className="w-full border rounded px-3 py-2"
+                    value={formData.min_stock}
+                    onChange={(e) =>
+                      setFormData({ ...formData, min_stock: e.target.value })
+                    }
+                    className={`w-full px-3 py-2 border rounded ${
+                      formErrors.min_stock
+                        ? "border-red-500"
+                        : "border-gray-300"
+                    }`}
                   />
+                  {formErrors.min_stock && (
+                    <p className="mt-1 text-sm text-red-500">
+                      {formErrors.min_stock}
+                    </p>
+                  )}
                 </div>
               </div>
               <div className="mt-6 flex justify-end gap-4">
                 <button
                   type="button"
-                  onClick={() => setShowModal(false)}
+                  onClick={() => {
+                    setShowModal(false);
+                    resetForm();
+                  }}
                   className="px-4 py-2 border rounded-lg hover:bg-gray-50"
                 >
                   Cancel
@@ -504,7 +617,7 @@ const Product = () => {
                   type="submit"
                   className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
                 >
-                  {modalMode === 'add' ? 'Add Product' : 'Save Changes'}
+                  {modalMode === "add" ? "Add Product" : "Save Changes"}
                 </button>
               </div>
             </form>
@@ -512,139 +625,126 @@ const Product = () => {
         </div>
       )}
 
-      {/* Category Modal */}
-      {showCategoryModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4">
+      {/* CSV Upload Modal */}
+      {showUploadModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-lg max-w-md w-full">
             <div className="flex justify-between items-center p-6 border-b">
               <h2 className="text-xl font-semibold">
-                {modalMode === 'add' ? 'Add New Category' : 'Edit Category'}
+                Import Products from CSV
               </h2>
-              <button onClick={() => setShowCategoryModal(false)} className="text-gray-500 hover:text-gray-700">
-                <X size={24} />
-              </button>
-            </div>
-            <form onSubmit={handleCategorySubmit} className="p-6">
-              {error && (
-                <div className="mb-4 p-3 bg-red-100 text-red-700 rounded-lg">
-                  {error}
-                </div>
-              )}
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Category Code</label>
-                  <input
-                    type="text"
-                    value={categoryForm.kdkel}
-                    onChange={(e) => setCategoryForm({ ...categoryForm, kdkel: e.target.value })}
-                    disabled={modalMode === 'edit'}
-                    required
-                    maxLength={4}
-                    className="w-full border rounded px-3 py-2 disabled:bg-gray-100"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Category Name</label>
-                  <input
-                    type="text"
-                    value={categoryForm.nmkel}
-                    onChange={(e) => setCategoryForm({ ...categoryForm, nmkel: e.target.value })}
-                    required
-                    className="w-full border rounded px-3 py-2"
-                  />
-                </div>
-              </div>
-              <div className="mt-6 flex justify-end gap-4">
-                <button
-                  type="button"
-                  onClick={() => setShowCategoryModal(false)}
-                  className="px-4 py-2 border rounded-lg hover:bg-gray-50"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"
-                >
-                  {modalMode === 'add' ? 'Add Category' : 'Save Changes'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* Import Modal */}
-      {importModalOpen && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-8 w-full max-w-md">
-            <div className="flex justify-between items-center mb-6">
-              <h2 className="text-2xl font-bold">Import Products</h2>
               <button
                 onClick={() => {
-                  setImportModalOpen(false);
-                  setImportStatus('');
-                  setImportError('');
-                  setImportFile(null);
+                  setShowUploadModal(false);
+                  setCsvFile(null);
                 }}
                 className="text-gray-500 hover:text-gray-700"
               >
                 <X size={24} />
               </button>
             </div>
-            <form onSubmit={handleImportProducts}>
+            <div className="p-6">
               <div className="mb-4">
-                <label className="block text-gray-700 text-sm font-bold mb-2">
+                <label
+                  htmlFor="selectCsvFile"
+                  className="block text-sm font-medium text-gray-700 mb-2"
+                >
                   Select CSV File
                 </label>
                 <input
                   type="file"
                   accept=".csv"
-                  onChange={(e) => setImportFile(e.target.files[0])}
-                  className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:border-blue-500"
-                  required
+                  onChange={handleFileChange}
+                  className="w-full px-3 py-2 border rounded"
                 />
                 <p className="mt-2 text-sm text-gray-500">
-                  File must be a CSV with headers: kdbar, barcode, nmbar, kdkel, hjual, markup
+                  File should be in CSV format with headers: code_product,
+                  barcode, name_product, code_categories, sell_price, min_stock
                 </p>
               </div>
-              
-              {importStatus && (
-                <div className="mb-4 p-2 bg-green-100 text-green-700 rounded">
-                  {importStatus}
-                </div>
-              )}
-              
-              {importError && (
-                <div className="mb-4 p-2 bg-red-100 text-red-700 rounded">
-                  {importError}
-                </div>
-              )}
-
-              <div className="flex justify-end gap-4">
+              <div className="flex justify-end gap-4 mt-6">
                 <button
                   type="button"
                   onClick={() => {
-                    setImportModalOpen(false);
-                    setImportStatus('');
-                    setImportError('');
-                    setImportFile(null);
+                    setShowUploadModal(false);
+                    setCsvFile(null);
                   }}
-                  className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg"
+                  className="px-4 py-2 border rounded-lg hover:bg-gray-50"
                 >
                   Cancel
                 </button>
                 <button
-                  type="submit"
-                  className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600"
+                  onClick={handleCsvUpload}
+                  disabled={uploadLoading || !csvFile}
+                  className={`px-4 py-2 bg-green-600 text-white rounded-lg flex items-center gap-2 ${
+                    uploadLoading || !csvFile
+                      ? "opacity-50 cursor-not-allowed"
+                      : "hover:bg-green-700"
+                  }`}
                 >
-                  Import
+                  {uploadLoading ? (
+                    <>
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                      <span>Uploading...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Upload className="h-4 w-4" />
+                      <span>Upload</span>
+                    </>
+                  )}
                 </button>
               </div>
-            </form>
+            </div>
           </div>
         </div>
       )}
+
+      {/* Delete Confirmation Modal */}
+      {deleteConfirmModal.isOpen && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-lg max-w-md w-full p-6">
+            <h3 className="text-xl font-semibold mb-4">Delete Product</h3>
+            <p className="text-gray-600 mb-6">
+              Are you sure you want to delete the product "
+              {deleteConfirmModal.product.name_product}"? This action cannot be
+              undone.
+            </p>
+            <div className="flex justify-end gap-4">
+              <button
+                onClick={() =>
+                  setDeleteConfirmModal({ isOpen: false, product: null })
+                }
+                className="px-4 py-2 border rounded-lg hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() =>
+                  handleDelete(deleteConfirmModal.product.code_product)
+                }
+                className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700"
+              >
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Success Modal */}
+      <SuccessModal
+        isOpen={successModal.isOpen}
+        message={successModal.message}
+        onClose={() => setSuccessModal({ isOpen: false, message: "" })}
+      />
+
+      {/* Alert Modal */}
+      <AlertModal
+        isOpen={alertModal.isOpen}
+        message={alertModal.message}
+        onClose={() => setAlertModal({ isOpen: false, message: "" })}
+      />
     </div>
   );
 };

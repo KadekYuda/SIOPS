@@ -2,7 +2,7 @@ import { Trash2 } from "lucide-react";
 import DeleteModal from "../modal/DeleteModal";
 import { useState } from "react";
 
-const Trash = ({ onConfirm, confirmMessage = "Apakah Anda yakin ingin menghapus item ini?", title = "Confirm Delete" }) => {
+const Trash = ({ onConfirm, confirmMessage = "Are you sure you want to delete this item?", title = "Confirm Delete" }) => {
   const [open, setOpen] = useState(false);
 
   const handleDelete = () => {

@@ -11,7 +11,7 @@ import {
 import { motion, AnimatePresence } from "framer-motion";
 
 
-const OrderStock = () => {
+const Order = () => {
   const [orders, setOrders] = useState([]);
   const [editingOrder, setEditingOrder] = useState(null);
   const [orderForm, setOrderForm] = useState({
@@ -427,4 +427,4 @@ const OrderStock = () => {
   );
 };
 
-export default OrderStock;
+export default Order;

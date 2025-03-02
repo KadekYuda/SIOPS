@@ -3,41 +3,58 @@ import db from "../config/Database.js";
 
 const { DataTypes } = Sequelize;
 
-const BatchStok = db.define('batch_stok', {
+const BatchStock = db.define('batch_stock', {
     batch_id: {
         type: DataTypes.INTEGER,
         primaryKey: true,
         autoIncrement: true
     },
-    kdbar: {
+    code_product: {
         type: DataTypes.STRING(13),
         allowNull: false,
         references: {
             model: 'products',
-            key: 'kdbar'
+            key: 'code_product'
         },
         onDelete: 'CASCADE',
         onUpdate: 'CASCADE'
     },
-    hbeli: {
+    batch_code: {
+        type: DataTypes.STRING(40),
+        allowNull: false,
+    },
+    purchase_price: {
         type: DataTypes.DECIMAL(12,2),
         allowNull: false,
-        field: 'HBeli'
+       
     },
-    stok: {
+    initial_stock: {
         type: DataTypes.INTEGER,
         allowNull: false,
         defaultValue: 0,
-        field: 'Stok'
+        
     },
-    tgl_masuk: {
+    stock_quantity: {
+        type: DataTypes.INTEGER,
+        allowNull: false,
+        defaultValue: 0,
+      
+    },
+    arrival_date: {
         type: DataTypes.DATE,
         allowNull: false,
-        field: 'TanggalMasuk'
-    }
+        
+    },
+    exp_date: {
+        type: DataTypes.DATE,
+        allowNull: false,
+        
+    },
+    created_at: DataTypes.DATE,
+    updated_at: DataTypes.DATE,
+     
 }, {
     freezeTableName: true,
-    timestamps: true
 });
 
-export default BatchStok;
+export default BatchStock;

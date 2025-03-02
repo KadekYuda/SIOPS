@@ -1,47 +1,95 @@
 import DeleteModal from "../modal/DeleteModal";
 import { useState } from "react";
 
-const CrudButton = ({ 
-  icon: Icon, 
-  label, // Label teks tombol
-  onConfirm, // Fungsi untuk aksi yang memerlukan konfirmasi (seperti delete)
-  onClick, // Fungsi untuk aksi tanpa konfirmasi (seperti edit atau add)
-  confirmMessage = "Apakah Anda yakin ingin melakukan aksi ini?", // Pesan konfirmasi default
-  title = "Confirm Action", // Judul modal konfirmasi
-  actionType = "default", // Jenis aksi: "delete", "edit", atau "add"
-  className = "", // Kelas tambahan untuk styling tombol
-  buttonStyle = "primary" // Style default tombol
+const CrudButton = ({
+  icon: Icon,
+  label,
+  onConfirm,
+  onClick,
+  confirmMessage = "Are you sure you want to proceed with this action?",
+  title = "Confirm Action",
+  actionType = "default",
+  className = "",
+  buttonStyle = "primary",
+  buttonType = "default", // Tambahkan prop buttonType
 }) => {
   const [open, setOpen] = useState(false);
 
-  // Fungsi untuk menangani aksi delete yang memerlukan konfirmasi
   const handleConfirm = () => {
     if (onConfirm) onConfirm();
-    setOpen(false); // Tutup modal setelah konfirmasi
+    setOpen(false);
   };
 
-  // Handle tombol saat diklik
   const handleClick = () => {
     if (actionType === "delete") {
-      setOpen(true); // Buka modal konfirmasi jika actionType adalah "delete"
+      setOpen(true);
     } else {
-      onClick(); // Jalankan fungsi onClick langsung untuk edit atau add
+      onClick?.();
     }
   };
 
-  // Kelas dinamis berdasarkan buttonStyle
+  // Styling kondisional berdasarkan buttonType
   const buttonClasses = `
-    btn
-    ${buttonStyle === "primary" ? "bg-blue-500 text-white hover:bg-blue-600" : ""}
-    ${buttonStyle === "secondary" ? "bg-green-500 text-white hover:bg-green-600" : ""}
-    ${buttonStyle === "danger" ? "bg-red-600 text-white hover:bg-red-700" : ""}
+    ${
+      buttonType === "product"
+        ? // Styling untuk tombol produk
+          `${
+            actionType === "edit" || actionType === "delete"
+              ? "p-1 rounded-full"
+              : "px-4 py-2 rounded-lg"
+          }
+          ${
+            buttonStyle === "primary"
+              ? "text-blue-600 hover:text-blue-800 hover:bg-blue-50"
+              : ""
+          }
+          ${
+            buttonStyle === "secondary"
+              ? "bg-green-600 text-white hover:bg-green-700"
+              : ""
+          }
+          ${
+            buttonStyle === "danger"
+              ? "text-red-600 hover:text-red-800 hover:bg-red-50"
+              : ""
+          }
+          transition-colors duration-150`
+        : // Styling untuk tombol pengguna umum
+          `btn
+          ${
+            buttonStyle === "primary"
+              ? "bg-blue-500 text-white hover:bg-blue-600"
+              : ""
+          }
+          ${
+            buttonStyle === "secondary"
+              ? "bg-green-500 text-white hover:bg-green-600"
+              : ""
+          }
+          ${
+            buttonStyle === "danger"
+              ? "bg-red-600 text-white hover:bg-red-700"
+              : ""
+          }`
+    }
     ${className}
   `;
 
   return (
     <div>
       <button className={buttonClasses} onClick={handleClick}>
-        {Icon && <Icon className="mr-2" />} {label}
+        {Icon && (
+          <Icon
+            size={
+              buttonType === "product" &&
+              (actionType === "edit" || actionType === "delete")
+                ? 18
+                : 20
+            }
+            className={label ? "mr-2" : ""}
+          />
+        )}
+        {label}
       </button>
 
       {actionType === "delete" && open && (
@@ -53,10 +101,16 @@ const CrudButton = ({
               <p className="text-sm text-gray-500">{confirmMessage}</p>
             </div>
             <div className="flex gap-4">
-              <button className="btn bg-red-600 text-white w-full hover:bg-red-700" onClick={handleConfirm}>
+              <button
+                className="btn bg-red-600 text-white w-full hover:bg-red-700"
+                onClick={handleConfirm}
+              >
                 Delete
               </button>
-              <button className="btn bg-gray-300 text-gray-800 w-full hover:bg-gray-400" onClick={() => setOpen(false)}>
+              <button
+                className="btn bg-gray-300 text-gray-800 w-full hover:bg-gray-400"
+                onClick={() => setOpen(false)}
+              >
                 Cancel
               </button>
             </div>
