@@ -9,6 +9,7 @@
     import BatchStockRoute from "./routes/BatchStockRoute.js";
     import OpnameRoute from "./routes/OpnameRoute.js";
     import initializeAdmin from "./utils/initializeAdmin.js";
+    import cookieParser from "cookie-parser";
 
     dotenv.config();
 
@@ -26,8 +27,14 @@
     app.use(express.json());
     app.use(express.urlencoded({ extended: true }));
 
+    // Cookie parser middleware
+    app.use(cookieParser());
+
     // Error handling middleware
     app.use((err, req, res, next) => {
+        if (res.headersSent){
+            return next(err);
+        }
         console.error(err.stack);
         res.status(500).json({ 
             msg: 'Something went wrong!',
@@ -36,11 +43,11 @@
     });
 
     // Routes
-    app.use('/users', UserRoute);
-    app.use('/orders', OrderRoute);
+    app.use('/api/users', UserRoute);
+    app.use('/api/orders', OrderRoute);
     app.use('/api', ProductCategoriesRoute);
-    app.use('/batch-stok', BatchStockRoute);
-    app.use('/opname', OpnameRoute);
+    app.use('/api/batch', BatchStockRoute);
+    app.use('/api/opname', OpnameRoute);
 
     // Create uploads directory if it doesn't exist
     import { mkdirSync } from 'fs';

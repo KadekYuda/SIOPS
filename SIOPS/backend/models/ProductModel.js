@@ -6,7 +6,7 @@ const { DataTypes } = Sequelize;
 
 const Product = db.define('products', {
     code_product: {
-        type: DataTypes.STRING(13),
+        type: DataTypes.STRING(255),
         allowNull: false,
         primaryKey: true
     },
@@ -21,7 +21,7 @@ const Product = db.define('products', {
         onUpdate: 'CASCADE'
     },
     barcode: {
-        type: DataTypes.STRING(15),
+        type: DataTypes.STRING(255),
         allowNull: true
     },
     name_product: {

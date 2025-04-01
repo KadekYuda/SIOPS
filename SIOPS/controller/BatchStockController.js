@@ -1,47 +1,44 @@
 import BatchStok from "../models/BatchstockModel.js";
 import Products from "../models/ProductModel.js";
-import { Op } from "sequelize";
+import { Op, Sequelize } from "sequelize";
 
 export const getBatchStok = async (req, res) => {
     try {
         let { page, limit, search } = req.query;
 
         page = parseInt(page) || 0;
-        limit = parseInt(limit) || 5;
+        limit = parseInt(limit) || 10;
         const offset = page * limit;
 
-        // Kondisi pencarian
-        const whereCondition = {};
-        
-        // Jika ada pencarian
+        let whereCondition = {};
         if (search) {
-            whereCondition[Op.or] = [
-                { batch_code: { [Op.like]: `%${search}%` } },
-                { code_product: { [Op.like]: `%${search}%` } }
-                // Tambahkan field lain jika perlu
-            ];
+            whereCondition = {
+                [Op.or]: [
+                    { '$Product.name_product$': { [Op.like]: `%${search}%` } }, // Gunakan Op.like untuk MySQL
+                    Sequelize.where(Sequelize.cast(Sequelize.col('Product.code_product'), 'CHAR'), {
+                        [Op.like]: `%${search}%`
+                    }),
+                    Sequelize.where(Sequelize.cast(Sequelize.col('BatchStok.stock_quantity'), 'CHAR'), {
+                        [Op.like]: `%${search}%`
+                    })
+                ]
+            };
         }
 
-        // Query dengan kondisi
         const { count, rows } = await BatchStok.findAndCountAll({
+            include: [{
+                model: Products,
+                attributes: ['code_product', 'name_product']
+            }],
             where: whereCondition,
-            include: [
-                {
-                    model: Products,
-                    attributes: ['code_product', 'name_product'],
-                    required: false // Tidak wajib ada hasil dari Products
-                }
-            ],
             order: [['batch_id', 'DESC']],
             limit: limit,
             offset: offset,
             distinct: true
         });
 
-        // Format respons
         const formattedResponse = rows.map(item => {
             const plainItem = item.get({ plain: true });
-            // Format kode produk menjadi string
             if (plainItem.Product && plainItem.Product.code_product) {
                 plainItem.Product.code_product = String(plainItem.Product.code_product);
             }
@@ -57,11 +54,10 @@ export const getBatchStok = async (req, res) => {
             totalPages: Math.ceil(count / limit)
         });
     } catch (error) {
-        console.error("Error in getBatchStok:", error);
+        console.error("Error in getBatchStok:", error); // Tambahkan logging
         res.status(500).json({ msg: error.message });
     }
 };
-
 export const getBatchStokById = async (req, res) => {
     try {
         const response = await BatchStok.findOne({
@@ -120,4 +116,3 @@ export const updateBatchStok = async (req, res) => {
 export const deleteBatchStok = async (req, res) => {
     res.status(403).json({ msg: "Operation not allowed" });
 };
-

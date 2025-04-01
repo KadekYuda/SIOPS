@@ -16,37 +16,41 @@ const Login = () => {
 
   const handleLogin = async (e) => {
     e.preventDefault();
+    setError('');
     
     try {
-      const response = await axios.post('http://localhost:5000/users/login', {
+      const response = await axios.post('http://localhost:5000/api/users/login', {
         email,
         password
       });
   
       const { token, role } = response.data;
-
+  
       // Simpan token dan role ke localStorage
       localStorage.setItem('token', token);
       localStorage.setItem('role', role);
   
       const decodedToken = jwtDecode(token);
-
+  
       // Redirect berdasarkan role
       if (decodedToken.role === 'admin') {
         navigate('/DashboardAdmin');
       } else if (decodedToken.role === 'staff') {
         navigate('/dashboard');
       }
-
+  
     } catch (error) {
-      if (error.response && error.response.status === 400) {
-        setError('Password salah!');
-      } else if (error.response && error.response.status === 404) {
-        setError('User tidak ditemukan!');
+      if (error.response) {
+        // Langsung gunakan pesan dari backend
+        setError(error.response.data.msg || "An error occurred on the server");
+      } else if (error.request) {
+        // Jika request dibuat tapi tidak ada respon
+        setError("No response from server");
       } else {
-        setError('Terjadi kesalahan pada server.');
+        // Ada kesalahan dalam setting up request
+        setError("Error setting up the request");
       }
-      console.error('Login error:', error);
+      console.error("Login error:", error);
     }
   };
 

@@ -13,7 +13,7 @@ import {
 import axios from "axios";
 
 const Sidebars = ({ isSidebarOpen, isDesktopSidebarOpen }) => {
-  const navigate = useNavigate();
+  
 
   // Data untuk Sidebar
   const Fiturs = [
@@ -23,9 +23,9 @@ const Sidebars = ({ isSidebarOpen, isDesktopSidebarOpen }) => {
       text: "Dashboard",
     },
     {
-      to: "#",
+      to: "/product",
       icon: Package,
-      text: "Stok",
+      text: "Product",
     },
     {
       to: "/order",
@@ -33,53 +33,64 @@ const Sidebars = ({ isSidebarOpen, isDesktopSidebarOpen }) => {
       text: "Order",
     },
     {
-      to: "#",
+      href: "sales",
+      icon: ShoppingCart,
+      text: "Sales",
+    },
+
+    {
+      href: "opname",
       icon: PackageSearch,
       text: "Opname",
     },
-  ];
-
-  const handleLogout = async () => {
-    try {
-      const token = localStorage.getItem('token');
-      // Call logout endpoint to invalidate token
-      await axios.post('http://localhost:5000/logout', {}, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
-      
-      // Clear local storage
-      localStorage.removeItem('token');
-      
-      // Redirect to login page using navigate
-      navigate('/login');
-    } catch (error) {
-      console.error('Logout failed:', error);
-      // Still remove token and redirect on error
-      localStorage.removeItem('token');
-      navigate('/login');
-    }
-  };
-
-  const shortcutLink = [
     {
-      to: "/report",
-      title: "Report",
-      icon: ClipboardList,
-    },
-    {
-      to: "/settings",
-      title: "Settings",
-      icon: Settings,
-    },
-    {
-      to: "#",
-      title: "Logout",
-      icon: LogOut,
-      onClick: handleLogout
+      href: "/report",
+      icon:ClipboardList,
+      text: "Report",
     },
   ];
+
+  // const handleLogout = async () => {
+  //   try {
+  //     const token = localStorage.getItem('token');
+  //     // Call logout endpoint to invalidate token
+  //     await axios.post('http://localhost:5000/logout', {}, {
+  //       headers: {
+  //         Authorization: `Bearer ${token}`,
+  //       },
+  //     });
+      
+  //     // Clear local storage
+  //     localStorage.removeItem('token');
+      
+  //     // Redirect to login page using navigate
+  //     navigate('/login');
+  //   } catch (error) {
+  //     console.error('Logout failed:', error);
+  //     // Still remove token and redirect on error
+  //     localStorage.removeItem('token');
+  //     navigate('/login');
+  //   }
+  // };
+
+  // const shortcutLink = [
+  //   {
+  //     to: "/report",
+  //     title: "Report",
+  //     icon: ClipboardList,
+  //   },
+  //   {
+  //     to: "/settings",
+  //     title: "Settings",
+  //     icon: Settings,
+  //   },
+  //   {
+  //     to: "#",
+  //     title: "Logout",
+  //     icon: LogOut,
+  //     onClick: handleLogout
+  //   },
+  // ];
 
   return (
     <aside
@@ -125,7 +136,7 @@ const Sidebars = ({ isSidebarOpen, isDesktopSidebarOpen }) => {
         </ul>
       </div>
 
-      {/* Shortcuts */}
+      {/* Shortcuts
       <div className="px-4 py-4 border-t border-gray-200 dark:border-gray-700">
         <h2 className="px-4 text-sm -mx-3 mb-3 font-semibold text-gray-500 dark:text-gray-400">
           OTHER
@@ -157,7 +168,7 @@ const Sidebars = ({ isSidebarOpen, isDesktopSidebarOpen }) => {
             </li>
           ))}
         </ul>
-      </div>
+      </div> */}
     </aside>
   );
 };

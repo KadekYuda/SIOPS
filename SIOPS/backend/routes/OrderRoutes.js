@@ -45,7 +45,7 @@ router.post('/',
 
 router.patch('/:order_id', 
   authenticateToken, 
-  allowMultipleRoles(['admin', 'staff']), 
+  allowMultipleRoles(['admin']), 
   updateOrder
 );
 

@@ -15,17 +15,19 @@ const User = db.define('users', {
         type: DataTypes.ENUM('admin', 'staff'),
         defaultValue: 'staff' 
     },
+    status: {
+        type: DataTypes.ENUM('active', 'inactive'),
+        defaultValue: 'active',
+    },
+    
     phone_number: DataTypes.STRING,
     created_at: DataTypes.DATE,
     updated_at: DataTypes.DATE, 
-    deleted_at: {
-        type: DataTypes.DATE,
-        allowNull: true
-    },
         
 }, {
-    freezeTableName: true
+    freezeTableName: true,
+    timestamps: true,
+    paranoid:true
 });
-db.sync({ alter: true });
 
 export default User;

@@ -6,7 +6,7 @@ import db from "../config/Database.js";
 import Product from "./ProductModel.js";
 import User from "./UserModel.js";
 import Order from "./OrderModel.js";
-import categories from "./CategoriesModel.js";
+import Categories from "./CategoriesModel.js";
 import Opname from "./OpnameModel.js";
 import BatchStock from "./BatchstockModel.js";
 import Sales from "./SalesModel.js";
@@ -23,15 +23,15 @@ const initializeAssociations = () => {
     Sales.belongsTo(User, { foreignKey: 'user_id' });
     Opname.belongsTo(User, { foreignKey: 'user_id' });
 
-    // categories associations
-    categories.hasMany(Product, { foreignKey: 'code_categories' });
-    Product.belongsTo(categories, { foreignKey: 'code_categories' });
+    // Categories associations
+    Categories.hasMany(Product, { foreignKey: 'code_categories' });
+    Product.belongsTo(Categories, { foreignKey: 'code_categories' });
 
     // Products associations
     Product.hasMany(BatchStock, { foreignKey: 'code_product' });
     BatchStock.belongsTo(Product, { foreignKey: 'code_product' });
 
-    //  Relasi Many-to-Many Order ↔ Products melalui OrderDetail
+    // Relasi Many-to-Many Order ↔ Products melalui OrderDetail
     Order.belongsToMany(Product, { through: OrderDetail, foreignKey: 'order_id', otherKey: 'code_product' });
     Product.belongsToMany(Order, { through: OrderDetail, foreignKey: 'code_product', otherKey: 'order_id' });
 
@@ -81,7 +81,7 @@ export {
     Product,
     User,
     Order,
-    categories,
+    Categories,
     Opname,
     BatchStock,
     Sales,

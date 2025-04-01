@@ -5,6 +5,7 @@ import SuccessModal from "../../modal/SuccessModal";
 import AlertModal from "../../modal/AlertModal";
 import Categories from "./Categories";
 import CrudButton from "../../Button/CrudButton";
+import Pagination from "./Pagination";
 
 const Product = () => {
   const [products, setProducts] = useState([]);
@@ -244,11 +245,35 @@ const Product = () => {
     setFormErrors({});
   };
 
+  const formatLargeNumber = (number) => {
+    if (!number) return "";
+
+    // Convert to string and remove any scientific notation
+    const str = String(number);
+    if (str.includes("E+")) {
+      const [mantissa, exponent] = str.split("E+");
+      const decimalPoints = mantissa.includes(".")
+        ? mantissa.split(".")[1].length
+        : 0;
+      const num = parseFloat(mantissa);
+      const exp = parseInt(exponent);
+
+      // Convert to full number string
+      let result = num.toString().replace(".", "");
+      const zerosToAdd = exp - decimalPoints;
+      result += "0".repeat(Math.max(0, zerosToAdd));
+
+      return result;
+    }
+
+    return str;
+  };
+
   return (
     <div className="container mx-auto px-4 py-8 pt-20">
       {/* Header and Search Section */}
       <div className="mb-6">
-        <div className="flex justify-between items-center mb-4">
+        <div className="flex flex-col md:flex-row justify-between items-center mb-4 space-y-4 md:space-y-0">
           <h1 className="text-2xl font-bold text-gray-800 flex items-center gap-2">
             <Package className="h-6 w-6" />
             Product Management
@@ -273,132 +298,144 @@ const Product = () => {
               className="flex items-center gap-2"
             />
           </div>
-        </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div className="relative">
-            <input
-              type="text"
-              placeholder="Search products..."
-              value={search}
-              onChange={(e) => {
-                setSearch(e.target.value);
-                setPage(0);
-              }}
-              className="w-full pl-10 pr-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
-            />
-            <Search
-              className="absolute left-3 top-2.5 text-gray-400"
-              size={20}
-            />
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="relative">
+              <input
+                type="text"
+                placeholder="Search products..."
+                value={search}
+                onChange={(e) => {
+                  setSearch(e.target.value);
+                  setPage(0);
+                }}
+                className="w-full pl-10 pr-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
+              />
+              <Search
+                className="absolute left-3 top-2.5 text-gray-400"
+                size={20}
+              />
+            </div>
+            <Categories onCategoriesChange={handleCategoriesChange} />
           </div>
-          <Categories onCategoriesChange={handleCategoriesChange} />
         </div>
-      </div>
 
-      {/* Products Table */}
-      <div className="bg-white rounded-lg shadow overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-gray-200">
+        {/* Products Table */}
+        <div className="bg-white rounded-lg shadow overflow-x-auto">
+          <table className="min-w-full table-fixed divide-y divide-gray-200">
             <thead className="bg-gray-50">
               <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-12">
+                  No
+                </th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Code
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Barcode
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Name
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  categories
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Categories
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Price
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Min Stock
                 </th>
-                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Actions
                 </th>
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
-              {loading ? (
-                <tr>
-                  <td colSpan="7" className="px-6 py-4 text-center">
-                    <div className="flex justify-center items-center space-x-2">
-                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-500"></div>
-                      <span>Loading...</span>
-                    </div>
-                  </td>
-                </tr>
-              ) : products.length > 0 ? (
-                products.map((product) => (
-                  <tr key={product.code_product} className="hover:bg-gray-50">
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                      {product.code_product}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {product.barcode || "-"}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      {product.name_product}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {categories.find(
-                        (c) => c.code_categories === product.code_categories
-                      )?.name_categories || "-"}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      Rp {Number(product.sell_price).toLocaleString()}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {product.min_stock}
-                    </td>
-                    <td className="px-6 py-4  text-right text-sm font-medium">
-                      <div className="flex justify-end gap-3">
-                        <CrudButton
-                          icon={Edit2}
-                          onClick={() => {
-                            setFormData(product);
-                            setModalMode("edit");
-                            setShowModal(true);
-                          }}
-                          actionType="edit"
-                          buttonStyle="primary"
-                          className="p-1 rounded-full"
-                          buttonType="product"
-                        />
-                        <CrudButton
-                          icon={Trash2}
-                          onConfirm={() => handleDelete(product.code_product)}
-                          actionType="delete"
-                          buttonStyle="danger"
-                          className="p-1 rounded-full"
-                          title="Delete Product"
-                          confirmMessage={ <>
-                            Are you sure you want to delete category <b className="text-gray-700">{product.name_product}</b>?
-                          </>}
-                          buttonType="product"
-                        />
-                      </div>
-                    </td>
-                  </tr>
-                ))
-              ) : (
-                <tr>
-                  <td
-                    colSpan="7"
-                    className="px-6 py-4 text-center text-gray-500"
-                  >
-                    No products found
-                  </td>
-                </tr>
-              )}
-            </tbody>
+  {(() => {
+    if (loading) {
+      return (
+        <tr>
+          <td colSpan="8" className="px-4 py-4 text-center">
+            <div className="flex justify-center items-center space-x-2">
+              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-500"></div>
+              <span>Loading...</span>
+            </div>
+          </td>
+        </tr>
+      );
+    }
+
+    if (products.length === 0) {
+      return (
+        <tr>
+          <td colSpan="8" className="px-4 py-4 text-center text-gray-500">
+            No products found
+          </td>
+        </tr>
+      );
+    }
+
+    return products.map((product, index) => (
+      <tr key={product.code_product} className="hover:bg-gray-50">
+        <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500">
+          {index + 1 + page * limit}
+        </td>
+        <td className="px-4 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+          {formatLargeNumber(product.code_product)}
+        </td>
+        <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500">
+          {formatLargeNumber(product.barcode) || "-"}
+        </td>
+        <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900">
+          {product.name_product}
+        </td>
+        <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500">
+          {categories.find(
+            (c) => c.code_categories === product.code_categories
+          )?.name_categories || "-"}
+        </td>
+        <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900">
+          Rp {Number(product.sell_price).toLocaleString()}
+        </td>
+        <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500">
+          {product.min_stock}
+        </td>
+        <td className="px-4 py-4 text-right text-sm font-medium">
+          <div className="flex justify-end gap-3">
+            <CrudButton
+              icon={Edit2}
+              onClick={() => {
+                setFormData(product);
+                setModalMode("edit");
+                setShowModal(true);
+              }}
+              actionType="edit"
+              buttonStyle="primary"
+              className="p-1 rounded-full"
+              buttonType="product"
+            />
+            <CrudButton
+              icon={Trash2}
+              onConfirm={() => handleDelete(product.code_product)}
+              actionType="delete"
+              buttonStyle="danger"
+              className="p-1 rounded-full"
+              title="Delete Product"
+              confirmMessage={
+                <>
+                  Are you sure you want to delete product{" "}
+                  <b className="text-gray-700">{product.name_product}</b>?
+                </>
+              }
+              buttonType="product"
+            />
+          </div>
+        </td>
+      </tr>
+    ));
+  })()}
+</tbody>
           </table>
         </div>
       </div>
@@ -417,23 +454,15 @@ const Product = () => {
             <option value={10}>10 per page</option>
             <option value={20}>20 per page</option>
             <option value={50}>50 per page</option>
+            <option value={100}>100 per page</option>
           </select>
         </div>
-        <div className="flex gap-2">
-          {Array.from({ length: totalPages }, (_, i) => (
-            <button
-              key={i}
-              onClick={() => setPage(i)}
-              className={`px-3 py-1 rounded text-sm ${
-                page === i
-                  ? "bg-blue-600 text-white"
-                  : "bg-gray-200 text-gray-700 hover:bg-gray-300"
-              }`}
-            >
-              {i + 1}
-            </button>
-          ))}
-        </div>
+
+        <Pagination
+          currentPage={page}
+          totalPages={totalPages}
+          onPageChange={setPage}
+        />
       </div>
 
       {/* Add/Edit Modal */}

@@ -7,6 +7,7 @@ import DashboardStaff from "../components/Page/Sidebar/staff/DashboardStaff";
 import DashboardLayout from "../components/Page/Login/DashboardLayout";
 import UserProfile from "../components/Page/Profile/UserProfile";
 import Product from "../components/Page/Product/Product"
+import BatchStok from "../components/Page/Product/BatchStok";
 
 function AppRoutes() {
   // Function to check if user is authenticated
@@ -129,7 +130,22 @@ function AppRoutes() {
             </ProtectedRoute>
           }
         />
+
+          
+        <Route
+          path="/report"
+          element={
+            <ProtectedRoute >
+              <BatchStok/>
+            </ProtectedRoute>
+          }
+        />
+
       </Route>
+
+      
+
+
 
       <Route path="/" element={<DashboardLayout />}>
         {/* Admin Routes */}
@@ -165,6 +181,15 @@ function AppRoutes() {
             </ProtectedRoute>
           }
         />
+
+{/* <Route
+          path="report"
+          element={
+            <ProtectedRoute allowedRoles={['admin', 'user']}>
+              <Report />
+            </ProtectedRoute>
+          }
+        /> */}
 
         {/* Default route - redirect based on role */}
         <Route
