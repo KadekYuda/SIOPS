@@ -57,6 +57,7 @@ const Login = ({ onLoginSuccess }) => {
         setError("Error setting up the request");
       }
       console.error("Login error:", error);
+      console.error("Login error:", error);
     }
   };
   

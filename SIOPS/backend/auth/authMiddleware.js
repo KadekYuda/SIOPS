@@ -135,3 +135,4 @@ export const authorizeUserOrAdmin = (req, res, next) => {
     res.status(403).json({ msg: "Access denied" });
   }
 };
+

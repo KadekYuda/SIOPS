@@ -50,6 +50,7 @@ const UserProfile = () => {
     setFormData((prev) => ({
       ...prev,
       [name]: value,
+      [name]: value,
     }));
   };
 
