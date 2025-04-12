@@ -1,11 +1,10 @@
 import { useState, useEffect, useCallback } from "react";
 import { Pencil, Trash2, Plus, X } from "lucide-react";
 import { motion } from "framer-motion";
-import axios from "axios";
 import AlertModal from "../../modal/AlertModal";
-import DeleteModal from "../../modal/DeleteModal";
 import SuccessModal from "../../modal/SuccessModal";
 import CrudButton from "../../Button/CrudButton";
+import api from "../../../service/api";
 
 const Categories = ({ onCategoriesChange }) => {
   const [categories, setCategories] = useState([]);
@@ -14,10 +13,7 @@ const Categories = ({ onCategoriesChange }) => {
   const [editing, setEditing] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [alertModal, setAlertModal] = useState({ isOpen: false, message: "" });
-  const [deleteModal, setDeleteModal] = useState({
-    isOpen: false,
-    category: null,
-  });
+  
   const [successModal, setSuccessModal] = useState({
     isOpen: false,
     message: "",
@@ -25,7 +21,7 @@ const Categories = ({ onCategoriesChange }) => {
 
   const fetchCategories = useCallback(async () => {
     try {
-      const response = await axios.get(`http://localhost:5000/api/categories`);
+      const response = await api.get("/categories");
       const categoriesData = response.data.result;
       setCategories(categoriesData);
 
@@ -54,7 +50,7 @@ const Categories = ({ onCategoriesChange }) => {
 
     try {
       if (editing) {
-        await axios.put(`http://localhost:5000/api/categories/${code}`, {
+        await api.put(`/categories/${code}`, {
           name_categories: name,
         });
         setSuccessModal({
@@ -62,7 +58,7 @@ const Categories = ({ onCategoriesChange }) => {
           message: "Category updated successfully!",
         });
       } else {
-        await axios.post(`http://localhost:5000/api/categories`, {
+        await api.post("/categories", {
           code_categories: code,
           name_categories: name,
         });
@@ -93,9 +89,9 @@ const Categories = ({ onCategoriesChange }) => {
 
   const handleDelete = async (code) => {
     try {
-      await axios.delete(`/api/categories/${code}`);
+      await api.delete(`/categories/${code}`);
       await fetchCategories();
-      setDeleteModal({ isOpen: false, category: null });
+     
       setSuccessModal({
         isOpen: true,
         message: "Category deleted successfully!",
@@ -206,75 +202,75 @@ const Categories = ({ onCategoriesChange }) => {
             transition={{ type: "spring", duration: 0.5, delay: 0.2 }}
             className="bg-white rounded-lg shadow-lg overflow-hidden w-[480px] max-w-lg mx-4 mt-4"
           >
-            <table className="w-full border-collapse">
-              <thead>
-                <tr className="bg-gray-50">
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-1/4">
-                    Code
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-2/4">
-                    Category Name
-                  </th>
-                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider w-1/4">
-                    Actions
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
-                {categories.map((category) => (
-                  <tr
-                    key={category.code_categories}
-                    className="hover:bg-gray-50"
-                  >
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      {category.code_categories}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      {category.name_categories}
-                    </td>
-                    <td className="px-6 py-4 text-right text-sm">
-                      <div className="flex justify-end gap-3">
-                        <CrudButton
-                          icon={Pencil}
-                          onClick={() => handleEdit(category)}
-                          actionType="edit"
-                          buttonStyle="primary"
-                          className="p-1 rounded-full"
-                          buttonType="product"
-                        />
-                        <CrudButton
-                          icon={Trash2}
-                          onConfirm={() =>
-                            setDeleteModal({
-                              isOpen: true,
-                              category: category,
-                            })
-                          }
-                          actionType="delete"
-                          buttonStyle="danger"
-                          className="p-1 rounded-full"
-                          title="Delete Category"
-                          confirmMessage= {<>
-                          Are you sure you want to delete category <b className="text-gray-700">{category.name_categories}</b>?
-                        </>}
-                          buttonType="product"
-                        />
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-                {categories.length === 0 && (
+            {/* Container scroll */}
+            <div className="max-h-[400px] overflow-y-auto">
+              <table className="w-full border-collapse">
+                <thead className="sticky top-0 bg-gray-50">
                   <tr>
-                    <td
-                      colSpan="3"
-                      className="px-6 py-4 text-center text-gray-500"
-                    >
-                      No categories found
-                    </td>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-1/4">
+                      Code
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-2/4">
+                      Category Name
+                    </th>
+                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider w-1/4">
+                      Actions
+                    </th>
                   </tr>
-                )}
-              </tbody>
-            </table>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-200">
+                  {categories.map((category) => (
+                    <tr
+                      key={category.code_categories}
+                      className="hover:bg-gray-50"
+                    >
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                        {category.code_categories}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                        {category.name_categories}
+                      </td>
+                      <td className="px-6 py-4 text-right text-sm">
+                        <div className="flex justify-end gap-3">
+                          <CrudButton
+                            icon={Pencil}
+                            onClick={() => handleEdit(category)}
+                            actionType="edit"
+                            buttonStyle="primary"
+                            className="p-1 rounded-full"
+                            buttonType="product"
+                          />
+                          <CrudButton
+                            icon={Trash2}
+                            onConfirm={() => handleDelete(category.code_categories)}
+                            actionType="delete"
+                            buttonStyle="danger"
+                            className="p-1 rounded-full"
+                            title="Delete Product"
+                            confirmMessage={(
+                              <>
+                                Are you sure you want to delete category <b className="text-gray-700">{category.name_categories}</b>?
+                              </>
+                            )}
+                            buttonType="product"
+                          />
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                  {categories.length === 0 && (
+                    <tr>
+                      <td
+                        colSpan="3"
+                        className="px-6 py-4 text-center text-gray-500"
+                      >
+                        No categories found
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
           </motion.div>
         </div>
       )}
@@ -295,46 +291,6 @@ const Categories = ({ onCategoriesChange }) => {
           onClose={() => setSuccessModal({ isOpen: false, message: "" })}
           message={successModal.message}
         />
-      </div>
-
-      {/* Delete Confirmation Modal - naikkan z-index */}
-      <div className="relative z-50">
-        <DeleteModal
-          open={deleteModal.isOpen}
-          onClose={() => setDeleteModal({ isOpen: false, category: null })}
-        >
-          <div className="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-red-100">
-            <Trash2 className="h-6 w-6 text-red-600" />
-          </div>
-          <div className="mt-3 text-center sm:mt-5">
-            <h3 className="text-lg leading-6 font-medium text-gray-900">
-              Are You Sure Want To Delete?
-            </h3>
-            <div className="mt-2">
-              <p className="text-sm text-gray-500 max-w-xs mx-auto whitespace-normal">
-                This action cannot be undone.
-              </p>
-            </div>
-          </div>
-          <div className="mt-5 sm:mt-6 flex gap-3 justify-end">
-            <button
-              type="button"
-              className="inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 sm:text-sm"
-              onClick={() => setDeleteModal({ isOpen: false, category: null })}
-            >
-              Cancel
-            </button>
-            <button
-              type="button"
-              className="inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-red-600 text-base font-medium text-white hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 sm:text-sm"
-              onClick={() =>
-                handleDelete(deleteModal.category?.code_categories)
-              }
-            >
-              Delete
-            </button>
-          </div>
-        </DeleteModal>
       </div>
     </div>
   );

@@ -3,19 +3,18 @@ import {
     getBatchStok,
     getBatchStokById,
     getBatchStokByProductCode,
-    createBatchStok,
-    updateBatchStok,
-    deleteBatchStok
+    getMinimumStockAlert
 } from "../controller/BatchStockController.js";
-import { verifyToken } from "../auth/authMiddleware.js";
+import { authenticateToken } from "../auth/authMiddleware.js";
 
 const router = express.Router();
 
-router.get('/', verifyToken, getBatchStok);
-router.get('/:batch_id', verifyToken, getBatchStokById);
-router.get('/product/:product_code', verifyToken, getBatchStokByProductCode);
-router.post('/', verifyToken, createBatchStok);
-router.patch('/:batch_id', verifyToken, updateBatchStok);
-router.delete('/:batch_id', verifyToken, deleteBatchStok);
 
-export default router;
+router.get('/stock', authenticateToken, getBatchStok);
+router.get('/minstock', authenticateToken, getMinimumStockAlert)
+router.get('/:batch_id',  authenticateToken, getBatchStokById);
+router.get('/product/:product_code',  authenticateToken, getBatchStokByProductCode);
+
+
+
+export default router;  

@@ -1,191 +1,204 @@
-    import { Routes, Route, Navigate } from "react-router-dom";
- 
-import Login from "../components/Page/Login/Login";
-import OrderStock from "../components/Page/Order/OrderStock";
-import DashboardAdmin from "../components/Page/Sidebar/admin/DashboardAdmin";
-import DashboardStaff from "../components/Page/Sidebar/staff/DashboardStaff";
-import DashboardLayout from "../components/Page/Login/DashboardLayout";
-import UserProfile from "../components/Page/Profile/UserProfile";
-import Product from "../components/Page/Product/Product"
+  import { Routes, Route, Navigate, useLocation } from "react-router-dom";
+  import { useState, useEffect, useCallback } from "react";
 
-function AppRoutes() {
-  // Function to check if user is authenticated
-  const isAuthenticated = () => {
-    const token = localStorage.getItem('token');
-    if (!token) return false;
-    
-    try {
-      const userData = JSON.parse(atob(token.split('.')[1]));
-      const currentTime = Math.floor(Date.now() / 1000);
-      return userData.exp > currentTime;
-    } catch {
-      return false;
-    }
-  };
+  import Login from "../components/Page/Login/Login";
+  import OrderStock from "../components/Page/Order/OrderStock";
+  import DashboardAdmin from "../components/Page/Sidebar/admin/DashboardAdmin";
+  import DashboardStaff from "../components/Page/Sidebar/staff/DashboardStaff";
+  import DashboardLayout from "../components/Page/Login/DashboardLayout";
+  import UserProfile from "../components/Page/Profile/UserProfile";
+  import Product from "../components/Page/Product/Product";
+  import BatchStok from "../components/Page/Product/BatchStok";
+  import api from "../service/api";
 
-  // Function to get user role
-  const getUserRole = () => {
-    const token = localStorage.getItem('token');
-    if (!token) return null;
-    
-    try {
-      const userData = JSON.parse(atob(token.split('.')[1]));
-      return userData.role || null;
-    } catch {
-      return null;
-    }
-  };
+  function AppRoutes() {
+    const [user, setUser] = useState(null);
+    const [loading, setLoading] = useState(true);
+    const location = useLocation();
 
-  // Protected Route component
-  const ProtectedRoute = ({ children, allowedRoles = [] }) => {
-    const auth = isAuthenticated();
-    const role = getUserRole();
-
-    if (!auth) {
-      return <Navigate to="/login" replace />;
-    }
-
-    if (allowedRoles.length > 0 && !allowedRoles.includes(role)) {
-      return <Navigate to={role === 'admin' ? '/dashboardAdmin' : '/dashboard'} replace />;
-    }
-
-    return children;
-  };
-
-  // Public Route component (accessible only when not authenticated)
-  const PublicRoute = ({ children }) => {
-    const auth = isAuthenticated();
-    const role = getUserRole();
-
-    if (auth) {
-      return <Navigate to={role === 'admin' ? '/dashboardAdmin' : '/dashboard'} replace />;
-    }
-
-    return children;
-  };
-
-  return (
-    <Routes>
-      {/* Public Routes */}
-      <Route
-        path="/login"
-        element={
-          <PublicRoute>
-            <Login />
-          </PublicRoute>
+    // Function to fetch user data using HTTP-only cookie
+    const fetchUser = useCallback(async () => {
+      try {
+        const response = await api.get("/users/verify-token");
+        console.log("Fetched user:", response.data.user);  // Tambahkan ini
+        setUser(response.data.user);
+        setLoading(false);
+      } catch (error) {
+        if (!(error.response?.status === 401 && location.pathname === "/login")) {
+          console.error("Error fetching user:", error);
         }
-      />
+        setUser(null);
+        setLoading(false);
+      }
+    }, [location.pathname]);
 
-      {/* Protected Routes */}
-      <Route
-        path="/"
-        element={
-          <ProtectedRoute>
-            <DashboardLayout />
-          </ProtectedRoute>
-        }
-      >
-        {/* Admin Routes */}
-        <Route
-          path="dashboardAdmin"
-          element={
-            <ProtectedRoute allowedRoles={['admin']}>
-              <DashboardAdmin />
-            </ProtectedRoute>
-          }
-        />
+    useEffect(() => {
+      if (location.pathname !== "/login") {
+        fetchUser();
+      } else {
+        setLoading(false);
+      }
+    }, [fetchUser, location.pathname]);
+
+    // Function to check if user is authenticated
+    const isAuthenticated = () => {
+      return !!user;
+    };
+
+    // Function to get user role
+    const getUserRole = () => {
+      return user?.role || null;
+    };
+
+    // Protected Route component
+    const ProtectedRoute = ({ children, allowedRoles = [] }) => {
+      if (loading) {
+        return <div>Loading...</div>;
+      }
+
+      if (!isAuthenticated()) {
+        return <Navigate to="/login" replace />;
+      }
+
+      if (allowedRoles.length > 0 && !allowedRoles.includes(getUserRole())) {
         
-        {/* Staff Routes */}
+        return (
+          <Navigate
+            to={getUserRole() === "admin" ? "/dashboardAdmin" : "/dashboard"}
+            replace
+          />
+        );
+      }
+
+      return children;
+    };
+
+    // Public Route component (accessible only when not authenticated)
+    const PublicRoute = ({ children }) => {
+      if (loading) {
+        return <div>Loading...</div>;
+      }
+
+      if (isAuthenticated()) {
+        const redirectPath =
+          getUserRole() === "admin" ? "/dashboardAdmin" : "/dashboard";
+
+        return <Navigate to={redirectPath} replace />;
+      }
+
+      return children;
+    };
+
+    // Helper function for default path
+    const getDefaultPath = () => {
+      if (!isAuthenticated()) return "/login";
+      return getUserRole() === "admin" ? "/dashboardAdmin" : "/dashboard";
+    };
+
+    return (
+      <Routes>
+        {/* Public Routes */}
         <Route
-          path="dashboard"
+          path="/login"
           element={
-            <ProtectedRoute allowedRoles={['staff']}>
-              <DashboardStaff />
-            </ProtectedRoute>
+            <PublicRoute>
+              <Login onLoginSuccess={fetchUser} />
+            </PublicRoute>
           }
         />
 
+        {/* Protected Routes */}
         <Route
-          path="/product"
-          element={
-            <ProtectedRoute allowedRoles={['staff', 'admin']}>
-              <Product />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/userprofile"
-          element={
-            <ProtectedRoute allowedRoles={['staff', 'admin']}>
-              <UserProfile />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="order"
+          path="/"
           element={
             <ProtectedRoute>
-              <OrderStock />
+              <DashboardLayout />
             </ProtectedRoute>
           }
-        />
-      </Route>
+        >
+          {/* Admin Routes */}
+          <Route
+            path="/dashboardAdmin"
+            element={
+              <ProtectedRoute allowedRoles={["admin"]}>
+                <DashboardAdmin />
+              </ProtectedRoute>
+            }
+          />
 
-      <Route path="/" element={<DashboardLayout />}>
-        {/* Admin Routes */}
-        <Route
-          path="dashboardAdmin"
-          element={
-            <ProtectedRoute allowedRoles={['admin']}>
-              <DashboardAdmin />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="product"
-          element={
-            <ProtectedRoute allowedRoles={['admin']}>
-              <Product />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="order"
-          element={
-            <ProtectedRoute allowedRoles={['admin']}>
-              <OrderStock />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="userprofile"
-          element={
-            <ProtectedRoute allowedRoles={['admin', 'user']}>
-              <UserProfile />
-            </ProtectedRoute>
-          }
-        />
+          {/* Staff Routes */}
+          <Route
+            path="/dashboard"
+            element={
+              <ProtectedRoute allowedRoles={["staff"]}>
+                <DashboardStaff />
+              </ProtectedRoute>
+            }
+          />
 
-        {/* Default route - redirect based on role */}
-        <Route
-          index
-          element={
-            <Navigate to={getUserRole() === 'admin' ? '/dashboardAdmin' : '/dashboard'} replace />
-          }
-        />
+          <Route
+            path="/product"
+            element={
+              <ProtectedRoute allowedRoles={["staff", "admin"]}>
+                <Product />
+              </ProtectedRoute>
+            }
+          />
 
-        {/* Catch-all route - redirect to appropriate dashboard */}
-        <Route
-          path="*"
-          element={
-            <Navigate to={getUserRole() === 'admin' ? '/dashboardAdmin' : '/dashboard'} replace />
-          }
-        />
-      </Route>
-    </Routes>
-  );
-}
+          <Route
+            path="/userprofile"
+            element={
+              <ProtectedRoute allowedRoles={["staff", "admin"]}>
+                <UserProfile />
+              </ProtectedRoute>
+            }
+          />
 
-export default AppRoutes;
+          <Route
+            path="/order"
+            element={
+              <ProtectedRoute allowedRoles={["staff", "admin"]}>
+                <OrderStock />
+              </ProtectedRoute>
+            }
+          />
 
-  
+          <Route
+            path="/report"
+            element={
+              <ProtectedRoute allowedRoles={["staff", "admin"]}>
+                <BatchStok />
+              </ProtectedRoute>
+            }
+          />
+
+          {/* Default route - redirect based on role */}
+          <Route
+            index
+            element={
+              <Navigate
+                to={getUserRole() === "admin" ? "/dashboardAdmin" : "/dashboard"}
+                replace
+              />
+            }
+          />
+
+          {/* Catch-all route - redirect to appropriate dashboard */}
+          <Route
+            path="*"
+            element={
+              <Navigate
+                to={getUserRole() === "admin" ? "/dashboardAdmin" : "/dashboard"}
+                replace
+              />
+            }
+          />
+        </Route>
+
+        {/* Fallback route */}
+        <Route path="*" element={<Navigate to={getDefaultPath()} replace />} />
+      </Routes>
+    );
+  }
+
+  export default AppRoutes;

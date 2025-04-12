@@ -2,55 +2,64 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Logo2 from "../../../assets/Logo2.png";
 import { motion } from 'framer-motion';
-import axios from 'axios';  // Tambahkan ini
-import { jwtDecode } from 'jwt-decode';
 import { Eye, EyeOff } from 'lucide-react';
+import api from "../../../service/api";
 
-const Login = () => {
+const Login = ({ onLoginSuccess }) => {
   const [isLogin, setIsLogin] = useState(true);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [showPassword, setShowPassword] = useState(false);
-  const navigate = useNavigate(); // Untuk navigasi
+  const navigate = useNavigate();
 
   const handleLogin = async (e) => {
     e.preventDefault();
+    setError('');
     
     try {
-      const response = await axios.post('http://localhost:5000/users/login', {
+      
+      const response = await api.post('/users/login', {
         email,
         password
-      });
+      },);
   
-      const { token, role } = response.data;
-
-      // Simpan token dan role ke localStorage
-      localStorage.setItem('token', token);
-      localStorage.setItem('role', role);
+      console.log("Login successful:", response.data);
+      
+      // Panggil callback untuk memperbarui state user di AppRoutes
+      if (onLoginSuccess) {
+        await onLoginSuccess();
+      }
   
-      const decodedToken = jwtDecode(token);
-
+      // Ambil role dari response
+      const { role } = response.data.user;
+      console.log("User role:", role);
+      console.log("Cookies after login:", document.cookie);
+  
       // Redirect berdasarkan role
-      if (decodedToken.role === 'admin') {
-        navigate('/DashboardAdmin');
-      } else if (decodedToken.role === 'staff') {
+      if (role === 'admin') {
+        console.log("Redirecting to DashboardAdmin...");
+        navigate('/dashboardAdmin');
+      } else if (role === 'staff') {
+        console.log("Redirecting to Dashboard...");
         navigate('/dashboard');
       }
-
+  
     } catch (error) {
-      if (error.response && error.response.status === 400) {
-        setError('Password salah!');
-      } else if (error.response && error.response.status === 404) {
-        setError('User tidak ditemukan!');
+      if (error.response) {
+        console.log("Error response from backend:", error.response);
+        setError(error.response.data.msg || "An error occurred on the server");
+      } else if (error.request) {
+        console.log("Error request (no response from server):", error.request);
+        setError("No response from server");
       } else {
-        setError('Terjadi kesalahan pada server.');
+        console.log("Error setting up the request:", error.message);
+        setError("Error setting up the request");
       }
-      console.error('Login error:', error);
+      console.error("Login error:", error);
     }
   };
-
-
+  
   return (
     <div className="flex justify-center items-center h-screen bg-gray-100 dark:bg-gray-800 relative">
       <div className="bg-white dark:bg-gray-100 rounded-[30px] shadow-lg flex flex-col md:flex-row w-[90%] max-w-[900px] h-auto md:h-[500px] overflow-hidden">
@@ -72,7 +81,7 @@ const Login = () => {
                   type="email"
                   placeholder="Enter your Email"
                   value={email}
-                   autoComplete='username'
+                  autoComplete='username'
                   onChange={(e) => setEmail(e.target.value)}
                   className="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
                 />

@@ -4,7 +4,7 @@ import dotenv from "dotenv";
 dotenv.config();
 
 const db = new Sequelize(
-    process.env.DB_NAME || 'simsorop_db',
+    process.env.DB_NAME || 'simsop_db',
     process.env.DB_USERNAME || 'root',
     process.env.DB_PASSWORD || '',
     {
@@ -22,7 +22,6 @@ const db = new Sequelize(
             underscored: true,
             createdAt: 'created_at',
             updatedAt: 'updated_at',
-            deletedAt: 'deleted_at',
             paranoid: true
         }
     }

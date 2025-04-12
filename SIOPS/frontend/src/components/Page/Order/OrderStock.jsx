@@ -161,7 +161,7 @@ const Order = () => {
   // Show alert message
   const showAlert = (type, title, message) => {
     setAlert({ type, title, message });
-    setTimeout(() => setAlert(null), 5000);
+    setTimeout(() => setAlert(null), 500000000);
   };
 
   

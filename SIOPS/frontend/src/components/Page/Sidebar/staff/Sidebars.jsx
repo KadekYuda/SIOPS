@@ -1,19 +1,16 @@
 import React from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link} from 'react-router-dom';
 import clsx from "clsx";
 import {
   LayoutDashboard,
   Package,
   ShoppingCart,
-  Settings,
   PackageSearch,
   ClipboardList,
-  LogOut,
 } from "lucide-react";
-import axios from "axios";
 
 const Sidebars = ({ isSidebarOpen, isDesktopSidebarOpen }) => {
-  const navigate = useNavigate();
+  
 
   // Data untuk Sidebar
   const Fiturs = [
@@ -23,9 +20,9 @@ const Sidebars = ({ isSidebarOpen, isDesktopSidebarOpen }) => {
       text: "Dashboard",
     },
     {
-      to: "#",
+      to: "/product",
       icon: Package,
-      text: "Stok",
+      text: "Product",
     },
     {
       to: "/order",
@@ -33,53 +30,24 @@ const Sidebars = ({ isSidebarOpen, isDesktopSidebarOpen }) => {
       text: "Order",
     },
     {
-      to: "#",
+      href: "sales",
+      icon: ShoppingCart,
+      text: "Sales",
+    },
+
+    {
+      href: "opname",
       icon: PackageSearch,
       text: "Opname",
     },
-  ];
-
-  const handleLogout = async () => {
-    try {
-      const token = localStorage.getItem('token');
-      // Call logout endpoint to invalidate token
-      await axios.post('http://localhost:5000/logout', {}, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
-      
-      // Clear local storage
-      localStorage.removeItem('token');
-      
-      // Redirect to login page using navigate
-      navigate('/login');
-    } catch (error) {
-      console.error('Logout failed:', error);
-      // Still remove token and redirect on error
-      localStorage.removeItem('token');
-      navigate('/login');
-    }
-  };
-
-  const shortcutLink = [
     {
-      to: "/report",
-      title: "Report",
-      icon: ClipboardList,
-    },
-    {
-      to: "/settings",
-      title: "Settings",
-      icon: Settings,
-    },
-    {
-      to: "#",
-      title: "Logout",
-      icon: LogOut,
-      onClick: handleLogout
+      href: "/report",
+      icon:ClipboardList,
+      text: "Report",
     },
   ];
+
+  
 
   return (
     <aside
@@ -103,6 +71,7 @@ const Sidebars = ({ isSidebarOpen, isDesktopSidebarOpen }) => {
           {Fiturs.map((item, index) => (
             <li key={index}>
               {item.to === "#" ? (
+                // eslint-disable-next-line jsx-a11y/anchor-is-valid
                 <a
                   href="#"
                   className="flex items-center px-4 py-2 text-gray-950 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-700 rounded-lg"
@@ -125,39 +94,7 @@ const Sidebars = ({ isSidebarOpen, isDesktopSidebarOpen }) => {
         </ul>
       </div>
 
-      {/* Shortcuts */}
-      <div className="px-4 py-4 border-t border-gray-200 dark:border-gray-700">
-        <h2 className="px-4 text-sm -mx-3 mb-3 font-semibold text-gray-500 dark:text-gray-400">
-          OTHER
-        </h2>
-        <ul className="mt-2 space-y-2">
-          {shortcutLink.map((shortcut, index) => (
-            <li key={index}>
-              {shortcut.onClick ? (
-                <a
-                  href="#"
-                  onClick={(e) => {
-                    e.preventDefault();
-                    shortcut.onClick();
-                  }}
-                  className="flex items-center px-4 py-2 text-gray-600 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-700 rounded-lg"
-                >
-                  <shortcut.icon className="w-5 h-5" />
-                  <span className="ml-3">{shortcut.title}</span>
-                </a>
-              ) : (
-                <Link
-                  to={shortcut.to}
-                  className="flex items-center px-4 py-2 text-gray-600 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-700 rounded-lg"
-                >
-                  <shortcut.icon className="w-5 h-5" />
-                  <span className="ml-3">{shortcut.title}</span>
-                </Link>
-              )}
-            </li>
-          ))}
-        </ul>
-      </div>
+      
     </aside>
   );
 };

@@ -1,13 +1,10 @@
 import clsx from "clsx";
-import axios from "axios"; // Import axios
 import {
   LayoutDashboard,
   Package,
   ShoppingCart,
-  Settings,
   PackageSearch,
   ClipboardList ,
-  LogOut, 
   ShoppingBag,
 } from "lucide-react";
 
@@ -42,58 +39,13 @@ const SidebarAdmin = ({ isSidebarOpen, isDesktopSidebarOpen }) => {
       text: "Opname",
     },
     {
-      href: "report",
+      href: "/report",
       icon:ClipboardList,
       text: "Report",
     },
   ];
 
-  const handleLogout = async () => {
-    try {
-      const token = localStorage.getItem('token');
-      // Call logout endpoint to invalidate token
-      await axios.post('http://localhost:5000/logout', {}, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
-      
-      // Clear local storage
-      localStorage.removeItem('token');
-      
-      // Redirect to login page
-      window.location.href = '/login';
-    } catch (error) { 
-      console.error('Logout failed:', error);
-      // Still remove token and redirect on error
-      localStorage.removeItem('token');
-      window.location.href = '/login';
-    }
-  };
 
-  const shortcutLink = [
-    {
-      href: "/report",
-      title: "Report",
-      icon: ClipboardList,
-    },
-    {
-      href: "/opname",
-      title: "Stock Opname",
-      icon: PackageSearch,
-    },
-    {
-      href: "/settings",
-      title: "Settings",
-      icon: Settings,
-    },
-    {
-      href: "#",
-      title: "Logout",
-      icon: LogOut,
-      onClick: handleLogout
-    },
-  ];
 
   return (
     <aside
@@ -128,7 +80,7 @@ const SidebarAdmin = ({ isSidebarOpen, isDesktopSidebarOpen }) => {
         </ul>
       </div>
 
-      {/* Shortcuts */}
+      {/* Shortcuts
       <div className="px-4 py-4 border-t border-gray-200 dark:border-gray-700">
         <h2 className="px-4 text-sm -mx-3 mb-3 font-semibold text-gray-500 dark:text-gray-400">
           OTHER  
@@ -147,7 +99,7 @@ const SidebarAdmin = ({ isSidebarOpen, isDesktopSidebarOpen }) => {
             </li>
           ))}
         </ul>
-      </div>
+      </div> */}
     </aside>
   );
 };

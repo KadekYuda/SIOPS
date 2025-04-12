@@ -1,39 +1,41 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import clsx from "clsx";
-import { Moon, Sun, Menu, User, UserCircle, LogOut, Settings } from "lucide-react";
+import {
+  Moon,
+  Sun,
+  Menu,
+  User,
+  UserCircle,
+  LogOut,
+  Settings,
+} from "lucide-react";
 import Logo2 from "../../../assets/Logo2.png";
-import axios from "axios";
 import { useNavigate } from "react-router-dom";
+import api from "../../../service/api";
 
-const Headers = ({ darkMode, toggleDarkMode, toggleSidebar, toggleDesktopSidebar }) => {
+const Headers = ({
+  darkMode,
+  toggleDarkMode,
+  toggleSidebar,
+  toggleDesktopSidebar,
+}) => {
   const [menuActive, setMenuActive] = useState(false);
   const [userDropdown, setUserDropdown] = useState(false);
-  const [userData, setUserData] = useState(null);
+  const [userData, setUserData] = useState(null); 
   const dropdownRef = useRef(null);
   const navigate = useNavigate();
 
+
   const fetchUserProfile = useCallback(async () => {
     try {
-      const token = localStorage.getItem('token');
-      // console.log('Fetching user profile with token:', token);
+      // Kirim permintaan tanpa header Authorization karena token sudah ada di cookie
+      const response = await api.get("/users/profile",);
 
-      if (!token) {
-        console.error('No token found');
-        return;
-      }
-
-      const response = await axios.get('http://localhost:5000/users/profile', {
-        headers: {
-          Authorization: `Bearer ${token}`
-        }
-      });
-
-      console.log('User Profile Response:', response.data);
-      setUserData(response.data);
+      setUserData(response.data.user);
     } catch (error) {
-      console.error('Error fetching user profile:', error);
+      console.error("Error fetching user profile:", error);
       if (error.response && error.response.status === 401) {
-        navigate('/login');
+        navigate("/login");
       }
     }
   }, [navigate]);
@@ -49,18 +51,25 @@ const Headers = ({ darkMode, toggleDarkMode, toggleSidebar, toggleDesktopSidebar
       }
     };
 
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  const handleLogout = () => {
-    localStorage.removeItem('token');
-    navigate('/login');
+  const handleLogout = async () => {
+    try {
+      await api.post("/users/logout", null, );
+      
+      setUserData(null); // Reset state user
+      navigate("/login"); // Pindah ke halaman login
+    } catch (error) {
+      console.error("Error logging out:", error);
+    }
   };
+  
 
   const toggleDropdown = (e) => {
     e.stopPropagation();
-    setUserDropdown(prev => !prev);
+    setUserDropdown((prev) => !prev);
   };
 
   return (
@@ -90,7 +99,7 @@ const Headers = ({ darkMode, toggleDarkMode, toggleSidebar, toggleDesktopSidebar
             <a href="/#" className="flex items-center space-x-2 ml-2">
               <img src={Logo2} alt="Logo" width="60" height="50" />
               <span className="self-center text-xl font-semibold sm:text-2xl whitespace-nowrap dark:text-white">
-                SIOPS
+                SIMSOP
               </span>
             </a>
 
@@ -118,12 +127,16 @@ const Headers = ({ darkMode, toggleDarkMode, toggleSidebar, toggleDesktopSidebar
               onClick={toggleDarkMode}
               className="p-2 text-gray-500 rounded-lg hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-200"
             >
-              {darkMode ? <Sun className="w-6 h-6" /> : <Moon className="w-6 h-6" />}
+              {darkMode ? (
+                <Sun className="w-6 h-6" />
+              ) : (
+                <Moon className="w-6 h-6" />
+              )}
             </button>
 
             {/* User dropdown */}
             <div className="relative" ref={dropdownRef}>
-              <button 
+              <button
                 onClick={toggleDropdown}
                 className={clsx(
                   "flex items-center justify-center ml-2",
@@ -137,44 +150,51 @@ const Headers = ({ darkMode, toggleDarkMode, toggleSidebar, toggleDesktopSidebar
               </button>
 
               {userDropdown && (
-                <div 
-                  className="absolute right-0 top-full mt-2 w-64 bg-white dark:bg-gray-800 rounded-lg shadow-lg border dark:border-gray-700 z-[100]"
-                >
+                <div className="absolute right-0 top-full mt-2 w-64 bg-white dark:bg-gray-800 rounded-lg shadow-lg border dark:border-gray-700 z-[100]">
                   {userData ? (
                     <>
                       <div className="p-4 border-b dark:border-gray-700 flex items-center">
-                        <UserCircle size={40} className="mr-3 text-gray-500 dark:text-gray-400" />
+                        <UserCircle
+                          size={40}
+                          className="mr-3 text-gray-500 dark:text-gray-400"
+                        />
                         <div>
                           <p className="text-sm font-semibold dark:text-white">
-                            {userData.name || 'User Name'}
+                            {userData.name || "User Name"}
                           </p>
                           <p className="text-xs text-gray-500 dark:text-gray-400 capitalize">
-                            {userData.role || 'Role'}
+                            {userData.role || "Role"}
                           </p>
                         </div>
                       </div>
                       <div className="py-1">
-                        <button 
+                        <button
                           onClick={() => {
-                            navigate('/userprofile');
+                            navigate("/userprofile");
                             setUserDropdown(false);
                           }}
                           className="w-full text-left px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center dark:text-white"
                         >
-                          <UserCircle size={16} className="mr-2 text-gray-500 dark:text-gray-400" />
+                          <UserCircle
+                            size={16}
+                            className="mr-2 text-gray-500 dark:text-gray-400"
+                          />
                           Profile
                         </button>
-                        <button 
+                        <button
                           onClick={() => {
-                            navigate('/settings');
+                            navigate("/settings");
                             setUserDropdown(false);
                           }}
                           className="w-full text-left px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center dark:text-white"
                         >
-                          <Settings size={16} className="mr-2 text-gray-500 dark:text-gray-400" />
+                          <Settings
+                            size={16}
+                            className="mr-2 text-gray-500 dark:text-gray-400"
+                          />
                           Settings
                         </button>
-                        <button 
+                        <button
                           onClick={() => {
                             handleLogout();
                             setUserDropdown(false);

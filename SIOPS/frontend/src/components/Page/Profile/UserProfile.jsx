@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
-import axios from "axios";
 import { motion } from "framer-motion";
 import { User, Mail, Phone, Lock, Edit, Save, X } from "lucide-react";
+import api from "../../../service/api";
 
 const UserProfile = () => {
   const [userData, setUserData] = useState(null);
@@ -16,28 +16,19 @@ const UserProfile = () => {
   useEffect(() => {
     const fetchUserProfile = async () => {
       try {
-        const token = localStorage.getItem("token");
-        if (!token) {
-          throw new Error("No token found");
-        }
-
-        const response = await axios.get(
-          "http://localhost:5000/users/profile",
-          {
-            headers: {
-              Authorization: `Bearer ${token}`,
-            },
-          },
-        );
-
+        // Get complete profile data in a single call
+        const response = await api.get("/users/profile");
         const userData = response.data.user ?? response.data;
-
+        
+        console.log("Complete profile data:", userData);
+        
         setUserData({
           user_id: userData.user_id || "",
           name: userData.name || "No name",
           email: userData.email || "No email",
           role: userData.role || "No role",
           phone_number: userData.phone_number || "No phone",
+          status: userData.status || "active"
         });
 
         setFormData({
@@ -50,7 +41,7 @@ const UserProfile = () => {
         console.error("Error fetching user profile:", error);
       }
     };
-
+  
     fetchUserProfile();
   }, []);
 
@@ -64,16 +55,9 @@ const UserProfile = () => {
 
   const handleUpdateProfile = async (e) => {
     e.preventDefault();
-    try { 
-      const token = localStorage.getItem("token");
-      const response = await axios.put(
-        `http://localhost:5000/users/${userData.user_id}`,
+    try {
+      const response = await api.put(`/users/${userData.user_id}`,
         formData,
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        }
       );
 
       const updatedUser = response.data.user;
@@ -211,41 +195,41 @@ const UserProfile = () => {
                 </motion.button>
               </div>
             </form>
-          ) : (
+          ) :(
             <div className="grid grid-cols-2 gap-6">
-              <div className="flex items-center space-x-4 bg-gray-50 p-4 rounded-lg">
-                <User className="text-blue-500" size={24} />
-                <div>
-                  <p className="text-sm text-gray-500">Name</p>
-                  <p className="text-base font-semibold">{userData.name}</p>
-                </div>
-              </div>
-
-              <div className="flex items-center space-x-4 bg-gray-50 p-4 rounded-lg">
-                <Mail className="text-green-500" size={24} />
-                <div>
-                  <p className="text-sm text-gray-500">Email</p>
-                  <p className="text-base font-semibold">{userData.email}</p>
-                </div>
-              </div>
-
-              <div className="flex items-center space-x-4 bg-gray-50 p-4 rounded-lg">
-                <Phone className="text-purple-500" size={24} />
-                <div>
-                  <p className="text-sm text-gray-500">Phone Number</p>
-                  <p className="text-base font-semibold">{userData.phone_number}</p>
-                </div>
-              </div>
-
-              <div className="flex items-center space-x-4 bg-gray-50 p-4 rounded-lg">
-                <Lock className="text-red-500" size={24} />
-                <div>
-                  <p className="text-sm text-gray-500">Role</p>
-                  <p className="text-base font-semibold">{userData.role}</p>
-                </div>
+            <div className="flex items-center space-x-4 bg-gray-50 p-4 rounded-lg">
+              <User className="text-blue-500" size={24} />
+              <div>
+                <p className="text-sm text-gray-500">Name</p>
+                <p className="text-base font-semibold">{userData.name}</p>
               </div>
             </div>
-          )}
+
+            <div className="flex items-center space-x-4 bg-gray-50 p-4 rounded-lg">
+              <Mail className="text-green-500" size={24} />
+              <div>
+                <p className="text-sm text-gray-500">Email</p>
+                <p className="text-base font-semibold">{userData.email}</p>
+              </div>
+            </div>
+
+            <div className="flex items-center space-x-4 bg-gray-50 p-4 rounded-lg">
+              <Phone className="text-purple-500" size={24} />
+              <div>
+                <p className="text-sm text-gray-500">Phone Number</p>
+                <p className="text-base font-semibold">{userData.phone_number}</p>
+              </div>
+            </div>
+
+            <div className="flex items-center space-x-4 bg-gray-50 p-4 rounded-lg">
+              <Lock className="text-red-500" size={24} />
+              <div>
+                <p className="text-sm text-gray-500">Role</p>
+                <p className="text-base font-semibold">{userData.role}</p>
+              </div>
+            </div>
+          </div>
+        )}
         </div>
       </div>
     </div>

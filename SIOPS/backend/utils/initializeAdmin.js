@@ -12,12 +12,12 @@ const initializeAdmin = async () => {
         password: hashedPassword,
         role: "admin",
       });
-      console.log("Admin default berhasil dibuat.");
+      console.log("Default admin successfully created.");
     } else {
-      console.log("Admin sudah ada, tidak perlu membuat ulang.");
+      console.log("Admin already exists, no need to recreate.");
     }
   } catch (error) {
-    console.error("Gagal membuat admin default:", error);
+    console.error("Failed create admin default:", error);
   }
 };
 

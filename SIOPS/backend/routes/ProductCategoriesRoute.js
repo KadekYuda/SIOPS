@@ -13,23 +13,24 @@ import {
   upload,
   importProductsFromCSV,
 } from "../controller/ProductCategoriesController.js";
+import { authorizeRole, authenticateToken } from "../auth/authMiddleware.js";
 
 const router = express.Router();
 
 // Product routes
-router.get("/products", getProducts);
-router.get("/products/:id", getProductById);
-router.post("/products", createProduct);
-router.put("/products/:id", updateProduct);
-router.delete("/products/:id", deleteProduct);
+router.get("/products", authenticateToken, getProducts);
+router.get("/products/:id", authenticateToken, getProductById);
+router.post("/products", authenticateToken, createProduct);
+router.put("/products/:id", authenticateToken,  authorizeRole('admin'), updateProduct,);
+router.delete("/products/:id", authenticateToken, authorizeRole('admin'), deleteProduct, );
 
 // Category routes
-router.get("/categories", getCategories);
-router.get("/categories/:id", getCategoryById);
-router.post("/categories", createCategory);
-router.put("/categories/:id", updateCategory);
-router.delete("/categories/:id", deleteCategory);
+router.get("/categories", authenticateToken, getCategories); 
+router.get("/categories/:id", authenticateToken, getCategoryById);
+router.post("/categories", authenticateToken, createCategory);
+router.put("/categories/:id", authorizeRole('admin'), updateCategory, );
+router.delete("/categories/:id", authorizeRole('admin'), deleteCategory, );
 
 // CSV routes
-router.post("/products/import", upload.single("file"), importProductsFromCSV)
+router.post("/products/import", upload.single('file'), importProductsFromCSV)
 export default router;

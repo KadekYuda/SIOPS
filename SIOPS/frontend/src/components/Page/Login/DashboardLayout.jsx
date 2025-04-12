@@ -1,28 +1,42 @@
 import React, { useState, useEffect } from "react";
 import clsx from "clsx";
 import { Outlet } from "react-router-dom";
-import SidebarAdmin from "../Sidebar/admin/SidebarAdmin"; // Admin Sidebar
-import Sidebars from "../Sidebar/staff/Sidebars"; // Staff Sidebar
-import Headers from "../Sidebar/Headers"; // Header Component
+import SidebarAdmin from "../Sidebar/admin/SidebarAdmin";
+import Sidebars from "../Sidebar/staff/Sidebars";
+import Headers from "../Sidebar/Headers";
+import api from "../../../service/api";
+import MinStockAlert from "../../modal/MinStockAlert";
+
 
 const DashboardLayout = () => {
   const [darkMode, setDarkMode] = useState(false);
-  const [isSidebarOpen, setIsSidebarOpen] = useState(false); // Mobile Sidebar
-  const [isDesktopSidebarOpen, setIsDesktopSidebarOpen] = useState(true); // Desktop Sidebar
-
-  // Get role from token instead of localStorage
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [isDesktopSidebarOpen, setIsDesktopSidebarOpen] = useState(true);
   const [role, setRole] = useState('');
-  
+  const [loading, setLoading] = useState(true);
+
+
+  // Fetch user data dari server
   useEffect(() => {
-    const token = localStorage.getItem('token');
-    if (token) {
+    const fetchUserData = async () => {
       try {
-        const userData = JSON.parse(atob(token.split('.')[1]));
-        setRole(userData.role);
+        const response = await api.get('/users/verify-token', );
+        
+        if (response.data.user && response.data.user.role) {
+          setRole(response.data.user.role);
+        }
       } catch (error) {
-        console.error('Error parsing token:', error);
+        console.error('Error fetching user data:', error);
+        // Redirect ke halaman login jika unauthorized
+        if (error.response?.status === 401 || error.response?.status === 403) {
+        window.location.href = '/login';
       }
-    }
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchUserData();
   }, []);
 
   // Toggle untuk Mobile Sidebar
@@ -35,12 +49,11 @@ const DashboardLayout = () => {
     setIsDesktopSidebarOpen((prev) => !prev);
   };
 
-  // Toggle untuk Dark Mode
+  // Toggle Dark Mode
   const toggleDarkMode = () => {
     setDarkMode((prev) => !prev);
   };
 
-  // Close mobile sidebar on larger screens
   useEffect(() => {
     const handleResize = () => {
       if (window.innerWidth >= 1024) {
@@ -54,6 +67,10 @@ const DashboardLayout = () => {
 
   const SidebarComponent = role === "admin" ? SidebarAdmin : Sidebars;
 
+  if (loading) {
+    return <div>Loading...</div>; // Tambahkan loading indicator
+  }
+
   return (
     <div
       className={clsx(
@@ -61,7 +78,7 @@ const DashboardLayout = () => {
         darkMode ? "dark bg-gray-900" : "bg-gray-100"
       )}
     >
-      {/* Overlay for mobile */}
+      {/* Overlay untuk mobile */}
       {isSidebarOpen && (
         <div
           className="fixed inset-0 bg-black bg-opacity-50 z-30 lg:hidden"
@@ -74,10 +91,10 @@ const DashboardLayout = () => {
         className={clsx(
           "fixed z-40 inset-y-0 left-0 bg-white dark:bg-gray-800 shadow-lg transition-transform duration-300 ease-in-out w-64",
           {
-            "translate-x-0": isSidebarOpen, // Mobile Sidebar Open
-            "-translate-x-full": !isSidebarOpen, // Mobile Sidebar Closed
-            "lg:translate-x-0": isDesktopSidebarOpen, // Desktop Sidebar Open
-            "lg:-translate-x-full": !isDesktopSidebarOpen, // Desktop Sidebar Closed
+            "translate-x-0": isSidebarOpen,
+            "-translate-x-full": !isSidebarOpen,
+            "lg:translate-x-0": isDesktopSidebarOpen,
+            "lg:-translate-x-full": !isDesktopSidebarOpen,
           }
         )}
       >
@@ -96,8 +113,8 @@ const DashboardLayout = () => {
           <Headers
             toggleDarkMode={toggleDarkMode}
             darkMode={darkMode}
-            toggleSidebar={toggleSidebar} // Mobile
-            toggleDesktopSidebar={toggleDesktopSidebar} // Desktop
+            toggleSidebar={toggleSidebar}
+            toggleDesktopSidebar={toggleDesktopSidebar}
           />
         </div>
 
@@ -106,13 +123,14 @@ const DashboardLayout = () => {
           className={clsx(
             "flex-1 p-4 transition-all duration-300 ease-in-out",
             {
-              "lg:ml-64": isDesktopSidebarOpen, // Geser konten saat Desktop Sidebar terbuka
-              "lg:ml-0": !isDesktopSidebarOpen, // Konten normal saat Desktop Sidebar tertutup
+              "lg:ml-64": isDesktopSidebarOpen,
+              "lg:ml-0": !isDesktopSidebarOpen,
             }
           )}
         >
           <main className="h-full">
             <Outlet />
+            <MinStockAlert />
           </main>
         </div>
       </div>
