@@ -9,7 +9,7 @@ import {
   LogOut,
   Settings,
 } from "lucide-react";
-import Logo2 from "../../../assets/Logo2.png";
+import LogoAM1 from "../../../assets/LogoAM1.png";
 import { useNavigate } from "react-router-dom";
 import api from "../../../service/api";
 
@@ -96,8 +96,8 @@ const Headers = ({
             </button>
 
             {/* Logo */}
-            <a href="/#" className="flex items-center space-x-2 ml-2">
-              <img src={Logo2} alt="Logo" width="60" height="50" />
+            <a href="/#" className="flex items-center space-x-2 ml-2 my-2">
+              <img src={LogoAM1} alt="Logo" width="60" height="50" />
               <span className="self-center text-xl font-semibold sm:text-2xl whitespace-nowrap dark:text-white">
                 SIMSOP
               </span>

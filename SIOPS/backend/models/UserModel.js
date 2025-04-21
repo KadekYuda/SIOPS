@@ -26,7 +26,7 @@ const User = db.define('users', {
         
 }, {
     freezeTableName: true,
-    timestamps: true,
+    timestamps: false,
     paranoid:true
 });
 

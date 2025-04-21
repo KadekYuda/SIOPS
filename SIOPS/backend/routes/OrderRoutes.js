@@ -1,39 +1,31 @@
-import express from "express";
-import {
-    getOrders,
-    getOrderById,
-    createOrder,
-    updateOrder,
-    deleteOrder
-} from "../controller/OrderController.js";
-import { authenticateToken } from "../auth/authMiddleware.js";
+import express from 'express';
+import { 
+    createOrder, 
+    getAllOrders, 
+    getOrderById, 
+    getOrdersByUserId, 
+    updateOrderStatus, 
+    deleteOrder,
+    getOrderDetailsByOrderId,
+    getAvailableBatchesByProductCode,
+    updateOrderItem
+} from '../controller/OrderController.js';
+import { authenticateToken } from '../auth/authMiddleware.js';
+
 
 const router = express.Router();
 
+// Protected routes (require authentication)
+router.post('/',  authenticateToken, createOrder);
+router.get('/user/:userId',  authenticateToken, getOrdersByUserId);
+router.get('/:id',  authenticateToken, getOrderById);
+router.get('/:orderId/details', authenticateToken, getOrderDetailsByOrderId);
 
-router.get('/', 
-  authenticateToken, 
-  getOrders
-);
-
-router.get('/:order_id', 
-  authenticateToken, 
-  getOrderById
-);
-
-router.post('/', 
-  authenticateToken, 
-  createOrder
-);
-
-router.patch('/:order_id', 
-  authenticateToken, 
-  updateOrder
-);
-
-router.delete('/:order_id', 
-  authenticateToken, 
-  deleteOrder
-);
+// Admin routes
+router.get('/', authenticateToken, getAllOrders);
+router.patch('/:id/status', authenticateToken, updateOrderStatus);
+router.delete('/:id', authenticateToken, deleteOrder);
+router.get('/:code_product/batches', authenticateToken,  getAvailableBatchesByProductCode);
+router.put('/:id/details/:detailId', authenticateToken, updateOrderItem);
 
 export default router;

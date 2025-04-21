@@ -1,5 +1,4 @@
 import React from 'react';
-import { Link} from 'react-router-dom';
 import clsx from "clsx";
 import {
   LayoutDashboard,
@@ -70,25 +69,13 @@ const Sidebars = ({ isSidebarOpen, isDesktopSidebarOpen }) => {
         <ul className="space-y-2 font-medium">
           {Fiturs.map((item, index) => (
             <li key={index}>
-              {item.to === "#" ? (
-                // eslint-disable-next-line jsx-a11y/anchor-is-valid
-                <a
-                  href="#"
-                  className="flex items-center px-4 py-2 text-gray-950 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-700 rounded-lg"
-                  onClick={(e) => e.preventDefault()}
-                >
-                  <item.icon className="w-5 h-5" />
-                  <span className="ml-3">{item.text}</span>
-                </a>
-              ) : (
-                <Link
-                  to={item.to}
-                  className="flex items-center px-4 py-2 text-gray-950 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-700 rounded-lg"
-                >
-                  <item.icon className="w-5 h-5" />
-                  <span className="ml-3">{item.text}</span>
-                </Link>
-              )}
+              <a
+                href={item.href}
+                className="flex items-center px-4 py-2 text-gray-950 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-700 rounded-lg"
+              >
+                <item.icon className="w-5 h-5" />
+                <span className="ml-3">{item.text}</span>
+              </a>
             </li>
           ))}
         </ul>

@@ -2,13 +2,15 @@
   import { useState, useEffect, useCallback } from "react";
 
   import Login from "../components/Page/Login/Login";
-  import OrderStock from "../components/Page/Order/OrderStock";
   import DashboardAdmin from "../components/Page/Sidebar/admin/DashboardAdmin";
   import DashboardStaff from "../components/Page/Sidebar/staff/DashboardStaff";
   import DashboardLayout from "../components/Page/Login/DashboardLayout";
   import UserProfile from "../components/Page/Profile/UserProfile";
   import Product from "../components/Page/Product/Product";
   import BatchStok from "../components/Page/Product/BatchStok";
+  import OrderStock from "../components/Page/Order/OrderStock";
+  import Order from "../components/Page/Order/Staff/Order";
+  import OrderAdmin from "../components/Page/Order/Admin/OrderAdmin";
   import api from "../service/api";
 
   function AppRoutes() {
@@ -168,6 +170,24 @@
             element={
               <ProtectedRoute allowedRoles={["staff", "admin"]}>
                 <BatchStok />
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/orders"
+            element={
+              <ProtectedRoute allowedRoles={["staff", "admin"]}>
+                <Order />
+              </ProtectedRoute>
+            }
+          />
+
+<Route
+            path="/orderss"
+            element={
+              <ProtectedRoute allowedRoles={["staff", "admin"]}>
+                <OrderAdmin />
               </ProtectedRoute>
             }
           />

@@ -56,8 +56,8 @@ export const authorizeRole = (...roles) => {
 export const logout = (req, res) => {
   res.clearCookie("token", {
     httpOnly: true,
-    secure: false, // Hanya jika pakai HTTPS
-    sameSite: 'lax',
+    secure: true, // Hanya jika pakai HTTPS
+    sameSite: 'none',
   });
   res.status(200).json({ message: "Logged out successfully" });
 }

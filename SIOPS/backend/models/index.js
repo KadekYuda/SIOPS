@@ -18,50 +18,47 @@ const initializeAssociations = () => {
     User.hasMany(Order, { foreignKey: 'user_id' });
     User.hasMany(Sales, { foreignKey: 'user_id' });
     User.hasMany(Opname, { foreignKey: 'user_id' });
-
+    
     Order.belongsTo(User, { foreignKey: 'user_id' });
     Sales.belongsTo(User, { foreignKey: 'user_id' });
     Opname.belongsTo(User, { foreignKey: 'user_id' });
-
+    
     // Categories associations
     Categories.hasMany(Product, { foreignKey: 'code_categories' });
     Product.belongsTo(Categories, { foreignKey: 'code_categories' });
-
+    
     // Products associations
     Product.hasMany(BatchStock, { foreignKey: 'code_product' });
     BatchStock.belongsTo(Product, { foreignKey: 'code_product' });
-
-    // Relasi Many-to-Many Order ↔ Products melalui OrderDetail
-    Order.belongsToMany(Product, { through: OrderDetail, foreignKey: 'order_id', otherKey: 'code_product' });
-    Product.belongsToMany(Order, { through: OrderDetail, foreignKey: 'code_product', otherKey: 'order_id' });
-
+    
+    // Order dan OrderDetail (One-to-Many)
     Order.hasMany(OrderDetail, { foreignKey: 'order_id' });
     OrderDetail.belongsTo(Order, { foreignKey: 'order_id' });
-
-    OrderDetail.belongsTo(Product, { foreignKey: 'code_product' });
+    
+    // Product dan OrderDetail (One-to-Many)
     Product.hasMany(OrderDetail, { foreignKey: 'code_product' });
-
-    OrderDetail.belongsTo(BatchStock, { foreignKey: 'batch_id' });
+    OrderDetail.belongsTo(Product, { foreignKey: 'code_product' });
+    
+    // BatchStock dan OrderDetail (One-to-Many)
     BatchStock.hasMany(OrderDetail, { foreignKey: 'batch_id' });
-
-    // Relasi Many-to-Many Sales ↔ Products melalui SalesDetail
-    Sales.belongsToMany(Product, { through: SalesDetail, foreignKey: 'sales_id', otherKey: 'code_product' });
-    Product.belongsToMany(Sales, { through: SalesDetail, foreignKey: 'code_product', otherKey: 'sales_id' });
-
+    OrderDetail.belongsTo(BatchStock, { foreignKey: 'batch_id' });
+    
+    // Sales dan SalesDetail (One-to-Many)
     Sales.hasMany(SalesDetail, { foreignKey: 'sales_id' });
     SalesDetail.belongsTo(Sales, { foreignKey: 'sales_id' });
-
-    SalesDetail.belongsTo(Product, { foreignKey: 'code_product' });
+    
+    // Product dan SalesDetail (One-to-Many)
     Product.hasMany(SalesDetail, { foreignKey: 'code_product' });
-
-    SalesDetail.belongsTo(BatchStock, { foreignKey: 'batch_id' });
+    SalesDetail.belongsTo(Product, { foreignKey: 'code_product' });
+    
+    // BatchStock dan SalesDetail (One-to-Many)
     BatchStock.hasMany(SalesDetail, { foreignKey: 'batch_id' });
-
-    // ✅ Opname dan BatchStock (One-to-Many)
+    SalesDetail.belongsTo(BatchStock, { foreignKey: 'batch_id' });
+    
+    // Opname dan BatchStock (One-to-Many)
     Opname.belongsTo(BatchStock, { foreignKey: 'batch_id' });
     BatchStock.hasMany(Opname, { foreignKey: 'batch_id' });
 };
-
 
 // Initialize database
 export const initializeDatabase = async () => {

@@ -439,12 +439,10 @@ export const importProductsFromCSV = async (req, res) => {
         // Siapkan batch code
         const batchCount = batchCountMap.get(code_product) || 0;
         const newBatchNumber = String(batchCount + 1).padStart(3, '0');
-        const productNameSlug = (row.name_product || code_product)
-          .replace(/\s+/g, "-")
-          .replace(/[^a-zA-Z0-9\-]/g, "")
-          .substring(0, 30); // Limit length to avoid excessively long batch codes
-        
-        const batch_code = `${productNameSlug}-${newBatchNumber}`;
+        const productNameClean = (row.name_product || code_product)
+          .trim()
+          .replace(/[^a-zA-Z0-9 ]/g, ''); // Hanya huruf, angka, dan spasi
+        const batch_code = `${productNameClean}-${newBatchNumber}`;
         
         // Generate random arrival and expiration dates
         const arrivalDate = getRandomArrivalDate();
@@ -542,7 +540,7 @@ export const importProductsFromCSV = async (req, res) => {
 export const getProducts = async (req, res) => {
   try {
     const page = parseInt(req.query.page) || 0;
-    const limit = parseInt(req.query.limit) || 10;
+    const limit = parseInt(req.query.limit) || 3000;
     const search = req.query.search || "";
     const code_categories = req.query.code_categories || "";
     const offset = limit * page;
@@ -585,7 +583,7 @@ export const getProductById = async (req, res) => {
   try {
     const product = await Product.findOne({
       where: {
-        code_product: req.params.id,
+        code_product: req.params.code_product,
         deleted_at: null,
       },
       include: [
@@ -596,34 +594,22 @@ export const getProductById = async (req, res) => {
       ],
     });
 
-    const formattedRows = rows.map(item => {
-      const plainItem = item.get({ plain: true });
-      
-      // Convert code_product and barcode to string
-      if (plainItem.code_product) {
-          plainItem.code_product = String(plainItem.code_product);
-      }
-      
-      if (plainItem.barcode) {
-          plainItem.barcode = String(plainItem.barcode);
-      }
-      
-      return plainItem;
-  });
-  
-  res.json({
-      result: formattedRows,
-      page: page,
-      limit: limit,
-      totalRows: count,
-      totalPages: Math.ceil(count / limit),
-  });
-
-    if (!product) {
+    if (!product) { 
       return res.status(404).json({ message: "Product not found" });
     }
 
-    res.json(product);
+    // Convert code_product and barcode to string if needed
+    const plainProduct = product.get({ plain: true });
+    
+    if (plainProduct.code_product) {
+      plainProduct.code_product = String(plainProduct.code_product);
+    }
+    
+    if (plainProduct.barcode) {
+      plainProduct.barcode = String(plainProduct.barcode);
+    }
+
+    res.json(plainProduct);
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -666,7 +652,7 @@ export const updateProduct = async (req, res) => {
   try {
     const product = await Product.findOne({
       where: {
-        code_product: req.params.id,
+        code_product: req.params.code_product,
         deleted_at: null,
       },
     });
@@ -688,7 +674,7 @@ export const updateProduct = async (req, res) => {
 
     await Product.update(req.body, {
       where: {
-        code_product: req.params.id,
+        code_product: req.params.code_product,
       },
     });
 
@@ -705,7 +691,7 @@ export const deleteProduct = async (req, res) => {
   try {
     const product = await Product.findOne({
       where: {
-        code_product: req.params.id,
+        code_product: req.params.code_product,
         deleted_at: null,
       },
     });
@@ -716,7 +702,7 @@ export const deleteProduct = async (req, res) => {
 
     await Product.update(
       { deleted_at: new Date() },
-      { where: { code_product: req.params.id } }
+      { where: { code_product: req.params.code_product } }
     );
 
     res.json({
@@ -750,7 +736,7 @@ export const getCategoryById = async (req, res) => {
   try {
     const category = await Categories.findOne({
       where: {
-        code_categories: req.params.id,
+        code_categories: req.params.code_categories,
         deleted_at: null,
       },
     });
@@ -794,7 +780,7 @@ export const updateCategory = async (req, res) => {
   try {
     const category = await Categories.findOne({
       where: {
-        code_categories: req.params.id,
+        code_categories: req.params.code_categories,
         deleted_at: null,
       },
     });
@@ -808,7 +794,7 @@ export const updateCategory = async (req, res) => {
 
     await Categories.update(req.body, {
       where: {
-        code_categories: req.params.id,
+        code_categories: req.params.code_categories,
       },
     });
 
@@ -825,7 +811,7 @@ export const deleteCategory = async (req, res) => {
   try {
     const category = await Categories.findOne({
       where: {
-        code_categories: req.params.id,
+        code_categories: req.params.code_categories,
         deleted_at: null,
       },
     });
@@ -836,7 +822,7 @@ export const deleteCategory = async (req, res) => {
 
     await Categories.update(
       { deleted_at: new Date() },
-      { where: { code_categories: req.params.id } }
+      { where: { code_categories: req.params.code_categories } }
     );
 
     res.json({

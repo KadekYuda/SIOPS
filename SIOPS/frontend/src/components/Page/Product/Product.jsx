@@ -1,6 +1,6 @@
-import React, { useState, useEffect, useCallback } from "react";
-import axios from "axios";
+import React, { useState, useEffect, useCallback, useRef} from "react";
 import { Plus, Edit2, Trash2, Search, X, Upload, Package } from "lucide-react";
+import ProductModal from "../../modal/ProductModal";
 import SuccessModal from "../../modal/SuccessModal";
 import AlertModal from "../../modal/AlertModal";
 import Categories from "./Categories";
@@ -40,7 +40,38 @@ const Product = () => {
   const [csvFile, setCsvFile] = useState(null);
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [uploadLoading, setUploadLoading] = useState(false);
+  const [categoryDropdownOpen, setCategoryDropdownOpen] = useState(false);
+  const [categorySearch, setCategorySearch] = useState("");
+  const categoryDropdownRef = useRef(null);
 
+  useEffect(() => {
+    function handleClickOutside(event) {
+      if (categoryDropdownRef.current && !categoryDropdownRef.current.contains(event.target)) {
+        setCategoryDropdownOpen(false);
+      }
+    }
+    
+    if (categoryDropdownOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [categoryDropdownOpen]);useEffect(() => {
+    function handleClickOutside(event) {
+      if (categoryDropdownRef.current && !categoryDropdownRef.current.contains(event.target)) {
+        setCategoryDropdownOpen(false);
+      }
+    }
+    
+    if (categoryDropdownOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [categoryDropdownOpen]);
+  
   const validateForm = () => {
     const errors = {};
     if (!formData.code_product)
@@ -112,21 +143,18 @@ const Product = () => {
     fetchProducts();
   }, [fetchProducts]);
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    if (!validateForm()) return;
-
+  const handleSubmitProduct = async (productData) => {
     try {
       if (modalMode === "add") {
-        await api.post("/products", formData);
+        await api.post("/products", productData);
         setSuccessModal({
           isOpen: true,
           message: "Product added successfully",
         });
       } else {
         await api.put(
-          `/products/${formData.code_product}`,
-          formData
+          `/products/${productData.code_product}`,
+          productData
         );
         setSuccessModal({
           isOpen: true,
@@ -135,7 +163,6 @@ const Product = () => {
       }
 
       setShowModal(false);
-      resetForm();
       fetchProducts();
     } catch (error) {
       setAlertModal({
@@ -143,6 +170,14 @@ const Product = () => {
         message: error.response?.data?.message || "Failed to save product",
       });
     }
+  };
+  
+  // Persiapkan initialData setiap kali akan edit produk
+  const prepareEditData = (product) => {
+    return {
+      ...product,
+      category_name: categories.find(c => c.code_categories === product.code_categories)?.name_categories || ""
+    };
   };
 
   const handleDelete = async (code_product) => {
@@ -275,6 +310,7 @@ const Product = () => {
               className="flex items-center gap-2"
             />
           </div>
+          
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="relative">
@@ -295,6 +331,22 @@ const Product = () => {
             </div>
             <Categories onCategoriesChange={handleCategoriesChange} />
           </div>
+        </div>
+
+        <div className="flex md:hidden justify-end mb-4">
+          <select
+            value={limit}
+            onChange={(e) => {
+              setLimit(Number(e.target.value));
+              setPage(0);
+            }}
+            className="border rounded px-3 py-1 text-sm"
+          >
+            <option value={10}>10 per page</option>
+            <option value={20}>20 per page</option>
+            <option value={50}>50 per page</option>
+            <option value={100}>100 per page</option>
+          </select>
         </div>
 
         {/* Products Table */}
@@ -419,7 +471,7 @@ const Product = () => {
 
       {/* Pagination */}
       <div className="mt-4 flex justify-between items-center">
-        <div>
+        <div className="hidden md:flex">
           <select
             value={limit}
             onChange={(e) => {
@@ -443,193 +495,17 @@ const Product = () => {
       </div>
 
       {/* Add/Edit Modal */}
-      {showModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-lg max-w-2xl w-full">
-            <div className="flex justify-between items-center p-6 border-b">
-              <h2 className="text-xl font-semibold">
-                {modalMode === "add" ? "Add New Product" : "Edit Product"}
-              </h2>
-              <button
-                onClick={() => {
-                  setShowModal(false);
-                  resetForm();
-                }}
-                className="text-gray-500 hover:text-gray-700"
-              >
-                <X size={24} />
-              </button>
-            </div>
-            <form onSubmit={handleSubmit} className="p-6">
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label
-                    htmlFor="productCode"
-                    className="block text-sm font-medium text-gray-700 mb-1"
-                  >
-                    Product Code*
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.code_product}
-                    onChange={(e) =>
-                      setFormData({ ...formData, code_product: e.target.value })
-                    }
-                    disabled={modalMode === "edit"}
-                    className={`w-full px-3 py-2 border rounded ${
-                      formErrors.code_product
-                        ? "border-red-500"
-                        : "border-gray-300"
-                    }`}
-                  />
-                  {formErrors.code_product && (
-                    <p className="mt-1 text-sm text-red-500">
-                      {formErrors.code_product}
-                    </p>
-                  )}
-                </div>
-                <div>
-                  <label
-                    htmlFor="barcode"
-                    className="block text-sm font-medium text-gray-700 mb-1"
-                  >
-                    Barcode
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.barcode}
-                    onChange={(e) =>
-                      setFormData({ ...formData, barcode: e.target.value })
-                    }
-                    className="w-full px-3 py-2 border rounded"
-                  />
-                </div>
-                <div className="col-span-2">
-                  <label
-                    htmlFor="productName"
-                    className="block text-sm font-medium text-gray-700 mb-1"
-                  >
-                    Product Name*
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.name_product}
-                    onChange={(e) =>
-                      setFormData({ ...formData, name_product: e.target.value })
-                    }
-                    className={`w-full px-3 py-2 border rounded ${
-                      formErrors.name_product
-                        ? "border-red-500"
-                        : "border-gray-300"
-                    }`}
-                  />
-                  {formErrors.name_product && (
-                    <p className="mt-1 text-sm text-red-500">
-                      {formErrors.name_product}
-                    </p>
-                  )}
-                </div>
-                <div>
-                  <label
-                    htmlFor="categories"
-                    className="block text-sm font-medium text-gray-700 mb-1"
-                  >
-                    Categories
-                  </label>
-                  <select
-                    value={formData.code_categories}
-                    onChange={(e) =>
-                      setFormData({
-                        ...formData,
-                        code_categories: e.target.value,
-                      })
-                    }
-                    className="w-full px-3 py-2 border rounded"
-                  >
-                    <option value="">Select categories</option>
-                    {categories.map((cat) => (
-                      <option
-                        key={cat.code_categories}
-                        value={cat.code_categories}
-                      >
-                        {cat.name_categories}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label
-                    htmlFor="sellingPrice"
-                    className="block text-sm font-medium text-gray-700 mb-1"
-                  >
-                    Selling Price*
-                  </label>
-                  <input
-                    type="number"
-                    value={formData.sell_price}
-                    onChange={(e) =>
-                      setFormData({ ...formData, sell_price: e.target.value })
-                    }
-                    className={`w-full px-3 py-2 border rounded ${
-                      formErrors.sell_price
-                        ? "border-red-500"
-                        : "border-gray-300"
-                    }`}
-                  />
-                  {formErrors.sell_price && (
-                    <p className="mt-1 text-sm text-red-500">
-                      {formErrors.sell_price}
-                    </p>
-                  )}
-                </div>
-                <div>
-                  <label
-                    htmlFor="minimumStock"
-                    className="block text-sm font-medium text-gray-700 mb-1"
-                  >
-                    Minimum Stock*
-                  </label>
-                  <input
-                    type="number"
-                    value={formData.min_stock}
-                    onChange={(e) =>
-                      setFormData({ ...formData, min_stock: e.target.value })
-                    }
-                    className={`w-full px-3 py-2 border rounded ${
-                      formErrors.min_stock
-                        ? "border-red-500"
-                        : "border-gray-300"
-                    }`}
-                  />
-                  {formErrors.min_stock && (
-                    <p className="mt-1 text-sm text-red-500">
-                      {formErrors.min_stock}
-                    </p>
-                  )}
-                </div>
-              </div>
-              <div className="mt-6 flex justify-end gap-4">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setShowModal(false);
-                    resetForm();
-                  }}
-                  className="px-4 py-2 border rounded-lg hover:bg-gray-50"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-                >
-                  {modalMode === "add" ? "Add Product" : "Save Changes"}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
+      <ProductModal
+        isOpen={showModal}
+        onClose={() => {
+          setShowModal(false);
+          resetForm();
+        }}
+        onSubmit={handleSubmitProduct}
+        modalMode={modalMode}
+        initialData={modalMode === "add" ? {} : prepareEditData(formData)}
+        categories={categories}
+      />
 
       {/* CSV Upload Modal */}
       {showUploadModal && (

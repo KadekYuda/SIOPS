@@ -3,9 +3,10 @@ import {
     getBatchStok,
     getBatchStokById,
     getBatchStokByProductCode,
-    getMinimumStockAlert
+    getMinimumStockAlert,
+    createBatchStok
 } from "../controller/BatchStockController.js";
-import { authenticateToken } from "../auth/authMiddleware.js";
+import { authenticateToken, authorizeRole } from "../auth/authMiddleware.js";
 
 const router = express.Router();
 
@@ -13,7 +14,8 @@ const router = express.Router();
 router.get('/stock', authenticateToken, getBatchStok);
 router.get('/minstock', authenticateToken, getMinimumStockAlert)
 router.get('/:batch_id',  authenticateToken, getBatchStokById);
-router.get('/product/:product_code',  authenticateToken, getBatchStokByProductCode);
+router.post('/create', authenticateToken, authorizeRole('admin'), createBatchStok)
+router.get('/product/:code_product',  authenticateToken, getBatchStokByProductCode);
 
 
 

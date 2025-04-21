@@ -1,15 +1,16 @@
 import React, { useState, useEffect, useCallback } from "react";
 import Select from 'react-select';
-import { Trash2,  Check, AlertTriangle, Filter, Plus, Package, Eye, X } from "lucide-react";
+import { Trash2, Edit, Eye, Check, AlertTriangle, Filter, Plus, Package } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
-import api from "../../../service/api";
+import api from "../../../../service/api";
 
 const Order = () => {
   const [orders, setOrders] = useState([]);
   const [products, setProducts] = useState([]);
-  const [user, setUser] = useState(null);
+  const [selectedOrder, setSelectedOrder] = useState(null);
+  const [orderDetails, setOrderDetails] = useState([]);
+  const [showOrderDetail, setShowOrderDetail] = useState(false);
   const [orderForm, setOrderForm] = useState({
-    user_id: "",
     order_status: "pending",
     order_details: [
       {
@@ -21,40 +22,18 @@ const Order = () => {
     ],
   });
 
-  const fetchUserProfile = useCallback(async () => {
-    try {
-      const response = await api.get("/users/profile");
-      setUser(response.data.user);
-      
-      // Update orderForm with user_id
-      setOrderForm(prev => ({
-        ...prev,
-        user_id: response.data.user?.user_id
-      }));
-    } catch (error) {
-      console.error("Error fetching user profile:", error);
-      showAlert(
-        "error",
-        "Failed to fetch user profile",
-        error.response?.data?.msg || "Network error"
-      );
-    }
-  }, []);
-
-  useEffect(() => {
-  fetchUserProfile();
-}, [fetchUserProfile]);
-
+  const [isEditing, setIsEditing] = useState(false);
+  const [editingOrder, setEditingOrder] = useState(null);
   const [alert, setAlert] = useState(null);
+  const [deleteOrderId, setDeleteOrderId] = useState(null);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [filterMenuOpen, setFilterMenuOpen] = useState(false);
   const [filters, setFilters] = useState({
     code_product: "",
     order_status: "",
     created_at: "",
   });
-  const [showOrderDetail, setShowOrderDetail] = useState(false);
-  const [selectedOrder, setSelectedOrder] = useState(null);
-  const [orderDetails, setOrderDetails] = useState([]);
+  const [userRole, setUserRole] = useState("user"); // Default to user, should be set based on authentication
 
   // Fetch orders
   const fetchOrders = useCallback(async () => {
@@ -73,6 +52,17 @@ const Order = () => {
 
   useEffect(() => {
     fetchOrders();
+
+    const checkUserRole = async () => {
+      try {
+        const response = await api.get("/users/verify-token");
+        setUserRole(response.data.role);
+      } catch (error) {
+        console.error("Error fetching user role:", error);
+      }
+    };
+    
+    checkUserRole();
   }, [fetchOrders]);
 
   // Fetch products
@@ -93,7 +83,7 @@ const Order = () => {
   useEffect(() => {
     fetchProducts();
   }, [fetchProducts]);
-
+  
   // Fetch order details
   const fetchOrderDetails = async (orderId) => {
     try {
@@ -108,14 +98,6 @@ const Order = () => {
       );
       return [];
     }
-  };
-
-  // View order details
-  const viewOrderDetails = async (order) => {
-    setSelectedOrder(order);
-    const details = await fetchOrderDetails(order.order_id);
-    setOrderDetails(details);
-    setShowOrderDetail(true);
   };
 
   // Add order detail
@@ -180,6 +162,7 @@ const Order = () => {
     );
   };
 
+  // Create new order
   const handleCreateOrder = async (e) => {
     e.preventDefault();
     try {
@@ -194,16 +177,10 @@ const Order = () => {
         showAlert("error", "Error", "Please fill all required fields");
         return;
       }
-      
-      if (!orderForm.user_id) {
-        showAlert("error", "Error", "User not authenticated properly");
-        return;
-      }
 
-      // Prepare order data with user_id
+      // Prepare order data
       const newOrderForm = { 
-        ...orderForm,
-        user_id: orderForm.user_id,  // Make sure it's included
+        ...orderForm, 
         order_status: "pending",
         // Clean up order details to match API expectations
         order_details: orderForm.order_details.map(detail => ({
@@ -214,11 +191,8 @@ const Order = () => {
         }))
       };
 
-      console.log("Submitting order with data:", newOrderForm); // Debug log
-
-      // Create order - cookies will be automatically sent with request
+      // Create order
       await api.post("/orders", newOrderForm);
-
 
       showAlert("success", "Success", "Order created successfully");
       setOrderForm({
@@ -243,6 +217,62 @@ const Order = () => {
     }
   };
 
+  // Update order status
+  const handleUpdateOrder = async (e) => {
+    e.preventDefault();
+    if (!editingOrder) return;
+
+    try {
+      await api.patch(
+        `/orders/${editingOrder.order_id}/status`,
+        {
+          order_status: orderForm.order_status,
+        }
+      );
+
+      showAlert("success", "Success", "Order status updated successfully");
+      setIsEditing(false);
+      setEditingOrder(null);
+      fetchOrders();
+    } catch (error) {
+      console.error("Error updating order:", error);
+      showAlert(
+        "error",
+        "Failed to update order",
+        error.response?.data?.msg || "Network error"
+      );
+    }
+  };
+
+  // Delete order
+  const handleDeleteOrder = async () => {
+    if (!deleteOrderId) return;
+
+    try {
+      await api.delete(`orders/${deleteOrderId}`);
+
+      showAlert("success", "Success", "Order deleted successfully");
+      setShowDeleteModal(false);
+      setDeleteOrderId(null);
+      fetchOrders();
+    } catch (error) {
+      console.error("Error deleting order:", error);
+      showAlert(
+        "error",
+        "Failed to delete order",
+        error.response?.data?.message || "Network error"
+      );
+    }
+  };
+
+  // View order details
+  const viewOrderDetails = async (order) => {
+    setSelectedOrder(order);
+    const details = await fetchOrderDetails(order.order_id);
+    setOrderDetails(details);
+    setShowOrderDetail(true);
+  };
+
   // Show alert message
   const showAlert = (type, title, message) => {
     setAlert({ type, title, message });
@@ -264,8 +294,13 @@ const Order = () => {
     );
   };
 
+  // Check if user has admin privileges
+  const isAdmin = () => {
+    return userRole === "admin";
+  };
+
   return (
-    <div className="flex flex-col md:flex-row gap-6 p-4 my-14">
+    <div className="flex flex-col md:flex-row gap-6 p-4 mt-4">
       {/* Left Section - Create Order */}
       <div className="w-full md:w-1/2 bg-white rounded-lg shadow p-6">
         <h2 className="text-2xl font-bold mb-6">Create Order</h2>
@@ -410,7 +445,7 @@ const Order = () => {
               >
                 <option value="">All Statuses</option>
                 <option value="pending">Pending</option>
-                <option value="approved">Approved</option>
+                <option value="completed">Completed</option>
                 <option value="cancelled">Cancelled</option>
                 <option value="received">Received</option>
               </select>
@@ -428,6 +463,7 @@ const Order = () => {
                 onClick={() => {
                   // Apply filters logic here
                   setFilterMenuOpen(false);
+                  fetchOrders();
                 }}
               >
                 Apply Filters
@@ -457,7 +493,7 @@ const Order = () => {
                     <td className="px-4 py-3">{formatPrice(order.total_amount)}</td>
                     <td className="px-4 py-3">
                       <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                        order.order_status === 'approved' || order.order_status === 'received' ? 'bg-green-100 text-green-800' : 
+                        order.order_status === 'completed' || order.order_status === 'received' ? 'bg-green-100 text-green-800' : 
                         order.order_status === 'cancelled' ? 'bg-red-100 text-red-800' : 
                         'bg-yellow-100 text-yellow-800'
                       }`}>
@@ -466,12 +502,38 @@ const Order = () => {
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex space-x-2">
-                        <button
+                        <button 
                           onClick={() => viewOrderDetails(order)}
                           className="inline-flex items-center px-2.5 py-1.5 bg-indigo-100 text-indigo-700 rounded hover:bg-indigo-200"
                         >
                           <Eye size={14} className="mr-1" /> View
                         </button>
+                        {isAdmin() && (
+                          <>
+                            <button 
+                              onClick={() => {
+                                setEditingOrder(order);
+                                setOrderForm({
+                                  ...orderForm,
+                                  order_status: order.order_status
+                                });
+                                setIsEditing(true);
+                              }}
+                              className="text-blue-500 hover:text-blue-700"
+                            >
+                              <Edit size={16} />
+                            </button>
+                            <button 
+                              onClick={() => {
+                                setDeleteOrderId(order.order_id);
+                                setShowDeleteModal(true);
+                              }}
+                              className="text-red-500 hover:text-red-700"
+                            >
+                              <Trash2 size={16} />
+                            </button>
+                          </>
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -488,133 +550,191 @@ const Order = () => {
         </div>
       </div>
       
-    
+      {/* Order Status Update Modal (Admin only) */}
+      {isEditing && editingOrder && isAdmin() && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white p-6 rounded-lg max-w-md w-full">
+            <h3 className="text-lg font-bold mb-4">Update Order Status</h3>
+            <p className="mb-4">Order ID: {editingOrder.order_id}</p>
+            
+            <div className="mb-4">
+              <label className="block text-sm font-medium mb-2">Status</label>
+              <select
+                value={orderForm.order_status}
+                onChange={(e) => setOrderForm({...orderForm, order_status: e.target.value})}
+                className="w-full p-2 border rounded"
+              >
+                <option value="pending">Pending</option>
+                <option value="completed">Completed</option>
+                <option value="cancelled">Cancelled</option>
+                <option value="received">Received</option>
+              </select>
+            </div>
+            
+            <div className="mt-4 flex justify-end space-x-2">
+              <button
+                onClick={() => {
+                  setIsEditing(false);
+                  setEditingOrder(null);
+                }}
+                className="px-4 py-2 bg-gray-500 text-white rounded hover:bg-gray-600"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleUpdateOrder}
+                className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+              >
+                Update
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      
+      {/* Delete Confirmation Modal (Admin only) */}
+      {showDeleteModal && isAdmin() && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white p-6 rounded-lg max-w-md w-full">
+            <div className="flex items-center mb-4 text-red-500">
+              <AlertTriangle size={24} className="mr-2" />
+              <h3 className="text-lg font-bold">Confirm Deletion</h3>
+            </div>
+            
+            <p className="mb-4">Are you sure you want to delete order #{deleteOrderId}? This action cannot be undone.</p>
+            
+            <div className="mt-6 flex justify-end space-x-3">
+              <button
+                onClick={() => {
+                  setShowDeleteModal(false);
+                  setDeleteOrderId(null);
+                }}
+                className="px-4 py-2 bg-gray-500 text-white rounded hover:bg-gray-600"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleDeleteOrder}
+                className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700"
+              >
+                Delete Order
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      
       {/* Order Detail Modal */}
-      <AnimatePresence>
-        {showOrderDetail && selectedOrder && (
-          <motion.div 
-            initial={{ opacity: 0 }} 
-            animate={{ opacity: 1 }} 
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50"
-          >
-            <motion.div 
-              initial={{ scale: 0.9 }} 
-              animate={{ scale: 1 }} 
-              exit={{ scale: 0.9 }}
-              className="bg-white rounded-lg p-6 max-w-2xl w-full max-h-[90vh] overflow-auto"
-            >
-              <div className="flex justify-between items-center mb-6">
-                <h4 className="text-xl font-bold">Order Details</h4>
-                <button 
-                  onClick={() => setShowOrderDetail(false)}
-                  className="text-gray-400 hover:text-gray-500"
+      {showOrderDetail && selectedOrder && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white p-6 rounded-lg max-w-2xl w-full max-h-[90vh] overflow-auto">
+            <div className="flex justify-between items-center mb-6">
+              <h4 className="text-xl font-bold">Order Details</h4>
+              <button 
+                onClick={() => setShowOrderDetail(false)}
+                className="text-gray-400 hover:text-gray-500"
+              >
+                <Trash2 size={20} />
+              </button>
+            </div>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+              <div>
+                <h5 className="text-sm font-medium text-gray-500 mb-1">Order ID</h5>
+                <p className="text-gray-900">{selectedOrder.order_id}</p>
+              </div>
+              <div>
+                <h5 className="text-sm font-medium text-gray-500 mb-1">Date</h5>
+                <p className="text-gray-900">{new Date(selectedOrder.created_at).toLocaleDateString()}</p>
+              </div>
+              <div>
+                <h5 className="text-sm font-medium text-gray-500 mb-1">Status</h5>
+                <p className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium
+                  ${selectedOrder.order_status === "completed" ? "bg-green-100 text-green-800" : 
+                  selectedOrder.order_status === "cancelled" ? "bg-red-100 text-red-800" :
+                  selectedOrder.order_status === "received" ? "bg-blue-100 text-blue-800" : 
+                  "bg-yellow-100 text-yellow-800"}`}
                 >
-                  <X size={20} />
-                </button>
+                  {selectedOrder.order_status.charAt(0).toUpperCase() + selectedOrder.order_status.slice(1)}
+                </p>
               </div>
-              
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-                <div>
-                  <h5 className="text-sm font-medium text-gray-500 mb-1">Order ID</h5>
-                  <p className="text-gray-900">{selectedOrder.order_id}</p>
-                </div>
-                <div>
-                  <h5 className="text-sm font-medium text-gray-500 mb-1">Date</h5>
-                  <p className="text-gray-900">{new Date(selectedOrder.created_at).toLocaleDateString()}</p>
-                </div>
-                <div>
-                  <h5 className="text-sm font-medium text-gray-500 mb-1">User</h5>
-                  <p className="text-gray-900">{selectedOrder.user?.name || selectedOrder.user_id}</p>
-                </div>
-                <div>
-                  <h5 className="text-sm font-medium text-gray-500 mb-1">Status</h5>
-                  <p className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium
-                    ${selectedOrder.order_status === "completed" || selectedOrder.order_status === "received" ? "bg-green-100 text-green-800" : 
-                    selectedOrder.order_status === "cancelled" ? "bg-red-100 text-red-800" : 
-                    "bg-yellow-100 text-yellow-800"}`}
-                  >
-                    {selectedOrder.order_status.charAt(0).toUpperCase() + selectedOrder.order_status.slice(1)}
-                  </p>
-                </div>
-              </div>
-              
-              <div className="border-t border-gray-200 pt-6">
-                <h5 className="text-lg font-medium mb-4">Order Items</h5>
-                <div className="overflow-x-auto">
-                  <table className="min-w-full divide-y divide-gray-200">
-                    <thead className="bg-gray-50">
-                      <tr>
-                        <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Product</th>
-                        <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Code</th>
-                        <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Batch</th>
-                        <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Quantity</th>
-                        <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Price</th>
-                        <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Subtotal</th>
-                      </tr>
-                    </thead>
-                    <tbody className="bg-white divide-y divide-gray-200">
-                      {selectedOrder.order_details && selectedOrder.order_details.length > 0 ? (
-                        selectedOrder.order_details.map((item, index) => (
-                          <tr key={index}>
-                            <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900">{item.product_name}</td>
-                            <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500">{item.code_product}</td>
-                            <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500">{item.batch_code || "-"}</td>
-                            <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500">{item.stock_quantity}</td>
-                            <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500">
-                              {formatPrice(item.ordered_price)}
-                            </td>
-                            <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500">
-                              {formatPrice(item.subtotal)}
-                            </td>
-                          </tr>
-                        ))
-                      ) : orderDetails && orderDetails.length > 0 ? (
-                        orderDetails.map((item, index) => (
-                          <tr key={index}>
-                            <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900">{item.product_name}</td>
-                            <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500">{item.code_product}</td>
-                            <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500">{item.batch_code || "-"}</td>
-                            <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500">{item.stock_quantity}</td>
-                            <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500">
-                              {formatPrice(item.ordered_price)}
-                            </td>
-                            <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500">
-                              {formatPrice(item.subtotal)}
-                            </td>
-                          </tr>
-                        ))
-                      ) : (
-                        <tr>
-                          <td colSpan={6} className="px-4 py-3 whitespace-nowrap text-sm text-gray-500 text-center">
-                            No items data available
+            </div>
+            
+            <div className="border-t border-gray-200 pt-6">
+              <h5 className="text-lg font-medium mb-4">Order Items</h5>
+              <div className="overflow-x-auto">
+                <table className="min-w-full divide-y divide-gray-200">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Product</th>
+                      <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Code</th>
+                      <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Batch</th>
+                      <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Quantity</th>
+                      <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Price</th>
+                      <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Subtotal</th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-200">
+                    {selectedOrder.order_details && selectedOrder.order_details.length > 0 ? (
+                      selectedOrder.order_details.map((item, index) => (
+                        <tr key={index}>
+                          <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900">{item.product_name}</td>
+                          <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500">{item.code_product}</td>
+                          <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500">{item.batch_code}</td>
+                          <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500">{item.stock_quantity}</td>
+                          <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500">
+                            {formatPrice(item.ordered_price)}
+                          </td>
+                          <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500">
+                            {formatPrice(item.subtotal)}
                           </td>
                         </tr>
-                      )}
-                    </tbody>
-                  </table>
-                </div>
+                      ))
+                    ) : orderDetails && orderDetails.length > 0 ? (
+                      orderDetails.map((item, index) => (
+                        <tr key={index}>
+                          <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900">{item.product_name}</td>
+                          <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500">{item.code_product}</td>
+                          <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500">{item.batch_code}</td>
+                          <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500">{item.stock_quantity}</td>
+                          <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500">
+                            {formatPrice(item.ordered_price)}
+                          </td>
+                          <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500">
+                            {formatPrice(item.subtotal)}
+                          </td>
+                        </tr>
+                      ))
+                    ) : (
+                      <tr>
+                        <td colSpan={6} className="px-4 py-3 whitespace-nowrap text-sm text-gray-500 text-center">
+                          No items data available
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
               </div>
-              
-              <div className="border-t border-gray-200 mt-6 pt-6">
-                <div className="flex justify-between font-medium">
-                  <span>Total Amount:</span>
-                  <span>{formatPrice(selectedOrder.total_amount)}</span>
-                </div>
+            </div>
+            
+            <div className="border-t border-gray-200 mt-6 pt-6">
+              <div className="flex justify-between font-medium">
+                <span>Total Amount:</span>
+                <span>{formatPrice(selectedOrder.total_amount)}</span>
               </div>
-              
-              <div className="mt-6 flex justify-end">
-                <button
-                  onClick={() => setShowOrderDetail(false)}
-                  className="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
-                >
-                  Close
-                </button>
-              </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+            </div>
+            
+            <div className="mt-6 flex justify-end">
+              <button
+                onClick={() => setShowOrderDetail(false)}
+                className="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       
       {/* Alert Message */}
       <AnimatePresence>
@@ -629,31 +749,14 @@ const Order = () => {
           >
             <div className="flex items-center">
               {alert.type === "success" ? (
-              <Check size={20} className="mr-2" />
-            ) : (
-              <AlertTriangle size={20} className="mr-2" />
-            )}
+                <Check className="mr-2" size={20} />
+              ) : (
+                <AlertTriangle className="mr-2" size={20} />
+              )}
               <div>
-                <p className="font-medium">{alert.title}</p>
-                <p className="text-sm">{alert.message}</p>
+                <h3 className="font-bold">{alert.title}</h3>
+                <p>{alert.message}</p>
               </div>
-              <button
-                onClick={() => setAlert(null)}
-                className="ml-4 hover:text-gray-200"
-              >
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  className="h-5 w-5"
-                  viewBox="0 0 20 20"
-                  fill="currentColor"
-                >
-                  <path
-                    fillRule="evenodd"
-                    d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z"
-                    clipRule="evenodd"
-                  />
-                </svg>
-              </button>
             </div>
           </motion.div>
         )}

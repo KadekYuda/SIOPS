@@ -9,7 +9,7 @@ export const getBatchStok = async (req, res) => {
         let { page, limit, search } = req.query;
 
         page = parseInt(page) || 0;
-        limit = parseInt(limit) || 5;
+        limit = parseInt(limit) || 3000;
         const offset = page * limit;
 
         // Kondisi pencarian
@@ -94,22 +94,29 @@ export const getBatchStokById = async (req, res) => {
 
 export const getBatchStokByProductCode = async (req, res) => {
     try {
-        const response = await BatchStok.findAll({
+        const batchStocks = await BatchStok.findAll({
             where: {
-                kdbar: req.params.product_code
+                code_product: req.params.code_product
             },
             include: [{
                 model: Products,
-                attributes: ['code_product', 'name_product'] // Pastikan kolom ini ada di tabel Products
+                attributes: ['code_product', 'name_product']
             }],
             order: [['exp_date', 'ASC']]
         });
+        
+        // Tambahkan total_stock ke setiap batch
+        const response = batchStocks.map(batch => {
+            const batchData = batch.get({ plain: true });
+            batchData.total_stock = parseInt(batchData.initial_stock || 0) + parseInt(batchData.stock_quantity || 0);
+            return batchData;
+        });
+        
         res.status(200).json({ result: response });
     } catch (error) {
         res.status(500).json({ msg: error.message });
     }
 };
-
 
 export const getMinimumStockAlert = async (req, res) => {
     try{
@@ -123,8 +130,7 @@ export const getMinimumStockAlert = async (req, res) => {
             });
 
             const totalStock = batches.reduce((acc, batch) => {
-            const remaining = batch.stock_quantity - (batch.used_stock || 0);
-            return acc + remaining;
+           return acc + batch.stock_quantity + batch.initial_stock;
 
         }, 0)
 
@@ -145,17 +151,76 @@ export const getMinimumStockAlert = async (req, res) => {
 }
 }
 
+export const createBatchStok = async (req, res) => {
+    try {
+        const { code_product, batch_code, stock_quantity, purchase_price, expiry_date } = req.body;
+        
+        // Validate required fields
+        if (!code_product || !batch_code || !expiry_date) {
+            return res.status(400).json({ msg: "Product code, batch code, and expiry date are required" });
+        }
+        
+        // Check if product exists
+        const product = await Products.findOne({
+            where: { code_product: code_product }
+        });
+        
+        if (!product) {
+            return res.status(404).json({ msg: "Product not found" });
+        }
+        
+        // Check if batch code already exists
+        const existingBatch = await BatchStok.findOne({
+            where: { batch_code: batch_code }
+        });
+        
+        if (existingBatch) {
+            return res.status(409).json({ msg: "Batch code already exists" });
+        }
+        
+        // Create new batch
+        const newBatch = await BatchStok.create({
+            code_product: code_product,
+            batch_code: batch_code,
+            initial_stock: 0, // Initial stock is 0 as it's a new batch
+            stock_quantity: stock_quantity || 0,
+            purchase_price: purchase_price,
+            exp_date: expiry_date
+        });
+        
+        // Get full batch data with product info
+        const fullBatchData = await BatchStok.findOne({
+            where: { batch_id: newBatch.batch_id },
+            include: [{
+                model: Products,
+                attributes: ['code_product', 'name_product']
+            }]
+        });
+        
+        const formattedResponse = fullBatchData.get({ plain: true });
+        if (formattedResponse.Product && formattedResponse.Product.code_product) {
+            formattedResponse.Product.code_product = String(formattedResponse.Product.code_product);
+        }
+        if (formattedResponse.code_product) {
+            formattedResponse.code_product = String(formattedResponse.code_product);
+        }
+        
+        res.status(201).json({ 
+            msg: "Batch created successfully",
+            result: formattedResponse
+        });
+    } catch (error) {
+        console.error("Error creating batch stock:", error);
+        res.status(500).json({ msg: error.message });
+    }
+};
+
 
 
 
 // Disable create, update, and delete operations
-export const createBatchStok = async (req, res) => {
-    res.status(403).json({ msg: "Operation not allowed" });
-};
-
 export const updateBatchStok = async (req, res) => {
-    res.status(403).json({ msg: "Operation not allowed" });
-    res.status(403).json({ msg: "Operation not allowed" });
+    res.status(403).json({ msg: "Operation not allowed" })
 };
 
 export const deleteBatchStok = async (req, res) => {
