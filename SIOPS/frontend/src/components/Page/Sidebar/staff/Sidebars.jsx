@@ -4,6 +4,7 @@ import {
   LayoutDashboard,
   Package,
   ShoppingCart,
+  ShoppingBag,
   PackageSearch,
   ClipboardList,
 } from "lucide-react";
@@ -14,18 +15,19 @@ const Sidebars = ({ isSidebarOpen, isDesktopSidebarOpen }) => {
   // Data untuk Sidebar
   const Fiturs = [
     {
-      to: "/dashboard",
+      href: "/DashboardAdmin",
       icon: LayoutDashboard,
       text: "Dashboard",
     },
+    
     {
-      to: "/product",
+      href: "/product",
       icon: Package,
       text: "Product",
     },
     {
-      to: "/order",
-      icon: ShoppingCart,
+      href: "order",
+      icon: ShoppingBag,
       text: "Order",
     },
     {
@@ -45,6 +47,7 @@ const Sidebars = ({ isSidebarOpen, isDesktopSidebarOpen }) => {
       text: "Report",
     },
   ];
+
 
   
 

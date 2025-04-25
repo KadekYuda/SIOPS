@@ -23,7 +23,7 @@ const SidebarAdmin = ({ isSidebarOpen, isDesktopSidebarOpen }) => {
       text: "Product",
     },
     {
-      href: "order",
+      href: "/orderss",
       icon: ShoppingBag,
       text: "Order",
     },

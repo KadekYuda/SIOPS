@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from "react";
 import Pagination from "./Pagination";
 import api from "../../../service/api";
+import { Search } from "lucide-react";
 
 const BatchStok = () => {
   const [batchStok, setBatchStok] = useState([]);
@@ -9,8 +10,7 @@ const BatchStok = () => {
   const [limit, setLimit] = useState(5);
   const [totalPages, setTotalPages] = useState(0);
   const [searchTerm, setSearchTerm] = useState("");
-
-
+  const [totalItems, setTotalItems] = useState(0); // Add new state for total items
 
   const fetchBatchStok = useCallback(async () => {
     try {
@@ -23,6 +23,7 @@ const BatchStok = () => {
       );
       setBatchStok(response.data.result || []);
       setTotalPages(response.data.totalPages || 0);
+      setTotalItems(response.data.totalRows || 0); // Add this line
       setLoading(false);
     } catch (error) {
       console.error("Error fetching batch stock:", error);
@@ -66,15 +67,38 @@ const BatchStok = () => {
   return (
     <div className="container mx-auto px-4 py-8 pt-20">
       <h1 className="text-2xl font-bold text-gray-800 mb-6">Batch Stock</h1>
-      <div className="mb-4">
-        <input
-          type="text"
-          placeholder="Search by product name, code, or stock..."
-          value={searchTerm}
-          onChange={handleSearchChange}
-          className="w-full p-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-        />
-      </div>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="relative mb-4">
+                    <input
+                      type="text"
+                      placeholder="Search by product name, or code."
+                      value={searchTerm}
+                      onChange={handleSearchChange}
+                      className="w-full pl-10 pr-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
+                    />
+                    <Search
+                      className="absolute left-3 top-2.5 text-gray-400"
+                      size={20}
+                    />
+                  </div>
+
+                </div>
+
+      <div className="flex md:hidden justify-end mb-4">
+          <select
+            value={limit}
+            onChange={(e) => {
+              setLimit(Number(e.target.value));
+              setPage(0);
+            }}
+            className="border rounded px-3 py-1 text-sm"
+          >
+            <option value={10}>10 per page</option>
+            <option value={20}>20 per page</option>
+            <option value={50}>50 per page</option>
+            <option value={100}>100 per page</option>
+          </select>
+        </div>
 
       <div className="bg-white rounded-lg shadow overflow-x-auto">
         <table className="min-w-full divide-y divide-gray-200">
@@ -165,7 +189,7 @@ const BatchStok = () => {
           </tbody>
         </table>
       </div>
-      <div className="mt-4 flex justify-between items-center">
+      <div className="mt-4 hidden md:flex justify-between items-center">
         <div>
           <select
             value={limit}
@@ -181,12 +205,14 @@ const BatchStok = () => {
             <option value={100}>100 per page</option>
           </select>
         </div>
-        <Pagination
+      </div>
+      <Pagination
           currentPage={page}
           totalPages={totalPages}
           onPageChange={setPage}
+          itemsPerPage={limit}
+          totalItems={totalItems}
         />
-      </div>
     </div>
   );
 };

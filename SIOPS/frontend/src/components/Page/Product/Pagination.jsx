@@ -2,8 +2,10 @@ import React, { useMemo, useState, useEffect } from 'react';
 
 const Pagination = ({ 
   currentPage, 
-  totalPages, 
-  onPageChange 
+  totalPages,
+  onPageChange,
+  itemsPerPage = 10,
+  totalItems = 0
 }) => {
   const [windowWidth, setWindowWidth] = useState(window.innerWidth);
 
@@ -12,6 +14,12 @@ const Pagination = ({
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
   }, []);
+
+  const paginationInfo = useMemo(() => {
+    const start = currentPage * itemsPerPage + 1;
+    const end = Math.min((currentPage + 1) * itemsPerPage, totalItems);
+    return { start, end };
+  }, [currentPage, itemsPerPage, totalItems]);
 
   const paginationButtons = useMemo(() => {
     const buttons = [];
@@ -100,8 +108,25 @@ const Pagination = ({
   }, [currentPage, totalPages, onPageChange, windowWidth]);
 
   return (
-    <div className="flex gap-1 items-center justify-center flex-wrap md:gap-2">
-      {totalPages > 1 && paginationButtons}
+    <div className="flex flex-col gap-2 items-center justify-between w-full px-4 py-2 sm:flex-row">
+      <div className="text-sm text-gray-700 whitespace-nowrap">
+        {totalItems > 0 ? (
+          <>
+            Showing{' '}
+            <span className="font-medium">{paginationInfo.start}</span>{' '}
+            to{' '}
+            <span className="font-medium">{paginationInfo.end}</span>{' '}
+            of{' '}
+            <span className="font-medium">{totalItems}</span>{' '}
+            entries
+          </>
+        ) : (
+          'No entries found'
+        )}
+      </div>
+      <div className="flex gap-1 items-center justify-center flex-wrap md:gap-2">
+        {totalPages > 1 && paginationButtons}
+      </div>
     </div>
   );
 };

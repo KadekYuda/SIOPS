@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef} from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import { Plus, Edit2, Trash2, Search, X, Upload, Package } from "lucide-react";
 import ProductModal from "../../modal/ProductModal";
 import SuccessModal from "../../modal/SuccessModal";
@@ -7,7 +7,6 @@ import Categories from "./Categories";
 import CrudButton from "../../Button/CrudButton";
 import Pagination from "./Pagination";
 import api from "../../../service/api";
-
 
 const Product = () => {
   const [products, setProducts] = useState([]);
@@ -41,37 +40,44 @@ const Product = () => {
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [uploadLoading, setUploadLoading] = useState(false);
   const [categoryDropdownOpen, setCategoryDropdownOpen] = useState(false);
-  const [categorySearch, setCategorySearch] = useState("");
   const categoryDropdownRef = useRef(null);
+  const [totalItems, setTotalItems] = useState(0);
 
   useEffect(() => {
     function handleClickOutside(event) {
-      if (categoryDropdownRef.current && !categoryDropdownRef.current.contains(event.target)) {
+      if (
+        categoryDropdownRef.current &&
+        !categoryDropdownRef.current.contains(event.target)
+      ) {
         setCategoryDropdownOpen(false);
       }
     }
-    
+
     if (categoryDropdownOpen) {
-      document.addEventListener('mousedown', handleClickOutside);
+      document.addEventListener("mousedown", handleClickOutside);
     }
     return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-    };
-  }, [categoryDropdownOpen]);useEffect(() => {
-    function handleClickOutside(event) {
-      if (categoryDropdownRef.current && !categoryDropdownRef.current.contains(event.target)) {
-        setCategoryDropdownOpen(false);
-      }
-    }
-    
-    if (categoryDropdownOpen) {
-      document.addEventListener('mousedown', handleClickOutside);
-    }
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener("mousedown", handleClickOutside);
     };
   }, [categoryDropdownOpen]);
-  
+  useEffect(() => {
+    function handleClickOutside(event) {
+      if (
+        categoryDropdownRef.current &&
+        !categoryDropdownRef.current.contains(event.target)
+      ) {
+        setCategoryDropdownOpen(false);
+      }
+    }
+
+    if (categoryDropdownOpen) {
+      document.addEventListener("mousedown", handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, [categoryDropdownOpen]);
+
   const validateForm = () => {
     const errors = {};
     if (!formData.code_product)
@@ -88,7 +94,7 @@ const Product = () => {
   const fetchProducts = useCallback(async () => {
     try {
       setLoading(true);
-      
+
       const response = await api.get(
         `/products?${new URLSearchParams({
           search: search,
@@ -99,6 +105,7 @@ const Product = () => {
 
       setProducts(response.data.result || []);
       setTotalPages(Math.ceil(response.data.totalRows / limit));
+      setTotalItems(response.data.totalRows || 0);
       setLoading(false);
     } catch (error) {
       console.error("Error fetching products:", error);
@@ -114,7 +121,7 @@ const Product = () => {
   const fetchCategories = useCallback(async () => {
     try {
       const response = await api.get("/categories");
-      
+
       if (response.data && response.data.result) {
         setCategories(response.data.result);
       } else {
@@ -152,10 +159,7 @@ const Product = () => {
           message: "Product added successfully",
         });
       } else {
-        await api.put(
-          `/products/${productData.code_product}`,
-          productData
-        );
+        await api.put(`/products/${productData.code_product}`, productData);
         setSuccessModal({
           isOpen: true,
           message: "Product updated successfully",
@@ -171,14 +175,24 @@ const Product = () => {
       });
     }
   };
-  
-  // Persiapkan initialData setiap kali akan edit produk
-  const prepareEditData = (product) => {
-    return {
-      ...product,
-      category_name: categories.find(c => c.code_categories === product.code_categories)?.name_categories || ""
-    };
-  };
+
+  const prepareEditData = useCallback(
+    (product) => {
+      return {
+        ...product,
+        code_product: product.code_product ?? "",
+        barcode: product.barcode ?? "",
+        name_product: product.name_product ?? "",
+        code_categories: product.code_categories ?? "",
+        category_name:
+          categories.find((c) => c.code_categories === product.code_categories)
+            ?.name_categories ?? "",
+        sell_price: product.sell_price ?? 0,
+        min_stock: product.min_stock ?? 0,
+      };
+    },
+    [categories]
+  );
 
   const handleDelete = async (code_product) => {
     try {
@@ -218,15 +232,11 @@ const Product = () => {
       const formData = new FormData();
       formData.append("file", csvFile);
 
-      const response = await api.post(
-        "/products/import",
-        formData,
-        {
-          headers: {
-            'Content-Type': 'multipart/form-data'
-          }
-        }
-      );
+      const response = await api.post("/products/import", formData, {
+        headers: {
+          "Content-Type": "multipart/form-data",
+        },
+      });
 
       setUploadLoading(false);
       setShowUploadModal(false);
@@ -281,6 +291,21 @@ const Product = () => {
     return str;
   };
 
+  const handleAddProduct = () => {
+    // Reset form with proper default values
+    setFormData({
+      code_product: "",
+      barcode: "",
+      name_product: "",
+      code_categories: "",
+      category_name: "",
+      sell_price: "",
+      min_stock: "",
+    });
+    setModalMode("add");
+    setShowModal(true);
+  };
+
   return (
     <div className="container mx-auto px-4 py-8 pt-20">
       {/* Header and Search Section */}
@@ -301,16 +326,11 @@ const Product = () => {
             <CrudButton
               icon={Plus}
               label="Add Product"
-              onClick={() => {
-                setModalMode("add");
-                setShowModal(true);
-                resetForm();
-              }}
+              onClick={handleAddProduct}
               buttonStyle="primary"
               className="flex items-center gap-2"
             />
           </div>
-          
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="relative">
@@ -381,90 +401,96 @@ const Product = () => {
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
-  {(() => {
-    if (loading) {
-      return (
-        <tr>
-          <td colSpan="8" className="px-4 py-4 text-center">
-            <div className="flex justify-center items-center space-x-2">
-              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-500"></div>
-              <span>Loading...</span>
-            </div>
-          </td>
-        </tr>
-      );
-    }
+              {(() => {
+                if (loading) {
+                  return (
+                    <tr>
+                      <td colSpan="8" className="px-4 py-4 text-center">
+                        <div className="flex justify-center items-center space-x-2">
+                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-500"></div>
+                          <span>Loading...</span>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                }
 
-    if (products.length === 0) {
-      return (
-        <tr>
-          <td colSpan="8" className="px-4 py-4 text-center text-gray-500">
-            No products found
-          </td>
-        </tr>
-      );
-    }
+                if (products.length === 0) {
+                  return (
+                    <tr>
+                      <td
+                        colSpan="8"
+                        className="px-4 py-4 text-center text-gray-500"
+                      >
+                        No products found
+                      </td>
+                    </tr>
+                  );
+                }
 
-    return products.map((product, index) => (
-      <tr key={product.code_product} className="hover:bg-gray-50">
-        <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500">
-          {index + 1 + page * limit}
-        </td>
-        <td className="px-4 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-          {formatLargeNumber(product.code_product)}
-        </td>
-        <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500">
-          {formatLargeNumber(product.barcode) || "-"}
-        </td>
-        <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900">
-          {product.name_product}
-        </td>
-        <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500">
-          {categories.find(
-            (c) => c.code_categories === product.code_categories
-          )?.name_categories || "-"}
-        </td>
-        <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900">
-          Rp {Number(product.sell_price).toLocaleString()}
-        </td>
-        <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500">
-          {product.min_stock}
-        </td>
-        <td className="px-4 py-4 text-right text-sm font-medium">
-          <div className="flex justify-end gap-3">
-            <CrudButton
-              icon={Edit2}
-              onClick={() => {
-                setFormData(product);
-                setModalMode("edit");
-                setShowModal(true);
-              }}
-              actionType="edit"
-              buttonStyle="primary"
-              className="p-1 rounded-full"
-              buttonType="product"
-            />
-            <CrudButton
-              icon={Trash2}
-              onConfirm={() => handleDelete(product.code_product)}
-              actionType="delete"
-              buttonStyle="danger"
-              className="p-1 rounded-full"
-              title="Delete Product"
-              confirmMessage={
-                <>
-                  Are you sure you want to delete product{" "}
-                  <b className="text-gray-700">{product.name_product}</b>?
-                </>
-              }
-              buttonType="product"
-            />
-          </div>
-        </td>
-      </tr>
-    ));
-  })()}
-</tbody>
+                return products.map((product, index) => (
+                  <tr key={product.code_product} className="hover:bg-gray-50">
+                    <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500">
+                      {index + 1 + page * limit}
+                    </td>
+                    <td className="px-4 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                      {formatLargeNumber(product.code_product)}
+                    </td>
+                    <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500">
+                      {formatLargeNumber(product.barcode) || "-"}
+                    </td>
+                    <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900">
+                      {product.name_product}
+                    </td>
+                    <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500">
+                      {categories.find(
+                        (c) => c.code_categories === product.code_categories
+                      )?.name_categories || "-"}
+                    </td>
+                    <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900">
+                      Rp {Number(product.sell_price).toLocaleString()}
+                    </td>
+                    <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500">
+                      {product.min_stock}
+                    </td>
+                    <td className="px-4 py-4 text-right text-sm font-medium">
+                      <div className="flex justify-end gap-3">
+                        <CrudButton
+                          icon={Edit2}
+                          onClick={() => {
+                            setFormData(product);
+                            setModalMode("edit");
+                            setShowModal(true);
+                          }}
+                          actionType="edit"
+                          buttonStyle="primary"
+                          className="p-1 rounded-full"
+                          buttonType="product"
+                        />
+                        <CrudButton
+                          icon={Trash2}
+                          onConfirm={() => handleDelete(product.code_product)}
+                          actionType="delete"
+                          buttonStyle="danger"
+                          className="p-1 rounded-full"
+                          title="Delete Product"
+                          confirmMessage={
+                            <>
+                              Are you sure you want to delete product{" "}
+                              <b className="text-gray-700">
+                                {product.name_product}
+                              </b>{" "}
+                              ?
+                            </>
+                          }
+                          buttonType="product"
+                        />
+                      </div>
+                    </td>
+                  </tr>
+                ));
+              })()}
+            </tbody>
           </table>
         </div>
       </div>
@@ -491,11 +517,14 @@ const Product = () => {
           currentPage={page}
           totalPages={totalPages}
           onPageChange={setPage}
+          itemsPerPage={limit}
+          totalItems={totalItems}
         />
       </div>
 
       {/* Add/Edit Modal */}
       <ProductModal
+        key={`${modalMode}-${formData.code_product || "new"}`}
         isOpen={showModal}
         onClose={() => {
           setShowModal(false);
