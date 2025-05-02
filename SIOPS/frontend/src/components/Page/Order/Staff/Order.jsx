@@ -96,10 +96,17 @@ const Order = () => {
   const [selectedOrder, setSelectedOrder] = useState(null);
   const [orderDetails, setOrderDetails] = useState([]);
 
-  // Fetch orders
+  // Fetch orders with filters
   const fetchOrders = useCallback(async () => {
     try {
-      const response = await api.get("/orders");
+      // Build query parameters
+      const queryParams = new URLSearchParams();
+      if (filters.order_status)
+        queryParams.append("order_status", filters.order_status);
+      if (filters.created_at)
+        queryParams.append("created_at", filters.created_at);
+
+      const response = await api.get(`/orders?${queryParams.toString()}`);
       setOrders(response.data);
     } catch (error) {
       console.error("Error fetching orders:", error);
@@ -109,7 +116,7 @@ const Order = () => {
         error.response?.data?.msg || "Network error"
       );
     }
-  }, []);
+  }, [filters]);
 
   useEffect(() => {
     fetchOrders();
@@ -206,18 +213,89 @@ const Order = () => {
     });
   };
 
-  // Handle product selection
-  const handleProductSelect = async (index, code_product) => {
-    const selectedProduct = products.find(
-      (p) => p.code_product === code_product
-    );
+  // Add restockProduct handling in useEffect
+  useEffect(() => {
+    const handleRestockProduct = async () => {
+      const restockProduct = sessionStorage.getItem("restockProduct");
+      if (restockProduct) {
+        const product = JSON.parse(restockProduct);
 
-    handleDetailChange(index, "code_product", code_product);
-    handleDetailChange(
-      index,
-      "ordered_price",
-      selectedProduct?.sell_price || ""
+        try {
+          // Fetch available batches for the product
+          const batchResponse = await api.get(`/batch/${product.code_product}`);
+          const batches = batchResponse.data.result || [];
+
+          // Update orderForm with the restocked product
+          setOrderForm((prev) => ({
+            ...prev,
+            order_details: [
+              {
+                code_product: product.code_product,
+                name_product: product.name_product,
+                stock_quantity: "",
+                ordered_price: product.sell_price,
+                subtotal: "",
+                available_batches: batches,
+              },
+            ],
+          }));
+
+          // Automatically select the product in the dropdown
+          const productOption = {
+            value: product.code_product,
+            label: `${product.name_product} (${product.code_product})`,
+          };
+          handleProductSelect(0, productOption);
+        } catch (error) {
+          console.error("Error fetching batch data:", error);
+        }
+
+        // Clear the stored product data
+        sessionStorage.removeItem("restockProduct");
+      }
+    };
+
+    handleRestockProduct();
+  }, []);
+
+  // Handle product selection
+  const handleProductSelect = async (index, selectedOption) => {
+    if (!selectedOption) {
+      // Clear the product details if no option is selected
+      handleDetailChange(index, "code_product", "");
+      handleDetailChange(index, "name_product", "");
+      handleDetailChange(index, "ordered_price", "");
+      handleDetailChange(index, "available_batches", []);
+      return;
+    }
+
+    const selectedProduct = products.find(
+      (p) => p.code_product === selectedOption
     );
+    if (selectedProduct) {
+      try {
+        const batchResponse = await api.get(
+          `/batch/product/${selectedProduct.code_product}`
+        );
+        const batches = batchResponse.data.result || [];
+
+        handleDetailChange(index, "code_product", selectedProduct.code_product);
+        handleDetailChange(index, "name_product", selectedProduct.name_product);
+        handleDetailChange(
+          index,
+          "ordered_price",
+          selectedProduct.sell_price || ""
+        );
+        handleDetailChange(index, "available_batches", batches);
+      } catch (error) {
+        console.error("Error fetching batch data:", error);
+        showAlert(
+          "error",
+          "Failed to fetch batch data",
+          error.response?.data?.msg || "Network error"
+        );
+      }
+    }
   };
 
   const handleCreateOrder = async (e) => {

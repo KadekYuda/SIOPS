@@ -39,110 +39,56 @@ export const createOrder = async (req, res) => {
         // Process order details and handle batch creation if needed
         const orderDetailsPromises = [];
 
-        // Add check for pending products with the same price
+        // For each detail of order_details
         for (const detail of order_details) {
-            // Check if this product is in any pending order with the same price
-            const pendingOrdersWithProduct = await OrderDetail.findAll({
-                include: [
-                    {
-                        model: Order,
-                        where: {
-                            order_status: 'pending',
-                            // Exclude current user's orders if you want to allow same user to order same product
-                            // user_id: { [db.Sequelize.Op.ne]: user_id }
-                        }
-                    }
-                ],
-                where: {
-                    code_product: detail.code_product,
-                    ordered_price: detail.ordered_price
-                },
-                transaction: t
-            });
-        
-            // If product found in other pending orders with same price, throw error
-            if (pendingOrdersWithProduct.length > 0) {
-                throw new Error(`Product ${detail.code_product} is already in another pending order with the same price. Different prices are allowed.`);
+            // Get product information
+            const product = await Product.findByPk(detail.code_product, { transaction: t });
+            if (!product) {
+                throw new Error(`Product with code ${detail.code_product} not found`);
             }
-        
+            
             let batchId = detail.batch_id;
-            
-            
+
             // If no batch_id is provided, check if we need to create a new batch
-if (!batchId) {
-    // Get product information
-    const product = await Product.findByPk(detail.code_product, { transaction: t });
-    if (!product) {
-        throw new Error(`Product with code ${detail.code_product} not found`);
-    }
-    
-    // Always create a new batch for new ordered prices, or if no batches exist
-    const existingBatches = await BatchStock.findAll({
-        where: { code_product: detail.code_product },
-        transaction: t
-    });
-    
-    // Find a batch with the same price
-    const matchingPriceBatch = existingBatches.find(batch => 
-        parseFloat(batch.purchase_price) === parseFloat(detail.ordered_price) && 
-        batch.stock_quantity > 0
-    );
-    
-    if (existingBatches.length === 0 || !matchingPriceBatch) {
-        // Create a new batch - either first time or new price
-        // Generate sequential batch number
-        const batchNumber = existingBatches.length + 1;
-        const batchCode = `${product.name_product.substring(0, 15)}-${String(batchNumber).padStart(3, '0')}`;
-        const currentDate = new Date();
-        
-        // Default expiry date (1 year from now)
-        const expiryDate = new Date();
-        expiryDate.setFullYear(expiryDate.getFullYear() + 1);
-        
-        const newBatch = await BatchStock.create({
-            code_product: detail.code_product,
-            batch_code: batchCode,
-            purchase_price: detail.ordered_price,
-            initial_stock: detail.stock_quantity, // Use initial_stock for first order
-            stock_quantity: 0,
-            arrival_date: currentDate,
-            exp_date: expiryDate,
-            created_at: currentDate,
-            updated_at: currentDate
-        }, { transaction: t });
-        
-        batchId = newBatch.batch_id;
-    } else {
-        // Use the existing batch with matching price
-        batchId = matchingPriceBatch.batch_id;
-    }
-}
-            
-            // Now we have a valid batch_id, either existing or newly created
-            const batch = await BatchStock.findByPk(batchId, { transaction: t });
-            
-            // Update stock - check if we should update initial_stock or stock_quantity
-            if (batch.initial_stock > 0 && batch.stock_quantity === 0) {
-                // This is the second order for this batch, transition from initial_stock to stock_quantity
-                if (batch.initial_stock < detail.stock_quantity) {
-                    throw new Error(`Insufficient stock for batch ID ${batchId}`);
-                }
+            if (!batchId) {
+                // Check existing batches
+                const existingBatches = await BatchStock.findAll({
+                    where: { code_product: detail.code_product },
+                    transaction: t
+                });
                 
-                await batch.update({
-                    stock_quantity: batch.initial_stock - detail.stock_quantity,
-                    initial_stock: 0, // Zero out initial stock after first use
-                    updated_at: new Date()
-                }, { transaction: t });
-            } else {
-                // Normal stock update (not first-time)
-                if (batch.stock_quantity < detail.stock_quantity) {
-                    throw new Error(`Insufficient stock for batch ID ${batchId}`);
-                }
+                // Find a batch with the same price
+                const matchingPriceBatch = existingBatches.find(batch => 
+                    parseFloat(batch.purchase_price) === parseFloat(detail.ordered_price)
+                );
                 
-                await batch.update({
-                    stock_quantity: batch.stock_quantity - detail.stock_quantity,
-                    updated_at: new Date()
-                }, { transaction: t });
+                if (existingBatches.length === 0 || !matchingPriceBatch) {
+                    // Create a new batch - either first time or new price
+                    const batchNumber = existingBatches.length + 1;
+                    const batchCode = `${product.name_product.substring(0, 15)}-${String(batchNumber).padStart(3, '0')}`;
+                    const currentDate = new Date();
+                    
+                    // Default expiry date (1 year from now)
+                    const expiryDate = new Date();
+                    expiryDate.setFullYear(expiryDate.getFullYear() + 1);
+                    
+                    const newBatch = await BatchStock.create({
+                        code_product: detail.code_product,
+                        batch_code: batchCode,
+                        purchase_price: detail.ordered_price,
+                        initial_stock: 0, // Set initial stock to 0, will be updated when order is received
+                        stock_quantity: 0,
+                        arrival_date: currentDate,
+                        exp_date: expiryDate,
+                        created_at: currentDate,
+                        updated_at: currentDate
+                    }, { transaction: t });
+                    
+                    batchId = newBatch.batch_id;
+                } else {
+                    // Use the existing batch with matching price
+                    batchId = matchingPriceBatch.batch_id;
+                }
             }
             
             // Create order detail with the batch_id
@@ -327,44 +273,27 @@ export const updateOrderStatus = async (req, res) => {
                 const batchStock = await BatchStock.findByPk(detail.batch_id, { transaction: t });
                 
                 if (!batchStock) {
-                    console.error(`Batch stock not found for order detail ${detail.order_detail_id}, skipping...`);
-                    continue;
+                    await t.rollback();
+                    return res.status(400).json({ 
+                        msg: `Batch stock not found for order detail ${detail.order_detail_id}` 
+                    });
                 }
                 
+                // Update the stock quantity when receiving the order
                 await batchStock.increment('stock_quantity', {
-                    by: detail.quantity,
+                    by: parseInt(detail.quantity),
                     transaction: t
                 });
+
+                // Update arrival date when receiving
+                await batchStock.update({
+                    arrival_date: new Date(),
+                    updated_at: new Date()
+                }, { transaction: t });
             }
         }
         
-        // If cancelling an order, restore the batch stock quantities
-        if (order_status === 'cancelled' && order.order_status !== 'cancelled') {
-            const orderDetails = await OrderDetail.findAll({
-    where: { order_id: orderId },
-    transaction: t
-});
-
-for (const detail of orderDetails) {
-    const batchStock = await BatchStock.findByPk(detail.batch_id, { transaction: t });
-    
-    if (!batchStock) {
-        await t.rollback();
-        return res.status(400).json({ 
-            msg: `Batch stock not found for order detail ${detail.order_detail_id}` 
-        });
-    }
-
-    await batchStock.increment(
-        'stock_quantity',
-        {
-            by: detail.quantity,
-            transaction: t
-        }
-    );
-}
-        }
-        
+        // Update order status
         await order.update({
             order_status,
             updated_at: new Date()
@@ -447,7 +376,7 @@ export const deleteOrder = async (req, res) => {
 export const getOrderDetailsByOrderId = async (req, res) => {
     try {
         // First, log the request to make sure we're getting the right orderId
-        console.log("Fetching details for order ID:", req.params.orderId);
+        // console.log("Fetching details for order ID:", req.params.orderId);
         
         // Fetch order details with explicit joins
         const orderDetails = await OrderDetail.findAll({

@@ -2,8 +2,6 @@ import BatchStok from "../models/BatchstockModel.js";
 import Products from "../models/ProductModel.js";
 import { Op } from "sequelize";
 
-
-
 export const getBatchStok = async (req, res) => {
     try {
         let { page, limit, search } = req.query;
@@ -20,18 +18,17 @@ export const getBatchStok = async (req, res) => {
             whereCondition[Op.or] = [
                 { batch_code: { [Op.like]: `%${search}%` } },
                 { code_product: { [Op.like]: `%${search}%` } }
-                // Tambahkan field lain jika perlu
             ];
         }
 
-        // Query dengan kondisi
+        // Get all batches with their product info
         const { count, rows } = await BatchStok.findAndCountAll({
             where: whereCondition,
             include: [
                 {
                     model: Products,
                     attributes: ['code_product', 'name_product'],
-                    required: false // Tidak wajib ada hasil dari Products
+                    required: false
                 }
             ],
             order: [['batch_id', 'DESC']],
@@ -40,16 +37,41 @@ export const getBatchStok = async (req, res) => {
             distinct: true
         });
 
-        // Format respons
+        // Get all unique product codes from the results
+        const productCodes = [...new Set(rows.map(item => item.code_product))];
+
+        // Calculate total stock for each product
+        const productTotalStocks = {};
+        for (const code of productCodes) {
+            const allBatches = await BatchStok.findAll({
+                where: { code_product: code }
+            });
+            
+            const totalStock = allBatches.reduce((sum, batch) => {
+                return sum + (parseInt(batch.initial_stock) || 0) + (parseInt(batch.stock_quantity) || 0);
+            }, 0);
+            
+            productTotalStocks[code] = totalStock;
+        }
+
+        // Format response and add total_stock
         const formattedResponse = rows.map(item => {
             const plainItem = item.get({ plain: true });
-            // Format kode produk menjadi string
+            
+            // Format code_product as string
             if (plainItem.Product && plainItem.Product.code_product) {
                 plainItem.Product.code_product = String(plainItem.Product.code_product);
             }
             if (plainItem.code_product) {
                 plainItem.code_product = String(plainItem.code_product);
             }
+
+            // Add total_stock from all batches for this product
+            plainItem.total_stock = productTotalStocks[plainItem.code_product] || 0;
+            
+            // Calculate batch specific total
+            plainItem.batch_total = (parseInt(plainItem.initial_stock) || 0) + (parseInt(plainItem.stock_quantity) || 0);
+
             return plainItem;
         });
 
@@ -119,37 +141,54 @@ export const getBatchStokByProductCode = async (req, res) => {
 };
 
 export const getMinimumStockAlert = async (req, res) => {
-    try{
-        const products = await Products.findAll();
+    try {
+        // Fetch all products with their categories
+        const products = await Products.findAll({
+            attributes: ['code_product', 'name_product', 'min_stock', 'code_categories', 'sell_price']
+        });
 
-        const alerts = []
+        const alerts = [];
 
         for (const product of products) {
+            // Get all batches for this product, including expired ones
             const batches = await BatchStok.findAll({
-                where: {code_product: product.code_product},
+                where: { 
+                    code_product: product.code_product
+                }
             });
 
+            // Calculate total stock from all batches
             const totalStock = batches.reduce((acc, batch) => {
-           return acc + batch.stock_quantity + batch.initial_stock;
+                const initialStock = parseInt(batch.initial_stock) || 0;
+                const stockQuantity = parseInt(batch.stock_quantity) || 0;
+                return acc + initialStock + stockQuantity;
+            }, 0);
 
-        }, 0)
-
-        if (totalStock <= product.min_stock) {
-            alerts.push ({
-                code_product: product.code_product,
-                name_product: product.name_product,
-                min_stock: product.min_stock,
-                current_stock: totalStock,
-            });
+            // Include in alerts if stock is at or below minimum
+            if (totalStock <= product.min_stock) {
+                alerts.push({
+                    code_product: product.code_product,
+                    name_product: product.name_product,
+                    code_categories: product.code_categories,
+                    min_stock: product.min_stock,
+                    current_stock: totalStock,
+                    sell_price: product.sell_price,
+                    batches: batches.map(batch => ({
+                        batch_code: batch.batch_code,
+                        initial_stock: batch.initial_stock || 0,
+                        stock_quantity: batch.stock_quantity || 0,
+                        total_batch_stock: (parseInt(batch.initial_stock) || 0) + (parseInt(batch.stock_quantity) || 0)
+                    }))
+                });
+            }
         }
-    }
 
-    res.status(200).json(alerts);
-} catch (error){
-    console.error("Error fetching minimum stock alerts:", error);
-    res.status(500).json({ msg: error.message });
-}
-}
+        res.status(200).json(alerts);
+    } catch (error) {
+        console.error("Error fetching minimum stock alerts:", error);
+        res.status(500).json({ msg: error.message });
+    }
+};
 
 export const createBatchStok = async (req, res) => {
     try {
@@ -214,9 +253,6 @@ export const createBatchStok = async (req, res) => {
         res.status(500).json({ msg: error.message });
     }
 };
-
-
-
 
 // Disable create, update, and delete operations
 export const updateBatchStok = async (req, res) => {

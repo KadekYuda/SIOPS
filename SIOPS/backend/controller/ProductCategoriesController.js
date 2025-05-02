@@ -426,47 +426,72 @@ export const importProductsFromCSV = async (req, res) => {
     
     const batchStocksToCreate = [];
     
+    // Get existing batch codes to prevent duplicates
+    const existingBatchCodes = new Set();
+    try {
+        const existingBatches = await BatchStock.findAll({
+            attributes: ['batch_code'],
+            where: {
+                code_product: {
+                    [Op.in]: Array.from(successfulProducts.keys())
+                }
+            }
+        });
+        existingBatches.forEach(batch => {
+            existingBatchCodes.add(batch.batch_code);
+        });
+    } catch (error) {
+        console.error('Error fetching existing batch codes:', error);
+    }
+    
     // Prepare all batch stocks
     for (const [code_product, productInfo] of successfulProducts.entries()) {
-      try {
-        const row = productInfo.data;
-        
-        // // Skip if no stock to add
-        // if (row.initial_stock <= 0 && row.stock_quantity <= 0) {
-        //   continue;
-        // }
-        
-        // Siapkan batch code
-        const batchCount = batchCountMap.get(code_product) || 0;
-        const newBatchNumber = String(batchCount + 1).padStart(3, '0');
-        const productNameClean = (row.name_product || code_product)
-          .trim()
-          .replace(/[^a-zA-Z0-9 ]/g, ''); // Hanya huruf, angka, dan spasi
-        const batch_code = `${productNameClean}-${newBatchNumber}`;
-        
-        // Generate random arrival and expiration dates
-        const arrivalDate = getRandomArrivalDate();
-        const expDate = getRandomExpDate(arrivalDate);
-        
-        // Siapkan data batch stock with randomized dates
-        batchStocksToCreate.push({
-          code_product,
-          batch_code,
-          purchase_price: row.purchase_price,
-          initial_stock: row.initial_stock,
-          stock_quantity: row.stock_quantity,
-          arrival_date: arrivalDate,
-          exp_date: expDate,
-          created_at: now,
-          updated_at: now,
-        });
-      } catch (error) {
-        console.error(`Error preparing batch stock for ${code_product}:`, error);
-        errors.push({
-          code_product,
-          error: `Error preparing batch stock: ${error.message}`
-        });
-      }
+        try {
+            const row = productInfo.data;
+            const productNameClean = (row.name_product || code_product)
+                .trim()
+                .replace(/[^a-zA-Z0-9 ]/g, '');
+            
+            // Only create new batch if one doesn't exist with same code and product
+            const batch_code = `${productNameClean}-001`;
+            
+            if (!existingBatchCodes.has(batch_code)) {
+                const arrivalDate = getRandomArrivalDate();
+                const expDate = getRandomExpDate(arrivalDate);
+                
+                batchStocksToCreate.push({
+                    code_product,
+                    batch_code,
+                    purchase_price: row.purchase_price,
+                    initial_stock: row.initial_stock,
+                    stock_quantity: row.stock_quantity,
+                    arrival_date: arrivalDate,
+                    exp_date: expDate,
+                    created_at: now,
+                    updated_at: now,
+                });
+            } else {
+                // Update existing batch stock instead of creating new one
+                await BatchStock.update(
+                    {
+                        stock_quantity: row.stock_quantity,
+                        updated_at: now
+                    },
+                    {
+                        where: { 
+                            code_product,
+                            batch_code
+                        }
+                    }
+                );
+            }
+        } catch (error) {
+            console.error(`Error preparing batch stock for ${code_product}:`, error);
+            errors.push({
+                code_product,
+                error: `Error preparing batch stock: ${error.message}`
+            });
+        }
     }
     
     // Create batch stocks in larger chunks
@@ -479,7 +504,7 @@ export const importProductsFromCSV = async (req, res) => {
       
       for (let i = 0; i < batchStocksToCreate.length; i += BATCH_STOCK_CHUNK_SIZE) {
         const batchStockChunk = batchStocksToCreate.slice(i, i + BATCH_STOCK_CHUNK_SIZE);
-        
+          
         try {
           const createdBatchStocks = await BatchStock.bulkCreate(batchStockChunk);
           batchStockSuccessCount += createdBatchStocks.length;
@@ -545,35 +570,90 @@ export const getProducts = async (req, res) => {
     const code_categories = req.query.code_categories || "";
     const offset = limit * page;
 
+    // Base where condition
+    const whereCondition = {
+      [Op.or]: [
+        { code_product: { [Op.like]: `%${search}%` } },
+        { name_product: { [Op.like]: `%${search}%` } },
+        { barcode: { [Op.like]: `%${search}%` } },
+      ],
+      deleted_at: null,
+    };
+
+    // Add category filter if provided
+    if (code_categories) {
+      whereCondition.code_categories = code_categories;
+    }
+
+    // Find products with category info
     const { count, rows } = await Product.findAndCountAll({
-      where: {
-        [Op.or]: [
-          { code_product: { [Op.like]: `%${search}%` } },
-          { name_product: { [Op.like]: `%${search}%` } },
-          { barcode: { [Op.like]: `%${search}%` } },
-        ],
-        ...(code_categories && { code_categories }),
-        deleted_at: null,
-      },
+      where: whereCondition,
       include: [
         {
           model: Categories,
           attributes: ["code_categories", "name_categories"],
+          where: code_categories ? { code_categories } : undefined,
         },
       ],
       offset: offset,
       limit: limit,
       order: [["name_product", "ASC"]],
+      distinct: true,
+    });
+
+    // Get all batch stocks for the found products
+    const productCodes = rows.map(product => product.code_product);
+    const batchStocks = await BatchStock.findAll({
+      where: {
+        code_product: {
+          [Op.in]: productCodes
+        }
+      },
+      attributes: ['code_product', 'initial_stock', 'stock_quantity']
+    });
+
+    // Calculate total stock for each product
+    const stockMap = {};
+    batchStocks.forEach(batch => {
+      const code = batch.code_product;
+      if (!stockMap[code]) {
+        stockMap[code] = 0;
+      }
+      stockMap[code] += parseInt(batch.stock_quantity || 0);
+    });
+
+    // Add total stock and stock status to products
+    const productsWithStock = rows.map(product => {
+      const plainProduct = product.get({ plain: true });
+      const totalStock = stockMap[plainProduct.code_product] || 0;
+      const minStock = plainProduct.min_stock || 0;
+
+      // Calculate stock status
+      let stockStatus = 'success'; // Default green (plenty of stock)
+      if (totalStock <= minStock) {
+        stockStatus = 'danger'; // Red (below or at min stock)
+      } else if (totalStock <= minStock + 5) {
+        stockStatus = 'warning'; // Yellow (approaching min stock)
+      }
+
+      return {
+        ...plainProduct,
+        total_stock: totalStock,
+        stock_status: stockStatus,
+        code_product: String(plainProduct.code_product), // Convert to string
+        barcode: plainProduct.barcode ? String(plainProduct.barcode) : null, // Convert to string if exists
+      };
     });
 
     res.json({
-      result: rows,
+      result: productsWithStock,
       page: page,
       limit: limit,
       totalRows: count,
       totalPages: Math.ceil(count / limit),
     });
   } catch (error) {
+    console.error('Error in getProducts:', error);
     res.status(500).json({ message: error.message });
   }
 };
@@ -802,7 +882,7 @@ export const updateCategory = async (req, res) => {
       message: "Category updated successfully",
     });
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    res.status (500).json({ message: error.message });
   }
 };
 

@@ -1,83 +1,99 @@
 import { useState, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { AlertCircle, X, Bell, Package, Tag, ExternalLink } from "lucide-react";
+import { AlertCircle, ArrowRight, X, Bell } from "lucide-react";
 import { Link, useLocation } from "react-router-dom";
 import api from "../../service/api";
 
 const MinStockAlert = () => {
   const [notifications, setNotifications] = useState([]);
-  const [visible, setVisible] = useState(false);
+  const [isOpen, setIsOpen] = useState(false);
   const [categories, setCategories] = useState([]);
   const [isLoaded, setIsLoaded] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
   const location = useLocation();
-  
-  // Check if current page is dashboard
-  const isDashboard = location.pathname === "/dashboardAdmin" || location.pathname === "/dashboard";
 
-  // Fetch categories
+  // Check if current page is dashboard
+  const isDashboard =
+    location.pathname === "/dashboardAdmin" ||
+    location.pathname === "/dashboard";
+
+  // Fetch categories - using the same approach as Product.jsx
   const fetchCategories = useCallback(async () => {
     try {
       const response = await api.get("/categories");
-      const categoriesData = response.data.result;
-      setCategories(categoriesData);
+      if (response.data && response.data.result) {
+        setCategories(response.data.result);
+      } else {
+        throw new Error("Invalid response format from server");
+      }
     } catch (error) {
-      console.error("Error fetching categories", error);
+      console.error("Error fetching categories:", error);
+      setCategories([]);
     }
   }, []);
 
-  // Fetch low stock items
-  const fetchLowStockItems = useCallback(async () => {
-    if (categories.length === 0) return;
-    
+  // Fetch minimum stock alerts with category information
+  const fetchMinimumStockAlerts = useCallback(async () => {
     try {
       const response = await api.get("/batch/minstock");
-
       if (response.data && response.data.length > 0) {
         // Enrich notifications with category information
-        const enrichedData = response.data.map(item => {
-          const categoryCode = item.code_categories;
-          const categoryInfo = categories.find(cat => 
-            cat.code_categories === categoryCode || 
-            cat.id === categoryCode
+        const enrichedData = response.data.map((item) => {
+          const category = categories.find(
+            (cat) => cat.code_categories === item.code_categories
           );
-          
           return {
             ...item,
-            category_name: categoryInfo ? categoryInfo.name_categories : "Uncategorized"
+            category_name: category
+              ? category.name_categories
+              : "Uncategorized",
           };
         });
-        
+
         setNotifications(enrichedData);
-        
+
         // Auto-show notification only on dashboard
         if (isDashboard && !isLoaded) {
-          setVisible(true);
+          setIsOpen(true);
           setIsLoaded(true);
-          
-          // Auto-hide after 10 seconds
-          setTimeout(() => {
-            setVisible(false);
-          }, 10000);
+          setTimeout(() => setIsOpen(false), 10000);
         }
       } else {
         setNotifications([]);
       }
     } catch (error) {
-      console.error("Error fetching low stock items:", error);
+      console.error("Error fetching minimum stock alerts:", error);
+      setNotifications([]);
     }
   }, [categories, isDashboard, isLoaded]);
+
+  // Check user role
+  const checkUserRole = useCallback(async () => {
+    try {
+      const response = await api.get("/users/profile");
+      const userRole = response.data.user?.role;
+      setIsAdmin(userRole === "admin");
+    } catch (error) {
+      console.error("Error checking user role:", error);
+      setIsAdmin(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    checkUserRole();
+  }, [checkUserRole]);
 
   // Initial data load
   useEffect(() => {
     fetchCategories();
   }, [fetchCategories]);
 
-  // Load low stock items when categories are loaded
+  // Load alerts when categories are available
   useEffect(() => {
     if (categories.length > 0) {
-      fetchLowStockItems();
+      fetchMinimumStockAlerts();
     }
-  }, [categories, fetchLowStockItems]);
+  }, [categories, fetchMinimumStockAlerts]);
 
   // Reset isLoaded flag when navigating to a different page
   useEffect(() => {
@@ -89,87 +105,131 @@ const MinStockAlert = () => {
   // Set up periodic refresh (every hour)
   useEffect(() => {
     const interval = setInterval(() => {
-      fetchLowStockItems();
+      fetchMinimumStockAlerts();
     }, 60 * 60 * 1000);
 
     return () => clearInterval(interval);
-  }, [fetchLowStockItems]);
+  }, [fetchMinimumStockAlerts]);
 
-  // Function to toggle notification when bell is clicked
-  const toggleNotification = () => {
-    setVisible(prev => !prev);
+  // Handle restock button click
+  const handleRestock = (product) => {
+    // Store product data in sessionStorage
+    const orderData = {
+      code_product: product.code_product,
+      name_product: product.name_product,
+      category_name: product.category_name,
+      sell_price: product.sell_price,
+      code_categories: product.code_categories,
+    };
+
+    // Store the data and redirect
+    sessionStorage.setItem("restockProduct", JSON.stringify(orderData));
+
+    // Close modal before navigating
+    setIsOpen(false);
+
+    // Navigate based on role
+    if (isAdmin) {
+      sessionStorage.setItem("openCreateOrder", "true");
+      window.location.href = "/orderss";
+    } else {
+      window.location.href = "/orders";
+    }
   };
 
   return (
     <>
       <AnimatePresence>
-        {visible && notifications.length > 0 && (
+        {isOpen && notifications.length > 0 && (
           <motion.div
-            key="notification-panel"
-            initial={{ opacity: 0, y: 50 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: 50 }}
-            transition={{ duration: 0.3 }}
-            className="fixed bottom-4 right-4 z-50 w-80"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed right-4 bottom-16 z-50"
+            onClick={(e) => e.stopPropagation()}
           >
-            <div className="rounded-lg shadow-xl overflow-hidden border border-red-300">
-              <div className="p-3 bg-red-500 text-white">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center space-x-2">
-                    <AlertCircle className="text-white" size={18} />
-                    <h3 className="font-bold">Low Stock Alert</h3>
+            <motion.div
+              initial={{ y: 20, opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              exit={{ y: -20, opacity: 0 }}
+              transition={{ type: "spring", damping: 25 }}
+              className="w-full max-w-md"
+            >
+              <div className="bg-white rounded-lg shadow-xl overflow-hidden border border-gray-200 w-full relative">
+                {/* Header */}
+                <div className="bg-red-100 p-4 flex items-start">
+                  <div className="h-10 w-10 flex items-center justify-center rounded-full bg-red-500 text-white flex-shrink-0">
+                    <AlertCircle className="h-5 w-5" />
+                  </div>
+                  <div className="ml-4">
+                    <h3 className="text-lg font-bold text-red-800">
+                      Low Stock Alert
+                    </h3>
+                    <p className="text-sm text-red-600">
+                      {notifications.length} product
+                      {notifications.length !== 1 ? "s" : ""} below minimum
+                      stock level
+                    </p>
                   </div>
                   <button
-                    onClick={() => setVisible(false)}
-                    className="text-white hover:text-red-100 transition-colors"
-                    aria-label="Close alert"
+                    onClick={() => setIsOpen(false)}
+                    className="ml-auto text-red-500 hover:text-red-700"
                   >
-                    <X size={18} />
+                    <X className="h-5 w-5" />
                   </button>
                 </div>
-              </div>
-              <div className="max-h-72 overflow-y-auto bg-white">
-                {notifications.slice(0, 3).map((item, index) => (
-                  <motion.div
-                    key={item.code_product || index}
-                    initial={{ opacity: 0, x: -10 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    transition={{ delay: index * 0.1 }}
-                    className="p-3 border-b border-gray-100 hover:bg-red-50"
-                  >
-                    <div className="flex items-start">
-                      <Package size={18} className="text-red-500 mt-1 mr-2 flex-shrink-0" />
-                      <div className="flex-1">
-                        <p className="font-medium text-gray-800">{item.name_product}</p>
-                        <div className="flex items-center mt-1">
-                          <Tag size={12} className="text-red-400 mr-1" />
-                          <span className="text-xs font-medium text-red-700">
+
+                {/* Content */}
+                <div className="p-4 max-h-[60vh] overflow-y-auto">
+                  <div className="space-y-4">
+                    {notifications.map((item) => (
+                      <div
+                        key={item.code_product}
+                        className="flex items-start p-3 rounded-lg border border-red-100 bg-red-50"
+                      >
+                        <div className="flex-1">
+                          <h4 className="font-medium">{item.name_product}</h4>
+                          <p className="text-xs text-gray-600 mt-1">
                             {item.category_name}
-                          </span>
+                          </p>
+                          <div className="flex items-center mt-1 text-sm">
+                            <span className="text-red-600 font-medium">
+                              Stock: {item.current_stock}
+                            </span>
+                            <ArrowRight className="h-4 w-4 mx-2 text-red-400" />
+                            <span className="text-gray-700">
+                              Min: {item.min_stock}
+                            </span>
+                          </div>
                         </div>
-                        <p className="text-xs mt-1">
-                          <span className="text-red-600 font-bold">{item.total_stock}</span>
-                          {" units "}
-                          <span className="text-gray-500">(min: {item.min_stock})</span>
-                        </p>
+                        <button
+                          className="ml-4 px-3 py-1 text-sm bg-white border border-gray-300 rounded hover:bg-gray-50 font-medium"
+                          onClick={() => handleRestock(item)}
+                        >
+                          Restock
+                        </button>
                       </div>
-                    </div>
-                  </motion.div>
-                ))}
-                
-                {notifications.length > 3 && (
-                  <Link 
-                    to="/report" 
-                    className="block p-3 bg-red-50 hover:bg-red-100 transition-colors"
+                    ))}
+                  </div>
+                </div>
+
+                {/* Footer */}
+                <div className="bg-gray-50 px-4 py-3 flex justify-between border-t">
+                  <button
+                    className="text-gray-600 hover:text-gray-800 px-3 py-1.5 rounded hover:bg-gray-100"
+                    onClick={() => setIsOpen(false)}
                   >
-                    <div className="flex items-center justify-between text-red-600 font-medium">
-                      <span>+{notifications.length - 3} more items with low stock</span>
-                      <ExternalLink size={14} />
-                    </div>
+                    Dismiss
+                  </button>
+
+                  <Link to="/report">
+                    <button className="px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white rounded font-medium">
+                      View All Inventory
+                    </button>
                   </Link>
-                )}
+                </div>
               </div>
-            </div>
+            </motion.div>
           </motion.div>
         )}
       </AnimatePresence>
@@ -183,8 +243,10 @@ const MinStockAlert = () => {
         <motion.button
           whileHover={{ scale: 1.1 }}
           whileTap={{ scale: 0.9 }}
-          className={`p-3 ${notifications.length > 0 ? 'bg-red-600' : 'bg-gray-500'} text-white rounded-full shadow-lg flex items-center justify-center relative`}
-          onClick={toggleNotification}
+          className={`p-3 ${
+            notifications.length > 0 ? "bg-red-600" : "bg-gray-500"
+          } text-white rounded-full shadow-lg flex items-center justify-center relative`}
+          onClick={() => setIsOpen(true)}
           disabled={notifications.length === 0}
           aria-label="Show low stock notifications"
         >

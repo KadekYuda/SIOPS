@@ -512,6 +512,40 @@ const OrderAdmin = () => {
     );
   };
 
+  useEffect(() => {
+    // Check for restock product when component mounts
+    const restockProduct = sessionStorage.getItem("restockProduct");
+    const shouldOpenCreateOrder = sessionStorage.getItem("openCreateOrder");
+
+    if (restockProduct && shouldOpenCreateOrder === "true") {
+      const product = JSON.parse(restockProduct);
+
+      // Clear the flags
+      sessionStorage.removeItem("restockProduct");
+      sessionStorage.removeItem("openCreateOrder");
+
+      // Set the product in the order form
+      setOrderForm((prev) => ({
+        ...prev,
+        order_details: [
+          {
+            code_product: product.code_product,
+            name_product: product.name_product,
+            stock_quantity: "",
+            ordered_price: product.sell_price,
+            subtotal: "",
+          },
+        ],
+      }));
+
+      // Open the create order modal
+      setShowCreateOrderModal(true);
+
+      // Fetch products for the dropdown
+      fetchProducts();
+    }
+  }, [fetchProducts]);
+
   return (
     <>
       {!isAdmin ? (

@@ -68,37 +68,33 @@ const BatchStok = () => {
     <div className="container mx-auto px-4 py-8 pt-20">
       <h1 className="text-2xl font-bold text-gray-800 mb-6">Batch Stock</h1>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="relative mb-4">
-                    <input
-                      type="text"
-                      placeholder="Search by product name, or code."
-                      value={searchTerm}
-                      onChange={handleSearchChange}
-                      className="w-full pl-10 pr-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
-                    />
-                    <Search
-                      className="absolute left-3 top-2.5 text-gray-400"
-                      size={20}
-                    />
-                  </div>
-
-                </div>
+        <div className="relative mb-4">
+          <input
+            type="text"
+            placeholder="Search by product name, or code."
+            value={searchTerm}
+            onChange={handleSearchChange}
+            className="w-full pl-10 pr-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
+          />
+          <Search className="absolute left-3 top-2.5 text-gray-400" size={20} />
+        </div>
+      </div>
 
       <div className="flex md:hidden justify-end mb-4">
-          <select
-            value={limit}
-            onChange={(e) => {
-              setLimit(Number(e.target.value));
-              setPage(0);
-            }}
-            className="border rounded px-3 py-1 text-sm"
-          >
-            <option value={10}>10 per page</option>
-            <option value={20}>20 per page</option>
-            <option value={50}>50 per page</option>
-            <option value={100}>100 per page</option>
-          </select>
-        </div>
+        <select
+          value={limit}
+          onChange={(e) => {
+            setLimit(Number(e.target.value));
+            setPage(0);
+          }}
+          className="border rounded px-3 py-1 text-sm"
+        >
+          <option value={10}>10 per page</option>
+          <option value={20}>20 per page</option>
+          <option value={50}>50 per page</option>
+          <option value={100}>100 per page</option>
+        </select>
+      </div>
 
       <div className="bg-white rounded-lg shadow overflow-x-auto">
         <table className="min-w-full divide-y divide-gray-200">
@@ -161,10 +157,14 @@ const BatchStok = () => {
                       Rp {Number(batch.purchase_price).toLocaleString()}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      {batch.stock_quantity + batch.initial_stock} pcs
+                      {parseInt(batch.stock_quantity || 0) +
+                        parseInt(batch.initial_stock || 0)}{" "}
+                      pcs
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      {new Date(batch.arrival_date).toLocaleDateString()}
+                      {batch.arrival_date
+                        ? new Date(batch.arrival_date).toLocaleDateString()
+                        : "-"}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                       {batch.exp_date
@@ -207,12 +207,12 @@ const BatchStok = () => {
         </div>
       </div>
       <Pagination
-          currentPage={page}
-          totalPages={totalPages}
-          onPageChange={setPage}
-          itemsPerPage={limit}
-          totalItems={totalItems}
-        />
+        currentPage={page}
+        totalPages={totalPages}
+        onPageChange={setPage}
+        itemsPerPage={limit}
+        totalItems={totalItems}
+      />
     </div>
   );
 };

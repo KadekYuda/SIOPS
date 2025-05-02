@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useMemo } from "react";
-import { X, Check } from "lucide-react";
+import { X, Check, Upload, ChevronLeft, ChevronRight } from "lucide-react";
 import PropTypes from "prop-types";
 
 const ProductModal = ({
@@ -23,6 +23,9 @@ const ProductModal = ({
   const [categoryDropdownOpen, setCategoryDropdownOpen] = useState(false);
   const [categorySearch, setCategorySearch] = useState("");
   const [isFormEdited, setIsFormEdited] = useState(false);
+  const [csvMode, setCsvMode] = useState(false);
+  const [csvFile, setCsvFile] = useState(null);
+  const [uploadLoading, setUploadLoading] = useState(false);
   const modalRef = useRef(null);
   const categoryDropdownRef = useRef(null);
 
@@ -214,6 +217,40 @@ const ProductModal = ({
     );
   }, [categories, categorySearch]);
 
+  const handleCsvUpload = async (e) => {
+    e.preventDefault();
+    if (!csvFile) return;
+
+    setUploadLoading(true);
+    // Create a processed CSV data object that matches the regular form data structure
+    const processedData = {
+      file: csvFile,
+      type: "csv",
+    };
+
+    try {
+      await onSubmit(processedData);
+      setCsvFile(null);
+    } catch (error) {
+      console.error("Error uploading CSV:", error);
+    } finally {
+      setUploadLoading(false);
+    }
+  };
+
+  const handleFileChange = (e) => {
+    if (e.target.files?.length) {
+      setCsvFile(e.target.files[0]);
+    }
+  };
+
+  const toggleMode = () => {
+    setCsvMode(!csvMode);
+    // Reset form states when toggling
+    setFormErrors({});
+    setCsvFile(null);
+  };
+
   if (!isOpen) return null;
 
   return (
@@ -223,9 +260,32 @@ const ProductModal = ({
         className="bg-white rounded-lg max-w-2xl w-full shadow-xl transform transition-all animate-fadeIn"
       >
         <div className="flex justify-between items-center p-5 border-b border-gray-200">
-          <h2 className="text-xl font-semibold text-gray-800">
-            {modalMode === "add" ? "Add New Product" : "Edit Product"}
-          </h2>
+          <div className="flex items-center space-x-4">
+            <h2 className="text-xl font-semibold text-gray-800">
+              {modalMode === "add" ? "Add New Product" : "Edit Product"}
+            </h2>
+            {modalMode === "add" && (
+              <div className="flex items-center bg-gray-100 rounded-full p-1">
+                <button
+                  type="button"
+                  onClick={toggleMode}
+                  className="flex items-center space-x-2 px-3 py-1 rounded-full transition-all"
+                >
+                  {csvMode ? (
+                    <>
+                      <ChevronLeft size={20} />
+                      <span>Form</span>
+                    </>
+                  ) : (
+                    <>
+                      <span>CSV</span>
+                      <ChevronRight size={20} />
+                    </>
+                  )}
+                </button>
+              </div>
+            )}
+          </div>
           <button
             onClick={onClose}
             className="p-1 rounded-full hover:bg-gray-100 transition-colors"
@@ -235,239 +295,295 @@ const ProductModal = ({
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div>
+        {csvMode ? (
+          <form onSubmit={handleCsvUpload} className="p-6">
+            <div className="mb-6">
               <label
-                htmlFor="code_product"
-                className="block text-sm font-medium text-gray-700 mb-1"
+                htmlFor="csvFile"
+                className="block text-sm font-medium text-gray-700 mb-2"
               >
-                Product Code<span className="text-red-500">*</span>
+                Select CSV File
               </label>
               <input
-                id="code_product"
-                name="code_product"
-                type="text"
-                value={formData.code_product}
-                onChange={handleInputChange}
-                disabled={modalMode === "edit"}
-                className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${
-                  formErrors.code_product
-                    ? "border-red-500 focus:ring-red-500 focus:border-red-500"
-                    : "border-gray-300"
-                }`}
-                placeholder="Enter product code"
+                id="csvFile"
+                type="file"
+                accept=".csv"
+                onChange={handleFileChange}
+                className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
               />
-              {formErrors.code_product && (
-                <p className="mt-1 text-sm text-red-500">
-                  {formErrors.code_product}
-                </p>
-              )}
+              <p className="mt-2 text-sm text-gray-500">
+                File should be in CSV format with headers: code_product,
+                barcode, name_product, code_categories, sell_price, min_stock
+              </p>
             </div>
 
-            <div>
-              <label
-                htmlFor="barcode"
-                className="block text-sm font-medium text-gray-700 mb-1"
-              >
-                Barcode
-              </label>
-              <input
-                id="barcode"
-                name="barcode"
-                type="text"
-                value={formData.barcode}
-                onChange={handleInputChange}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
-                placeholder="Enter barcode (optional)"
-              />
-            </div>
-
-            <div className="md:col-span-2">
-              <label
-                htmlFor="name_product"
-                className="block text-sm font-medium text-gray-700 mb-1"
-              >
-                Product Name<span className="text-red-500">*</span>
-              </label>
-              <input
-                id="name_product"
-                name="name_product"
-                type="text"
-                value={formData.name_product}
-                onChange={handleInputChange}
-                className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${
-                  formErrors.name_product
-                    ? "border-red-500 focus:ring-red-500 focus:border-red-500"
-                    : "border-gray-300"
-                }`}
-                placeholder="Enter product name"
-              />
-              {formErrors.name_product && (
-                <p className="mt-1 text-sm text-red-500">
-                  {formErrors.name_product}
-                </p>
-              )}
-            </div>
-
-            <div className="relative" ref={categoryDropdownRef}>
-              <label
-                htmlFor="categories"
-                className="block text-sm font-medium text-gray-700 mb-1"
-              >
-                Categories
-              </label>
+            <div className="flex justify-end gap-3">
               <button
                 type="button"
-                onClick={() => setCategoryDropdownOpen(!categoryDropdownOpen)}
-                className="w-full flex justify-between items-center px-4 py-2 border border-gray-300 rounded-lg text-left hover:border-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                onClick={onClose}
+                className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors"
               >
-                <span
-                  className={
-                    formData.code_categories ? "text-gray-900" : "text-gray-500"
-                  }
-                >
-                  {formData.category_name || formData.code_categories
-                    ? formData.category_name
-                    : "Select category"}
-                </span>
-                <span className="text-gray-400">▼</span>
+                Cancel
               </button>
+              <button
+                type="submit"
+                disabled={!csvFile || uploadLoading}
+                className={`px-6 py-2 bg-blue-600 text-white rounded-lg flex items-center gap-2 ${
+                  !csvFile || uploadLoading
+                    ? "opacity-50 cursor-not-allowed"
+                    : "hover:bg-blue-700"
+                }`}
+              >
+                {uploadLoading ? (
+                  <>
+                    <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent" />
+                    <span>Uploading...</span>
+                  </>
+                ) : (
+                  <>
+                    <Upload size={20} />
+                    <span>Upload CSV</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </form>
+        ) : (
+          <form onSubmit={handleSubmit} className="p-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div>
+                <label
+                  htmlFor="code_product"
+                  className="block text-sm font-medium text-gray-700 mb-1"
+                >
+                  Product Code<span className="text-red-500">*</span>
+                </label>
+                <input
+                  id="code_product"
+                  name="code_product"
+                  type="text"
+                  value={formData.code_product}
+                  onChange={handleInputChange}
+                  disabled={modalMode === "edit"}
+                  className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${
+                    formErrors.code_product
+                      ? "border-red-500 focus:ring-red-500 focus:border-red-500"
+                      : "border-gray-300"
+                  }`}
+                  placeholder="Enter product code"
+                />
+                {formErrors.code_product && (
+                  <p className="mt-1 text-sm text-red-500">
+                    {formErrors.code_product}
+                  </p>
+                )}
+              </div>
 
-              {categoryDropdownOpen && (
-                <div className="absolute left-0 right-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-10 max-h-64 flex flex-col">
-                  <div className="p-2 border-b border-gray-200 sticky top-0 bg-white z-10">
-                    <div className="relative">
-                      <input
-                        type="text"
-                        placeholder="Search categories..."
-                        value={categorySearch}
-                        onChange={(e) => setCategorySearch(e.target.value)}
-                        className="w-full px-4 py-2 pr-8 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                        autoFocus
-                      />
-                      {categorySearch && (
-                        <button
-                          type="button"
-                          onClick={() => setCategorySearch("")}
-                          className="absolute right-2 top-2.5 text-gray-400 hover:text-gray-600"
-                        >
-                          <X size={16} />
-                        </button>
+              <div>
+                <label
+                  htmlFor="barcode"
+                  className="block text-sm font-medium text-gray-700 mb-1"
+                >
+                  Barcode
+                </label>
+                <input
+                  id="barcode"
+                  name="barcode"
+                  type="text"
+                  value={formData.barcode}
+                  onChange={handleInputChange}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                  placeholder="Enter barcode (optional)"
+                />
+              </div>
+
+              <div className="md:col-span-2">
+                <label
+                  htmlFor="name_product"
+                  className="block text-sm font-medium text-gray-700 mb-1"
+                >
+                  Product Name<span className="text-red-500">*</span>
+                </label>
+                <input
+                  id="name_product"
+                  name="name_product"
+                  type="text"
+                  value={formData.name_product}
+                  onChange={handleInputChange}
+                  className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${
+                    formErrors.name_product
+                      ? "border-red-500 focus:ring-red-500 focus:border-red-500"
+                      : "border-gray-300"
+                  }`}
+                  placeholder="Enter product name"
+                />
+                {formErrors.name_product && (
+                  <p className="mt-1 text-sm text-red-500">
+                    {formErrors.name_product}
+                  </p>
+                )}
+              </div>
+
+              <div className="relative" ref={categoryDropdownRef}>
+                <label
+                  htmlFor="categories"
+                  className="block text-sm font-medium text-gray-700 mb-1"
+                >
+                  Categories
+                </label>
+                <button
+                  type="button"
+                  onClick={() => setCategoryDropdownOpen(!categoryDropdownOpen)}
+                  className="w-full flex justify-between items-center px-4 py-2 border border-gray-300 rounded-lg text-left hover:border-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                >
+                  <span
+                    className={
+                      formData.code_categories
+                        ? "text-gray-900"
+                        : "text-gray-500"
+                    }
+                  >
+                    {formData.category_name || formData.code_categories
+                      ? formData.category_name
+                      : "Select category"}
+                  </span>
+                  <span className="text-gray-400">▼</span>
+                </button>
+
+                {categoryDropdownOpen && (
+                  <div className="absolute left-0 right-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-10 max-h-64 flex flex-col">
+                    <div className="p-2 border-b border-gray-200 sticky top-0 bg-white z-10">
+                      <div className="relative">
+                        <input
+                          type="text"
+                          placeholder="Search categories..."
+                          value={categorySearch}
+                          onChange={(e) => setCategorySearch(e.target.value)}
+                          className="w-full px-4 py-2 pr-8 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                          autoFocus
+                        />
+                        {categorySearch && (
+                          <button
+                            type="button"
+                            onClick={() => setCategorySearch("")}
+                            className="absolute right-2 top-2.5 text-gray-400 hover:text-gray-600"
+                          >
+                            <X size={16} />
+                          </button>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="overflow-y-auto flex-1 max-h-48">
+                      {filteredCategories.length > 0 ? (
+                        filteredCategories.map((cat) => (
+                          <div
+                            key={cat.code_categories}
+                            className={`px-4 py-2 cursor-pointer hover:bg-blue-50 flex items-center justify-between ${
+                              formData.code_categories === cat.code_categories
+                                ? "bg-blue-100"
+                                : ""
+                            }`}
+                            onClick={() => handleCategorySelect(cat)}
+                          >
+                            <span>{cat.name_categories}</span>
+                            {formData.code_categories ===
+                              cat.code_categories && (
+                              <Check size={16} className="text-blue-600" />
+                            )}
+                          </div>
+                        ))
+                      ) : (
+                        <div className="px-4 py-2 text-gray-500 text-center">
+                          No categories found
+                        </div>
                       )}
                     </div>
                   </div>
+                )}
+              </div>
 
-                  <div className="overflow-y-auto flex-1 max-h-48">
-                    {filteredCategories.length > 0 ? (
-                      filteredCategories.map((cat) => (
-                        <div
-                          key={cat.code_categories}
-                          className={`px-4 py-2 cursor-pointer hover:bg-blue-50 flex items-center justify-between ${
-                            formData.code_categories === cat.code_categories
-                              ? "bg-blue-100"
-                              : ""
-                          }`}
-                          onClick={() => handleCategorySelect(cat)}
-                        >
-                          <span>{cat.name_categories}</span>
-                          {formData.code_categories === cat.code_categories && (
-                            <Check size={16} className="text-blue-600" />
-                          )}
-                        </div>
-                      ))
-                    ) : (
-                      <div className="px-4 py-2 text-gray-500 text-center">
-                        No categories found
-                      </div>
-                    )}
-                  </div>
+              <div>
+                <label
+                  htmlFor="sell_price"
+                  className="block text-sm font-medium text-gray-700 mb-1"
+                >
+                  Selling Price<span className="text-red-500">*</span>
+                </label>
+                <div className="relative">
+                  <span className="absolute left-3 top-2.5 text-gray-500">
+                    Rp
+                  </span>
+                  <input
+                    id="sell_price"
+                    name="sell_price"
+                    type="text"
+                    value={formatNumber(formData.sell_price)}
+                    onChange={handlePriceChange}
+                    className={`w-full pl-9 pr-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${
+                      formErrors.sell_price
+                        ? "border-red-500 focus:ring-red-500 focus:border-red-500"
+                        : "border-gray-300"
+                    }`}
+                    placeholder="0"
+                  />
                 </div>
-              )}
-            </div>
+                {formErrors.sell_price && (
+                  <p className="mt-1 text-sm text-red-500">
+                    {formErrors.sell_price}
+                  </p>
+                )}
+              </div>
 
-            <div>
-              <label
-                htmlFor="sell_price"
-                className="block text-sm font-medium text-gray-700 mb-1"
-              >
-                Selling Price<span className="text-red-500">*</span>
-              </label>
-              <div className="relative">
-                <span className="absolute left-3 top-2.5 text-gray-500">
-                  Rp
-                </span>
+              <div>
+                <label
+                  htmlFor="min_stock"
+                  className="block text-sm font-medium text-gray-700 mb-1"
+                >
+                  Minimum Stock<span className="text-red-500">*</span>
+                </label>
                 <input
-                  id="sell_price"
-                  name="sell_price"
-                  type="text"
-                  value={formatNumber(formData.sell_price)}
-                  onChange={handlePriceChange}
-                  className={`w-full pl-9 pr-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${
-                    formErrors.sell_price
+                  id="min_stock"
+                  name="min_stock"
+                  type="number"
+                  value={formData.min_stock}
+                  onChange={handleInputChange}
+                  className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${
+                    formErrors.min_stock
                       ? "border-red-500 focus:ring-red-500 focus:border-red-500"
                       : "border-gray-300"
                   }`}
                   placeholder="0"
                 />
+                {formErrors.min_stock && (
+                  <p className="mt-1 text-sm text-red-500">
+                    {formErrors.min_stock}
+                  </p>
+                )}
               </div>
-              {formErrors.sell_price && (
-                <p className="mt-1 text-sm text-red-500">
-                  {formErrors.sell_price}
-                </p>
-              )}
             </div>
 
-            <div>
-              <label
-                htmlFor="min_stock"
-                className="block text-sm font-medium text-gray-700 mb-1"
+            <div className="mt-8 flex justify-end gap-3">
+              <button
+                type="button"
+                onClick={onClose}
+                className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-gray-500 transition-colors"
               >
-                Minimum Stock<span className="text-red-500">*</span>
-              </label>
-              <input
-                id="min_stock"
-                name="min_stock"
-                type="number"
-                value={formData.min_stock}
-                onChange={handleInputChange}
-                className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${
-                  formErrors.min_stock
-                    ? "border-red-500 focus:ring-red-500 focus:border-red-500"
-                    : "border-gray-300"
-                }`}
-                placeholder="0"
-              />
-              {formErrors.min_stock && (
-                <p className="mt-1 text-sm text-red-500">
-                  {formErrors.min_stock}
-                </p>
-              )}
+                Cancel
+              </button>
+              <button
+                type="submit"
+                className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-colors"
+              >
+                {modalMode === "add" ? "Add Product" : "Save Changes"}
+              </button>
             </div>
-          </div>
-
-          <div className="mt-8 flex justify-end gap-3">
-            <button
-              type="button"
-              onClick={onClose}
-              className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-gray-500 transition-colors"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-colors"
-            >
-              {modalMode === "add" ? "Add Product" : "Save Changes"}
-            </button>
-          </div>
-        </form>
+          </form>
+        )}
       </div>
     </div>
   );
 };
-
-export default ProductModal;
 
 ProductModal.propTypes = {
   isOpen: PropTypes.bool.isRequired,
@@ -491,4 +607,4 @@ ProductModal.propTypes = {
   ),
 };
 
-
+export default ProductModal;
