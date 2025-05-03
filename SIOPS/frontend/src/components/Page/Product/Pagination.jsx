@@ -24,7 +24,7 @@ const Pagination = ({
   const paginationButtons = useMemo(() => {
     const buttons = [];
     const maxVisibleButtons = windowWidth < 768 ? 3 : 5;
-    const showFirstLastButtons = windowWidth >= 480;
+    const showFirstLastButtons = true;
 
     // Tombol First (<<)
     if (showFirstLastButtons && currentPage > 2) {

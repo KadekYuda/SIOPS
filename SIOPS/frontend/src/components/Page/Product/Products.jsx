@@ -1,5 +1,17 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
-import { Plus, Edit2, Trash2, Search, X, Upload, Package, ChevronDown, ChevronUp, Filter, Check } from "lucide-react";
+import {
+  Plus,
+  Edit2,
+  Trash2,
+  Search,
+  Upload,
+  Package,
+  Filter,
+  Check,
+  ChevronDown,
+  ChevronUp,
+  X,
+} from "lucide-react";
 import ProductModal from "../../modal/ProductModal";
 import SuccessModal from "../../modal/SuccessModal";
 import AlertModal from "../../modal/AlertModal";
@@ -43,7 +55,9 @@ const Product = () => {
   const categoryDropdownRef = useRef(null);
   const [totalItems, setTotalItems] = useState(0);
   const [expandedRow, setExpandedRow] = useState(null);
+  const [batchStok, setBatchStok] = useState([]);
   const [categoryFilter, setCategoryFilter] = useState("all");
+  const [batchStokLoading, setBatchStokLoading] = useState(true);
 
   useEffect(() => {
     function handleClickOutside(event) {
@@ -86,7 +100,7 @@ const Product = () => {
         page,
         limit,
       };
-      
+
       if (categoryFilter !== "all") {
         params.category = categoryFilter;
       }
@@ -128,11 +142,26 @@ const Product = () => {
     }
   }, []);
 
+  const fetchBatchStok = useCallback(async () => {
+    try {
+      setBatchStokLoading(true);
+      const response = await api.get("/batch/stock");
+      setBatchStok(response.data.result || []);
+      setBatchStokLoading(false);
+    } catch (error) {
+      console.error("Error fetching batch stock:", error);
+      setBatchStokLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchBatchStok();
+  }, [fetchBatchStok]);
+
   const handleCategoriesChange = (newCategories) => {
     setCategories(newCategories);
   };
 
-  // Update useEffect to include dependencies
   useEffect(() => {
     fetchCategories();
   }, [fetchCategories]);
@@ -143,20 +172,35 @@ const Product = () => {
 
   const handleSubmitProduct = async (productData) => {
     try {
-      if (modalMode === "add") {
-        await api.post("/products", productData);
+      if (productData.type === "csv") {
+        const formData = new FormData();
+        formData.append("file", productData.file);
+
+        await api.post("/products/import", formData, {
+          headers: {
+            "Content-Type": "multipart/form-data",
+          },
+        });
+
         setSuccessModal({
           isOpen: true,
-          message: "Product added successfully",
+          message: "Products imported successfully",
         });
       } else {
-        await api.put(`/products/${productData.code_product}`, productData);
-        setSuccessModal({
-          isOpen: true,
-          message: "Product updated successfully",
-        });
+        if (modalMode === "add") {
+          await api.post("/products", productData);
+          setSuccessModal({
+            isOpen: true,
+            message: "Product added successfully",
+          });
+        } else {
+          await api.put(`/products/${productData.code_product}`, productData);
+          setSuccessModal({
+            isOpen: true,
+            message: "Product updated successfully",
+          });
+        }
       }
-
       setShowModal(false);
       fetchProducts();
     } catch (error) {
@@ -301,6 +345,22 @@ const Product = () => {
     setExpandedRow(expandedRow === id ? null : id);
   };
 
+  const calculateTotalStock = useCallback(
+    (productCode) => {
+      const productBatches = batchStok.filter(
+        (batch) => batch.code_product === productCode
+      );
+      return productBatches.reduce(
+        (total, batch) =>
+          total +
+          (parseInt(batch.stock_quantity || 0) +
+            parseInt(batch.initial_stock || 0)),
+        0
+      );
+    },
+    [batchStok]
+  );
+
   return (
     <div className="container mx-auto px-4 py-8 pt-20">
       {/* Header and Search Section */}
@@ -312,19 +372,15 @@ const Product = () => {
           </h1>
           <div className="flex gap-2">
             <button
-              onClick={() => setShowUploadModal(true)}
-              className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-gray-600 rounded-lg hover:bg-gray-700"
-            >
-              <Upload className="h-4 w-4" />
-              Import CSV
-            </button>
-            <button
               onClick={handleAddProduct}
               className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700"
             >
               <Plus className="h-4 w-4" />
               Add Product
             </button>
+            <div>
+              <Categories onCategoriesChange={handleCategoriesChange} />
+            </div>
           </div>
         </div>
 
@@ -342,8 +398,9 @@ const Product = () => {
               className="w-full pl-10 pr-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
             />
           </div>
-          
-          <div className="w-full md:w-60">
+
+          <div className="w-full md:w-60 relative">
+            <Filter className="absolute left-3 top-3 h-4 w-4 text-gray-400 pointer-events-none" />
             <select
               value={categoryFilter}
               onChange={(e) => {
@@ -351,18 +408,19 @@ const Product = () => {
                 setPage(0);
               }}
               className="w-full pl-10 pr-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 appearance-none"
-              style={{ backgroundPosition: "right 0.5rem center" }}
             >
               <option value="all">All Categories</option>
-              {categories.map(category => (
-                <option key={category.code_categories} value={category.code_categories}>
+              {categories.map((category) => (
+                <option
+                  key={category.code_categories}
+                  value={category.code_categories}
+                >
                   {category.name_categories}
                 </option>
               ))}
             </select>
-            <Filter className="absolute left-3 top-3 h-4 w-4 text-gray-400 pointer-events-none" />
           </div>
-          
+
           <div className="w-full md:w-40">
             <select
               value={limit}
@@ -386,34 +444,64 @@ const Product = () => {
             <table className="min-w-full divide-y divide-gray-200">
               <thead className="bg-gray-50">
                 <tr>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase w-12">No</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase w-32">Code</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase w-32">Barcode</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Name</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase w-32">Category</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase w-32">Price</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase w-32">Stock</th>
-                  <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase w-40">Actions</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-12">
+                    No
+                  </th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-32">
+                    Code
+                  </th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-32">
+                    Barcode
+                  </th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Name
+                  </th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-32">
+                    Categories
+                  </th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-32">
+                    Price
+                  </th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-32">
+                    Min Stock
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Stock
+                  </th>
+                  <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider w-40">
+                    Actions
+                  </th>
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
-                {loading ? (
-                  <tr>
-                    <td colSpan="8" className="px-4 py-4 text-center">
-                      <div className="flex justify-center items-center space-x-2">
-                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-500"></div>
-                        <span>Loading...</span>
-                      </div>
-                    </td>
-                  </tr>
-                ) : products.length === 0 ? (
-                  <tr>
-                    <td colSpan="8" className="px-4 py-4 text-center text-gray-500">
-                      No products found
-                    </td>
-                  </tr>
-                ) : (
-                  products.map((product, index) => (
+                {(() => {
+                  if (loading || batchStokLoading) {
+                    return (
+                      <tr>
+                        <td colSpan="8" className="px-4 py-4 text-center">
+                          <div className="flex justify-center items-center space-x-2">
+                            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-500"></div>
+                            <span>Loading...</span>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  }
+
+                  if (products.length === 0) {
+                    return (
+                      <tr>
+                        <td
+                          colSpan="8"
+                          className="px-4 py-4 text-center text-gray-500"
+                        >
+                          No products found
+                        </td>
+                      </tr>
+                    );
+                  }
+
+                  return products.map((product, index) => (
                     <tr key={product.code_product} className="hover:bg-gray-50">
                       <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500">
                         {index + 1 + page * limit}
@@ -424,24 +512,30 @@ const Product = () => {
                       <td className="px-4 py-4 whitespace-nowrap text-sm font-mono text-gray-500">
                         {formatLargeNumber(product.barcode) || "-"}
                       </td>
-                      <td className="px-4 py-4 text-sm font-medium text-gray-900">
+                      <td className="px-4 py-4 text-xs font-medium text-gray-900">
                         {product.name_product}
                       </td>
                       <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500">
-                        {categories.find(c => c.code_categories === product.code_categories)?.name_categories || "-"}
+                        {categories.find(
+                          (c) => c.code_categories === product.code_categories
+                        )?.name_categories || "-"}
                       </td>
-                      <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500">
+                      <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900">
                         Rp {Number(product.sell_price).toLocaleString()}
                       </td>
-                      <td className="px-4 py-4 whitespace-nowrap">
-                        <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
-                          (product.stock || 0) > product.min_stock ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
-                        }`}>
-                          {product.stock || 0} / {product.min_stock}
-                        </span>
+                      <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500">
+                        {product.min_stock}
                       </td>
-                      <td className="px-4 py-4 whitespace-nowrap text-sm font-medium text-right">
-                        <div className="flex justify-end space-x-2">
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                        {!batchStokLoading ? `${calculateTotalStock(product.code_product)} pcs` : (
+                          <div className="flex items-center space-x-2">
+                            <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-blue-500"></div>
+                            <span>Loading...</span>
+                          </div>
+                        )}
+                      </td>
+                      <td className="px-4 py-4 text-right text-sm font-medium">
+                        <div className="flex justify-end gap-3">
                           <button
                             onClick={() => {
                               setFormData(prepareEditData(product));
@@ -461,21 +555,14 @@ const Product = () => {
                         </div>
                       </td>
                     </tr>
-                  ))
-                )}
+                  ));
+                })()}
               </tbody>
             </table>
           </div>
 
           {/* Desktop Pagination */}
-          <div className="flex items-center justify-between px-4 py-3 bg-white border-t border-gray-200">
-            <div className="text-sm text-gray-500">
-              Showing <span className="font-medium">{products.length > 0 ? (page * limit) + 1 : 0}</span> to{' '}
-              <span className="font-medium">
-                {Math.min((page + 1) * limit, totalItems)}
-              </span>{' '}
-              of <span className="font-medium">{totalItems.toLocaleString()}</span> results
-            </div>
+          <div className="hidden md:block">
             <Pagination
               currentPage={page}
               totalPages={totalPages}
@@ -485,10 +572,10 @@ const Product = () => {
             />
           </div>
         </div>
-        
+
         {/* Mobile View */}
         <div className="md:hidden space-y-3">
-          {loading ? (
+          {loading || batchStokLoading ? (
             <div className="bg-white p-6 rounded-lg shadow flex justify-center items-center">
               <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-500 mr-2"></div>
               <span>Loading...</span>
@@ -499,15 +586,22 @@ const Product = () => {
             </div>
           ) : (
             products.map((product) => (
-              <div key={product.code_product} className="bg-white rounded-lg shadow overflow-hidden">
-                <div 
+              <div
+                key={product.code_product}
+                className="bg-white rounded-lg shadow overflow-hidden"
+              >
+                <div
                   className="flex justify-between items-center p-4 cursor-pointer"
                   onClick={() => toggleRow(product.code_product)}
                 >
                   <div className="flex-1 min-w-0">
-                    <h3 className="font-medium text-gray-900 truncate">{product.name_product}</h3>
+                    <h3 className="font-medium text-gray-900 truncate">
+                      {product.name_product}
+                    </h3>
                     <div className="flex items-center gap-2 mt-1">
-                      <span className="text-sm text-gray-500 font-mono">{formatLargeNumber(product.code_product)}</span>
+                      <span className="text-sm text-gray-500 font-mono">
+                        {formatLargeNumber(product.code_product)}
+                      </span>
                       <span className="text-xs px-1.5 py-0.5 rounded bg-blue-100 text-blue-800">
                         Rp {Number(product.sell_price).toLocaleString()}
                       </span>
@@ -521,42 +615,41 @@ const Product = () => {
                     )}
                   </div>
                 </div>
-                
+
                 {expandedRow === product.code_product && (
                   <div className="px-4 pb-4 space-y-3">
                     <div className="grid grid-cols-2 gap-4">
                       <div>
                         <p className="text-xs text-gray-500">Barcode</p>
-                        <p className="text-sm font-mono">{formatLargeNumber(product.barcode) || "-"}</p>
-                      </div>
-                      <div>
-                        <p className="text-xs text-gray-500">Category</p>
-                        <p className="text-sm">{categories.find(c => c.code_categories === product.code_categories)?.name_categories || "-"}</p>
-                      </div>
-                      <div>
-                        <p className="text-xs text-gray-500">Stock / Min Stock</p>
-                        <p className={`text-sm ${
-                          (product.stock || 0) > product.min_stock ? 'text-green-600' : 'text-red-600'
-                        }`}>
-                          {product.stock || 0} / {product.min_stock}
+                        <p className="text-sm font-mono">
+                          {formatLargeNumber(product.barcode) || "-"}
                         </p>
                       </div>
                       <div>
-                        <p className="text-xs text-gray-500">Status</p>
+                        <p className="text-xs text-gray-500">Category</p>
                         <p className="text-sm">
-                          {(product.stock || 0) > product.min_stock ? (
-                            <span className="inline-flex items-center text-green-600">
-                              <Check className="h-4 w-4 mr-1" /> In Stock
-                            </span>
-                          ) : (
-                            <span className="inline-flex items-center text-red-600">
-                              <X className="h-4 w-4 mr-1" /> Low Stock
-                            </span>
+                          {categories.find(
+                            (c) => c.code_categories === product.code_categories
+                          )?.name_categories || "-"}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-gray-500">Min Stock</p>
+                        <p className="text-sm">{product.min_stock}</p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-gray-500">Stock</p>
+                        <p className="text-sm">
+                          {!batchStokLoading ? `${calculateTotalStock(product.code_product)} pcs` : (
+                            <div className="flex items-center space-x-2">
+                              <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-blue-500"></div>
+                              <span>Loading...</span>
+                            </div>
                           )}
                         </p>
                       </div>
                     </div>
-                    
+
                     <div className="flex justify-end space-x-2 pt-2">
                       <button
                         onClick={(e) => {
@@ -584,33 +677,17 @@ const Product = () => {
               </div>
             ))
           )}
-          
+
           {/* Mobile Pagination */}
           {!loading && products.length > 0 && (
-            <div className="flex flex-col items-center gap-3 mt-4 bg-white p-4 rounded-lg shadow">
-              <div className="text-sm text-gray-500">
-                Page {page + 1} of {totalPages}
-              </div>
-              <div className="flex space-x-2">
-                <button
-                  className={`px-3 py-1 border rounded ${
-                    page === 0 ? 'bg-gray-100 text-gray-400' : 'bg-white hover:bg-gray-50'
-                  }`}
-                  disabled={page === 0}
-                  onClick={() => setPage(Math.max(0, page - 1))}
-                >
-                  Previous
-                </button>
-                <button
-                  className={`px-3 py-1 border rounded ${
-                    page >= totalPages - 1 ? 'bg-gray-100 text-gray-400' : 'bg-white hover:bg-gray-50'
-                  }`}
-                  disabled={page >= totalPages - 1}
-                  onClick={() => setPage(Math.min(totalPages - 1, page + 1))}
-                >
-                  Next
-                </button>
-              </div>
+            <div className="mt-4">
+              <Pagination
+                currentPage={page}
+                totalPages={totalPages}
+                onPageChange={setPage}
+                itemsPerPage={limit}
+                totalItems={totalItems}
+              />
             </div>
           )}
         </div>

@@ -80,7 +80,7 @@ const BatchStok = () => {
         </div>
       </div>
 
-      <div className="flex md:hidden justify-end mb-4">
+      <div className="flex justify-end mb-4">
         <select
           value={limit}
           onChange={(e) => {
@@ -96,123 +96,122 @@ const BatchStok = () => {
         </select>
       </div>
 
-      <div className="bg-white rounded-lg shadow overflow-x-auto">
-        <table className="min-w-full divide-y divide-gray-200">
-          <thead className="bg-gray-50">
-            <tr>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                No
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Product Code
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Batch
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Purchase Price
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Stock
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Arrival Date
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Expiration Date
-              </th>
-            </tr>
-          </thead>
-          <tbody className="bg-white divide-y divide-gray-200">
-            {(() => {
-              if (loading) {
+      <div className="bg-white rounded-lg shadow overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="min-w-full divide-y divide-gray-200">
+            <thead className="bg-gray-50">
+              <tr>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  No
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Product Code
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Batch
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Purchase Price
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Stock
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Arrival Date
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Expiration Date
+                </th>
+              </tr>
+            </thead>
+            <tbody className="bg-white divide-y divide-gray-200">
+              {(() => {
+                if (loading) {
+                  return (
+                    <tr>
+                      <td colSpan="7" className="px-6 py-4 text-center">
+                        <div className="flex justify-center items-center space-x-2">
+                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-500"></div>
+                          <span>Loading...</span>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                }
+
+                if (batchStok.length > 0) {
+                  return batchStok.map((batch, index) => (
+                    <tr key={batch.batch_id} className="hover:bg-gray-50">
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        {index + 1 + page * limit}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                        {formatLargeNumber(
+                          batch.code_product ||
+                            (batch.Product && batch.Product.code_product)
+                        )}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                        {batch.batch_code}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                        Rp {Number(batch.purchase_price).toLocaleString()}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                        {parseInt(batch.stock_quantity || 0) +
+                          parseInt(batch.initial_stock || 0)}{" "}
+                        pcs
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                        {batch.arrival_date
+                          ? new Date(batch.arrival_date).toLocaleDateString()
+                          : "-"}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                        {batch.exp_date
+                          ? new Date(batch.exp_date).toLocaleDateString()
+                          : "-"}
+                      </td>
+                    </tr>
+                  ));
+                }
+
                 return (
                   <tr>
-                    <td colSpan="7" className="px-6 py-4 text-center">
-                      <div className="flex justify-center items-center space-x-2">
-                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-500"></div>
-                        <span>Loading...</span>
-                      </div>
+                    <td
+                      colSpan="7"
+                      className="px-6 py-4 text-center text-gray-500"
+                    >
+                      No batch stock found
                     </td>
                   </tr>
                 );
-              }
-
-              if (batchStok.length > 0) {
-                return batchStok.map((batch, index) => (
-                  <tr key={batch.batch_id} className="hover:bg-gray-50">
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {index + 1 + page * limit}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      {formatLargeNumber(
-                        batch.code_product ||
-                          (batch.Product && batch.Product.code_product)
-                      )}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      {batch.batch_code}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      Rp {Number(batch.purchase_price).toLocaleString()}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      {parseInt(batch.stock_quantity || 0) +
-                        parseInt(batch.initial_stock || 0)}{" "}
-                      pcs
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      {batch.arrival_date
-                        ? new Date(batch.arrival_date).toLocaleDateString()
-                        : "-"}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      {batch.exp_date
-                        ? new Date(batch.exp_date).toLocaleDateString()
-                        : "-"}
-                    </td>
-                  </tr>
-                ));
-              }
-
-              return (
-                <tr>
-                  <td
-                    colSpan="7"
-                    className="px-6 py-4 text-center text-gray-500"
-                  >
-                    No batch stock found
-                  </td>
-                </tr>
-              );
-            })()}
-          </tbody>
-        </table>
-      </div>
-      <div className="mt-4 hidden md:flex justify-between items-center">
-        <div>
-          <select
-            value={limit}
-            onChange={(e) => {
-              setLimit(Number(e.target.value));
-              setPage(0); // Reset to first page when changing limit
-            }}
-            className="border rounded px-3 py-1 text-sm"
-          >
-            <option value={5}>5 per page</option>
-            <option value={20}>20 per page</option>
-            <option value={50}>50 per page</option>
-            <option value={100}>100 per page</option>
-          </select>
+              })()}
+            </tbody>
+          </table>
+        </div>
+        {/* Desktop Pagination */}
+        <div className="hidden md:block">
+          <Pagination
+            currentPage={page}
+            totalPages={totalPages}
+            onPageChange={setPage}
+            itemsPerPage={limit}
+            totalItems={totalItems}
+          />
         </div>
       </div>
-      <Pagination
-        currentPage={page}
-        totalPages={totalPages}
-        onPageChange={setPage}
-        itemsPerPage={limit}
-        totalItems={totalItems}
-      />
+
+      {/* Mobile Pagination */}
+      <div className="md:hidden mt-4">
+        <Pagination
+          currentPage={page}
+          totalPages={totalPages}
+          onPageChange={setPage}
+          itemsPerPage={limit}
+          totalItems={totalItems}
+        />
+      </div>
     </div>
   );
 };
