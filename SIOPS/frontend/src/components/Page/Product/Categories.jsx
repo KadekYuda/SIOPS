@@ -13,7 +13,7 @@ const Categories = ({ onCategoriesChange }) => {
   const [editing, setEditing] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [alertModal, setAlertModal] = useState({ isOpen: false, message: "" });
-  
+
   const [successModal, setSuccessModal] = useState({
     isOpen: false,
     message: "",
@@ -24,14 +24,17 @@ const Categories = ({ onCategoriesChange }) => {
       const response = await api.get("/categories");
       const categoriesData = response.data.result;
       setCategories(categoriesData);
-
-      if (onCategoriesChange) {
+      // Only call onCategoriesChange if the categories have actually changed
+      if (
+        onCategoriesChange &&
+        JSON.stringify(categoriesData) !== JSON.stringify(categories)
+      ) {
         onCategoriesChange(categoriesData);
       }
     } catch (error) {
       console.error("Error fetching categories", error);
     }
-  }, [onCategoriesChange]);
+  }, [onCategoriesChange, categories]); // Add categories to dependency array
 
   useEffect(() => {
     fetchCategories();
@@ -91,7 +94,7 @@ const Categories = ({ onCategoriesChange }) => {
     try {
       await api.delete(`/categories/${code}`);
       await fetchCategories();
-     
+
       setSuccessModal({
         isOpen: true,
         message: "Category deleted successfully!",
@@ -244,16 +247,22 @@ const Categories = ({ onCategoriesChange }) => {
                             />
                             <CrudButton
                               icon={Trash2}
-                              onConfirm={() => handleDelete(category.code_categories)}
+                              onConfirm={() =>
+                                handleDelete(category.code_categories)
+                              }
                               actionType="delete"
                               buttonStyle="danger"
                               className="p-1 rounded-full"
                               title="Delete Product"
-                              confirmMessage={(
+                              confirmMessage={
                                 <>
-                                  Are you sure you want to delete category <b className="text-gray-700">{category.name_categories}</b>?
+                                  Are you sure you want to delete category{" "}
+                                  <b className="text-gray-700">
+                                    {category.name_categories}
+                                  </b>
+                                  ?
                                 </>
-                              )}
+                              }
                               buttonType="product"
                             />
                           </div>

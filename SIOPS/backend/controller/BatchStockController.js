@@ -7,7 +7,7 @@ export const getBatchStok = async (req, res) => {
         let { page, limit, search } = req.query;
 
         page = parseInt(page) || 0;
-        limit = parseInt(limit) || 3000;
+        limit = parseInt(limit) || 2500; 
         const offset = page * limit;
 
         // Kondisi pencarian
@@ -17,24 +17,37 @@ export const getBatchStok = async (req, res) => {
         if (search) {
             whereCondition[Op.or] = [
                 { batch_code: { [Op.like]: `%${search}%` } },
-                { code_product: { [Op.like]: `%${search}%` } }
+                { code_product: { [Op.like]: `%${search}%` } },
+                { '$Product.name_product$': { [Op.like]: `%${search}%` } }
             ];
         }
 
-        // Get all batches with their product info
-        const { count, rows } = await BatchStok.findAndCountAll({
+        // Get total count first
+        const totalCount = await BatchStok.count({
             where: whereCondition,
-            include: [
-                {
-                    model: Products,
-                    attributes: ['code_product', 'name_product'],
-                    required: false
-                }
-            ],
-            order: [['batch_id', 'DESC']],
-            limit: limit,
-            offset: offset,
+            include: [{
+                model: Products,
+                attributes: ['code_product', 'name_product'],
+                required: false
+            }],
             distinct: true
+        });
+
+        // Get paginated batches
+        const rows = await BatchStok.findAll({
+            where: whereCondition,
+            include: [{
+                model: Products,
+                attributes: ['code_product', 'name_product'],
+                required: false
+            }],
+            order: [
+                [{ model: Products }, 'name_product', 'ASC'], // Primary sort by product name
+                ['exp_date', 'ASC'], // Secondary sort by expiration date
+                ['batch_code', 'ASC'] // Tertiary sort by batch code
+            ],
+            limit: limit,
+            offset: offset
         });
 
         // Get all unique product codes from the results
@@ -77,8 +90,10 @@ export const getBatchStok = async (req, res) => {
 
         res.status(200).json({
             result: formattedResponse,
-            totalRows: count,
-            totalPages: Math.ceil(count / limit)
+            totalRows: totalCount,
+            totalPages: Math.ceil(totalCount / limit),
+            page: page,
+            limit: limit
         });
     } catch (error) {
         console.error("Error in getBatchStok:", error);
@@ -190,71 +205,75 @@ export const getMinimumStockAlert = async (req, res) => {
     }
 };
 
-export const createBatchStok = async (req, res) => {
-    try {
-        const { code_product, batch_code, stock_quantity, purchase_price, expiry_date } = req.body;
+// export const createBatchStok = async (req, res) => {
+//     try {
+//         const { code_product, batch_code, stock_quantity, purchase_price, expiry_date } = req.body;
         
-        // Validate required fields
-        if (!code_product || !batch_code || !expiry_date) {
-            return res.status(400).json({ msg: "Product code, batch code, and expiry date are required" });
-        }
+//         // Validate required fields
+//         if (!code_product || !batch_code || !expiry_date) {
+//             return res.status(400).json({ msg: "Product code, batch code, and expiry date are required" });
+//         }
         
-        // Check if product exists
-        const product = await Products.findOne({
-            where: { code_product: code_product }
-        });
+//         // Check if product exists
+//         const product = await Products.findOne({
+//             where: { code_product: code_product }
+//         });
         
-        if (!product) {
-            return res.status(404).json({ msg: "Product not found" });
-        }
+//         if (!product) {
+//             return res.status(404).json({ msg: "Product not found" });
+//         }
         
-        // Check if batch code already exists
-        const existingBatch = await BatchStok.findOne({
-            where: { batch_code: batch_code }
-        });
+//         // Check if batch code already exists
+//         const existingBatch = await BatchStok.findOne({
+//             where: { batch_code: batch_code }
+//         });
         
-        if (existingBatch) {
-            return res.status(409).json({ msg: "Batch code already exists" });
-        }
+//         if (existingBatch) {
+//             return res.status(409).json({ msg: "Batch code already exists" });
+//         }
         
-        // Create new batch
-        const newBatch = await BatchStok.create({
-            code_product: code_product,
-            batch_code: batch_code,
-            initial_stock: 0, // Initial stock is 0 as it's a new batch
-            stock_quantity: stock_quantity || 0,
-            purchase_price: purchase_price,
-            exp_date: expiry_date
-        });
+//         // Create new batch
+//         const newBatch = await BatchStok.create({
+//             code_product: code_product,
+//             batch_code: batch_code,
+//             initial_stock: 0, // Initial stock is 0 as it's a new batch
+//             stock_quantity: stock_quantity || 0,
+//             purchase_price: purchase_price,
+//             exp_date: expiry_date
+//         });
         
-        // Get full batch data with product info
-        const fullBatchData = await BatchStok.findOne({
-            where: { batch_id: newBatch.batch_id },
-            include: [{
-                model: Products,
-                attributes: ['code_product', 'name_product']
-            }]
-        });
+//         // Get full batch data with product info
+//         const fullBatchData = await BatchStok.findOne({
+//             where: { batch_id: newBatch.batch_id },
+//             include: [{
+//                 model: Products,
+//                 attributes: ['code_product', 'name_product']
+//             }]
+//         });
         
-        const formattedResponse = fullBatchData.get({ plain: true });
-        if (formattedResponse.Product && formattedResponse.Product.code_product) {
-            formattedResponse.Product.code_product = String(formattedResponse.Product.code_product);
-        }
-        if (formattedResponse.code_product) {
-            formattedResponse.code_product = String(formattedResponse.code_product);
-        }
+//         const formattedResponse = fullBatchData.get({ plain: true });
+//         if (formattedResponse.Product && formattedResponse.Product.code_product) {
+//             formattedResponse.Product.code_product = String(formattedResponse.Product.code_product);
+//         }
+//         if (formattedResponse.code_product) {
+//             formattedResponse.code_product = String(formattedResponse.code_product);
+//         }
         
-        res.status(201).json({ 
-            msg: "Batch created successfully",
-            result: formattedResponse
-        });
-    } catch (error) {
-        console.error("Error creating batch stock:", error);
-        res.status(500).json({ msg: error.message });
-    }
-};
+//         res.status(201).json({ 
+//             msg: "Batch created successfully",
+//             result: formattedResponse
+//         });
+//     } catch (error) {
+//         console.error("Error creating batch stock:", error);
+//         res.status(500).json({ msg: error.message });
+//     }
+// };
 
 // Disable create, update, and delete operations
+export const createBatchStok = async (req, res) => {
+    res.status(403).json({ msg: "Operation not allowed" })
+};
+
 export const updateBatchStok = async (req, res) => {
     res.status(403).json({ msg: "Operation not allowed" })
 };

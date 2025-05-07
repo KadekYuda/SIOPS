@@ -565,9 +565,10 @@ export const importProductsFromCSV = async (req, res) => {
 export const getProducts = async (req, res) => {
   try {
     const page = parseInt(req.query.page) || 0;
-    const limit = parseInt(req.query.limit) || 3000;
+    const limit = parseInt(req.query.limit) || 2500; 
     const search = req.query.search || "";
-    const code_categories = req.query.code_categories || "";
+    const category = req.query.category || "";
+
     const offset = limit * page;
 
     // Base where condition
@@ -580,19 +581,30 @@ export const getProducts = async (req, res) => {
       deleted_at: null,
     };
 
-    // Add category filter if provided
-    if (code_categories) {
-      whereCondition.code_categories = code_categories;
+    // Add category filter if provided and not "all"
+    if (category && category !== "all") {
+      whereCondition.code_categories = category;
     }
 
-    // Find products with category info
-    const { count, rows } = await Product.findAndCountAll({
+    // Get total count first
+    const totalCount = await Product.count({
+      where: whereCondition,
+      distinct: true,
+      include: [
+        {
+          model: Categories,
+          attributes: ["code_categories", "name_categories"],
+        },
+      ],
+    });
+
+    // Get paginated products
+    const products = await Product.findAll({
       where: whereCondition,
       include: [
         {
           model: Categories,
           attributes: ["code_categories", "name_categories"],
-          where: code_categories ? { code_categories } : undefined,
         },
       ],
       offset: offset,
@@ -601,47 +613,43 @@ export const getProducts = async (req, res) => {
       distinct: true,
     });
 
-    // Get all batch stocks for the found products
-    const productCodes = rows.map(product => product.code_product);
+    // Get batch stocks for products
+    const productCodes = products.map(p => p.code_product);
     const batchStocks = await BatchStock.findAll({
       where: {
         code_product: {
           [Op.in]: productCodes
         }
       },
-      attributes: ['code_product', 'initial_stock', 'stock_quantity']
+      attributes: ['code_product', 'stock_quantity', 'initial_stock']
     });
 
     // Calculate total stock for each product
     const stockMap = {};
     batchStocks.forEach(batch => {
-      const code = batch.code_product;
-      if (!stockMap[code]) {
-        stockMap[code] = 0;
+      if (!stockMap[batch.code_product]) {
+        stockMap[batch.code_product] = 0;
       }
-      stockMap[code] += parseInt(batch.stock_quantity || 0);
+      stockMap[batch.code_product] += parseInt(batch.stock_quantity || 0) + parseInt(batch.initial_stock || 0);
     });
 
-    // Add total stock and stock status to products
-    const productsWithStock = rows.map(product => {
+    // Add total stock to products
+    const productsWithStock = products.map(product => {
       const plainProduct = product.get({ plain: true });
       const totalStock = stockMap[plainProduct.code_product] || 0;
       const minStock = plainProduct.min_stock || 0;
 
-      // Calculate stock status
-      let stockStatus = 'success'; // Default green (plenty of stock)
-      if (totalStock <= minStock) {
-        stockStatus = 'danger'; // Red (below or at min stock)
-      } else if (totalStock <= minStock + 5) {
-        stockStatus = 'warning'; // Yellow (approaching min stock)
+      if (plainProduct.code_product) {
+        plainProduct.code_product = String(plainProduct.code_product);
+      }
+      if (plainProduct.barcode) {
+        plainProduct.barcode = String(plainProduct.barcode);
       }
 
       return {
         ...plainProduct,
-        total_stock: totalStock,
-        stock_status: stockStatus,
-        code_product: String(plainProduct.code_product), // Convert to string
-        barcode: plainProduct.barcode ? String(plainProduct.barcode) : null, // Convert to string if exists
+        totalStock: totalStock,
+        stock_status: totalStock <= minStock ? 'danger' : totalStock <= minStock + 5 ? 'warning' : 'success'
       };
     });
 
@@ -649,8 +657,8 @@ export const getProducts = async (req, res) => {
       result: productsWithStock,
       page: page,
       limit: limit,
-      totalRows: count,
-      totalPages: Math.ceil(count / limit),
+      totalRows: totalCount,
+      totalPages: Math.ceil(totalCount / limit),
     });
   } catch (error) {
     console.error('Error in getProducts:', error);

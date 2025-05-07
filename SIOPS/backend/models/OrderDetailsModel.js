@@ -18,14 +18,13 @@ const OrderDetail = db.define('order_details', {
         references: { model: Order , key: 'order_id' }
     },
     code_product:{
-        type:DataTypes.STRING(13),
-        allowNull:true,
+        type: DataTypes.STRING(13),
+        allowNull: false,
         references: { model: Product, key: 'code_product'}
     }, 
-
     batch_id: { 
         type: DataTypes.INTEGER, 
-        allowNull: false,
+        allowNull: true, // Changed to true to allow initial null values
         references: { model: BatchStock, key: 'batch_id' }
     },
     quantity: { 
@@ -43,8 +42,5 @@ const OrderDetail = db.define('order_details', {
     created_at: DataTypes.DATE,
     updated_at: DataTypes.DATE,
 }, { freezeTableName: true });
-
-
-
 
 export default OrderDetail;

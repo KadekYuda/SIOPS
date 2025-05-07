@@ -1,4 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
+import Select from "react-select";
+import { useNavigate } from "react-router-dom";
 import {
   Plus,
   Edit2,
@@ -6,13 +8,14 @@ import {
   Search,
   Upload,
   Package,
-  Filter,
   ChevronDown,
   ChevronUp,
   X,
   CheckCircle,
   AlertCircle,
   AlertTriangle,
+  Boxes,
+  ArrowRight,
 } from "lucide-react";
 import ProductModal from "../../modal/ProductModal";
 import SuccessModal from "../../modal/SuccessModal";
@@ -23,9 +26,11 @@ import Pagination from "./Pagination";
 import api from "../../../service/api";
 
 const Product = () => {
+  const navigate = useNavigate();
   const [products, setProducts] = useState([]);
   const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [isAdmin, setIsAdmin] = useState(false);
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(0);
   const [limit, setLimit] = useState(10);
@@ -59,6 +64,7 @@ const Product = () => {
   const [expandedRow, setExpandedRow] = useState(null);
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [isStockHovered, setIsStockHovered] = useState(null);
+  const [categoryOptions, setCategoryOptions] = useState([]);
 
   useEffect(() => {
     function handleClickOutside(event) {
@@ -123,48 +129,20 @@ const Product = () => {
   const fetchProducts = useCallback(async () => {
     try {
       setLoading(true);
-
-      // Add category filter to API request if not "all"
-      const params = {
+      const params = new URLSearchParams({
         search: search,
-        page,
-        limit,
-      };
+        page: page.toString(),
+        limit: limit.toString(),
+      });
 
-      if (categoryFilter !== "all") {
-        params.category = categoryFilter;
+      // Tambahkan parameter category jika bukan "all"
+      if (categoryFilter && categoryFilter !== "all") {
+        params.append("category", categoryFilter);
       }
 
-      const response = await api.get(
-        `/products?${new URLSearchParams(params)}`
-      );
+      const response = await api.get(`/products?${params}`);
 
-      // Fetch batch stock data for each product
-      const productsWithStock = await Promise.all(
-        (response.data.result || []).map(async (product) => {
-          try {
-            const batchResponse = await api.get(
-              `/batch/product/${product.code_product}`
-            );
-            const batches = batchResponse.data.result || [];
-            const totalStock = batches.reduce((sum, batch) => {
-              return (
-                sum +
-                (parseInt(batch.initial_stock) || 0) +
-                (parseInt(batch.stock_quantity) || 0)
-              );
-            }, 0);
-            return { ...product, totalStock };
-          } catch (error) {
-            console.error(
-              `Error fetching stock for product ${product.code_product}:`,
-              error
-            );
-            return { ...product, totalStock: 0 };
-          }
-        })
-      );
-
+      const productsWithStock = response.data.result || [];
       setProducts(productsWithStock);
       setTotalPages(Math.ceil(response.data.totalRows / limit));
       setTotalItems(response.data.totalRows || 0);
@@ -184,7 +162,15 @@ const Product = () => {
       const response = await api.get("/categories");
 
       if (response.data && response.data.result) {
+        const options = [
+          { value: "all", label: "All Categories" },
+          ...response.data.result.map((cat) => ({
+            value: cat.code_categories,
+            label: cat.name_categories,
+          })),
+        ];
         setCategories(response.data.result);
+        setCategoryOptions(options);
       } else {
         throw new Error("Invalid response format from server");
       }
@@ -195,8 +181,24 @@ const Product = () => {
         message: error.message || "Failed to fetch categories",
       });
       setCategories([]);
+      setCategoryOptions([{ value: "all", label: "All Categories" }]);
     }
   }, []);
+
+  const checkUserRole = useCallback(async () => {
+    try {
+      const response = await api.get("/users/profile");
+      const userRole = response.data.user?.role;
+      setIsAdmin(userRole === "admin");
+    } catch (error) {
+      console.error("Error checking user role:", error);
+      setIsAdmin(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    checkUserRole();
+  }, [checkUserRole]);
 
   const handleCategoriesChange = (newCategories) => {
     setCategories(newCategories);
@@ -390,10 +392,25 @@ const Product = () => {
       {/* Header and Search Section */}
       <div className="mb-6">
         <div className="flex flex-col md:flex-row justify-between items-center mb-6 gap-4">
-          <h1 className="text-2xl font-bold text-gray-800 flex items-center gap-2">
-            <Package className="h-6 w-6" />
-            Product Management
-          </h1>
+          <div className="flex items-center gap-4">
+            <h1 className="text-2xl font-bold text-gray-800 flex items-center gap-2">
+              <Package className="h-6 w-6" />
+              Product Management
+            </h1>
+            <div className="flex items-center gap-2 px-4 py-2">
+                      <div className="flex items-center gap-4">
+                        <button
+                          onClick={() => navigate("/batchstock")}
+                          className="flex items-center gap-2 px-4 py-2 bg-white text-gray-700 rounded-lg hover:bg-gray-100 shadow-sm transition-all"
+                          title="Back to Products"
+                        >
+                          <ArrowRight className="h-5 w-5" />
+                          <span>Batch Stock</span>
+                        </button>
+
+                      </div>
+                    </div>
+          </div>
           <div className="flex gap-2">
             <CrudButton
               icon={Plus}
@@ -422,26 +439,39 @@ const Product = () => {
             />
           </div>
 
-          <div className="w-full md:w-60 relative">
-            <Filter className="absolute left-3 top-3 h-4 w-4 text-gray-400 pointer-events-none" />
-            <select
-              value={categoryFilter}
-              onChange={(e) => {
-                setCategoryFilter(e.target.value);
+          <div className="w-full md:w-60">
+            <Select
+              value={categoryOptions.find(
+                (option) => option.value === categoryFilter
+              )}
+              onChange={(selectedOption) => {
+                setCategoryFilter(selectedOption.value);
                 setPage(0);
               }}
-              className="w-full pl-10 pr-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 appearance-none"
-            >
-              <option value="all">All Categories</option>
-              {categories.map((category) => (
-                <option
-                  key={category.code_categories}
-                  value={category.code_categories}
-                >
-                  {category.name_categories}
-                </option>
-              ))}
-            </select>
+              options={categoryOptions}
+              className="text-sm"
+              placeholder="Select Category"
+              isClearable={false}
+              styles={{
+                control: (base) => ({
+                  ...base,
+                  minHeight: "42px",
+                  borderColor: "#e5e7eb",
+                  "&:hover": {
+                    borderColor: "#3b82f6",
+                  },
+                }),
+                option: (base, state) => ({
+                  ...base,
+                  backgroundColor: state.isSelected
+                    ? "#3b82f6"
+                    : state.isFocused
+                    ? "#e5e7eb"
+                    : "white",
+                  color: state.isSelected ? "white" : "black",
+                }),
+              }}
+            />
           </div>
 
           <div className="w-full md:w-40">
@@ -491,9 +521,11 @@ const Product = () => {
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-900 uppercase tracking-wider w-32 ">
                     Stock
                   </th>
-                  <th className="px-4 py-3 text-right text-xs font-medium text-gray-900 uppercase tracking-wider w-1">
-                    Actions
-                  </th>
+                  {isAdmin && (
+                    <th className="px-4 py-3 text-right text-xs font-medium text-gray-900 uppercase tracking-wider w-1">
+                      Actions
+                    </th>
+                  )}
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
@@ -594,31 +626,35 @@ const Product = () => {
                           )}
                         </div>
                       </td>
-                      <td className="px-4 py-4 text-sm ">
-                        <div className="flex justify-end gap-3">
-                          <CrudButton
-                            icon={Edit2}
-                            onClick={() => {
-                              setFormData(prepareEditData(product));
-                              setModalMode("edit");
-                              setShowModal(true);
-                            }}
-                            buttonStyle="primary"
-                            buttonType="product"
-                            actionType="edit"
-                          />
-                          <CrudButton
-                            icon={Trash2}
-                            onConfirm={() => handleDelete(product.code_product)}
-                            buttonStyle="danger"
-                            buttonType="product"
-                            actionType="delete"
-                            confirmMessage="Are you sure you want to delete this product?"
-                            dataMessage="This action will permanently delete this product and cannot be undone."
-                            title="Delete Product"
-                          />
-                        </div>
-                      </td>
+                      {isAdmin && (
+                        <td className="px-4 py-4 text-sm ">
+                          <div className="flex justify-end gap-3">
+                            <CrudButton
+                              icon={Edit2}
+                              onClick={() => {
+                                setFormData(prepareEditData(product));
+                                setModalMode("edit");
+                                setShowModal(true);
+                              }}
+                              buttonStyle="primary"
+                              buttonType="product"
+                              actionType="edit"
+                            />
+                            <CrudButton
+                              icon={Trash2}
+                              onConfirm={() =>
+                                handleDelete(product.code_product)
+                              }
+                              buttonStyle="danger"
+                              buttonType="product"
+                              actionType="delete"
+                              confirmMessage="Are you sure you want to delete this product?"
+                              dataMessage="This action will permanently delete this product and cannot be undone."
+                              title="Delete Product"
+                            />
+                          </div>
+                        </td>
+                      )}
                     </tr>
                   ));
                 })()}
@@ -750,7 +786,7 @@ const Product = () => {
                         </div>
                       </div>
                     </div>
-
+                    {isAdmin && (
                     <div className="flex justify-end gap-3">
                       <CrudButton
                         icon={Edit2}
@@ -774,6 +810,7 @@ const Product = () => {
                         title="Delete Product"
                       />
                     </div>
+                    )}
                   </div>
                 )}
               </div>

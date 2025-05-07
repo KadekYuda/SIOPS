@@ -7,7 +7,6 @@ import DashboardStaff from "../components/Page/Sidebar/staff/DashboardStaff";
 import DashboardLayout from "../components/Page/Login/DashboardLayout";
 import UserProfile from "../components/Page/Profile/UserProfile";
 import Product from "../components/Page/Product/Product";
-import Products from "../components/Page/Product/Products";
 import BatchStok from "../components/Page/Product/BatchStok";
 import OrderStock from "../components/Page/Order/OrderStock";
 import Order from "../components/Page/Order/Staff/Order";
@@ -157,7 +156,7 @@ function AppRoutes() {
         />
 
         <Route
-          path="/order"
+          path="/1"
           element={
             <ProtectedRoute allowedRoles={["staff", "admin"]}>
               <OrderStock />
@@ -166,7 +165,7 @@ function AppRoutes() {
         />
 
         <Route
-          path="/report"
+          path="/batchstock"
           element={
             <ProtectedRoute allowedRoles={["staff", "admin"]}>
               <BatchStok />
@@ -175,7 +174,7 @@ function AppRoutes() {
         />
 
         <Route
-          path="/orders"
+          path="/order"
           element={
             <ProtectedRoute allowedRoles={["staff"]}>
               <Order />
@@ -184,7 +183,7 @@ function AppRoutes() {
         />
 
         <Route
-          path="/orderss"
+          path="/orderAdmin"
           element={
             <ProtectedRoute allowedRoles={["admin"]}>
               <OrderAdmin />
@@ -192,15 +191,7 @@ function AppRoutes() {
           }
         />
 
-        <Route
-          path="/products"
-          element={
-            <ProtectedRoute allowedRoles={["staff", "admin"]}>
-              <Products />
-            </ProtectedRoute>
-          }
-        />
-
+       
         {/* Default route - redirect based on role */}
         <Route
           index
