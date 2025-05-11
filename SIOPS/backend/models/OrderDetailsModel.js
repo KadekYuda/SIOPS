@@ -24,12 +24,12 @@ const OrderDetail = db.define('order_details', {
     }, 
     batch_id: { 
         type: DataTypes.INTEGER, 
-        allowNull: true, // Changed to true to allow initial null values
+        allowNull: true,
         references: { model: BatchStock, key: 'batch_id' }
     },
     quantity: { 
         type: DataTypes.INTEGER, 
-        allowNull: false 
+        allowNull: false,
     },
     ordered_price: { 
         type: DataTypes.DECIMAL(12,2), 
@@ -41,6 +41,13 @@ const OrderDetail = db.define('order_details', {
     },
     created_at: DataTypes.DATE,
     updated_at: DataTypes.DATE,
-}, { freezeTableName: true });
+}, { 
+    freezeTableName: true,
+    timestamps: false
+});
+
+OrderDetail.belongsTo(Order, { foreignKey: 'order_id' });
+OrderDetail.belongsTo(Product, { foreignKey: 'code_product' });
+OrderDetail.belongsTo(BatchStock, { foreignKey: 'batch_id' });
 
 export default OrderDetail;

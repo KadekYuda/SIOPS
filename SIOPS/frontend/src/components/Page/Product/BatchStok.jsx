@@ -13,6 +13,7 @@ import {
   ChevronDown,
   ChevronUp,
   Package2,
+  FileText,
 } from "lucide-react";
 
 const BatchStok = () => {
@@ -24,9 +25,30 @@ const BatchStok = () => {
   const [totalPages, setTotalPages] = useState(0);
   const [searchTerm, setSearchTerm] = useState("");
   const [totalItems, setTotalItems] = useState(0);
-  const [isFilterOpen, setIsFilterOpen] = useState(false);
   const [activeTab, setActiveTab] = useState("all");
   const [expandedRow, setExpandedRow] = useState(null);
+  const [isRoleLoading, setIsRoleLoading] = useState(true);
+  const [userRole, setUserRole] = useState("staff");
+
+  const fetchUserRole = async () => {
+    try {
+      setIsRoleLoading(true);
+      const response = await api.get("/users/profile");
+      if (response.data && response.data.user) {
+        setUserRole(response.data.user.role);
+      }
+    } catch (error) {
+      console.error("Error fetching user role:", error);
+      setUserRole("staff"); // Default to staff if error
+    } finally {
+      setIsRoleLoading(false);
+    }
+  };
+
+  // Add useEffect to fetch user role when component mounts
+  useEffect(() => {
+    fetchUserRole();
+  }, []);
 
   const fetchBatchStok = useCallback(async () => {
     try {
@@ -48,12 +70,15 @@ const BatchStok = () => {
           const diffDays = expDate
             ? Math.ceil((expDate - today) / (1000 * 60 * 60 * 24))
             : null;
+          const stockQuantity = parseInt(batch.stock_quantity) || 0;
 
           switch (activeTab) {
             case "expiring":
               return diffDays !== null && diffDays > 0 && diffDays <= 30;
             case "expired":
               return diffDays !== null && diffDays <= 0;
+            case "low":
+              return stockQuantity > 0 && stockQuantity < 10;
             case "good":
               return diffDays !== null && diffDays > 30;
             default:
@@ -143,6 +168,38 @@ const BatchStok = () => {
     }
   };
 
+  const getStockStatus = (stockQuantity) => {
+    const stockValue = parseInt(stockQuantity || 0);
+    if (stockValue === 0) {
+      return {
+        color: "bg-red-50 text-red-500",
+        text: `${stockValue} pcs`,
+      };
+    } else if (stockValue < 10) {
+      return {
+        color: "bg-amber-50 text-amber-500",
+        text: `${stockValue} pcs`,
+      };
+    } else {
+      return {
+        color: "bg-green-50 text-green-500",
+        text: `${stockValue} pcs`,
+      };
+    }
+  };
+
+  const handleAddNewOrder = () => {
+    if (isRoleLoading) return; // Prevent action while loading
+
+    console.log("Current user role:", userRole); // Debug log
+
+    if (userRole === "admin") {
+      navigate("/orderadmin");
+    } else {
+      navigate("/order");
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gray-50">
       <div className="container mx-auto px-4 py-6 pt-20">
@@ -180,13 +237,10 @@ const BatchStok = () => {
           <div className="bg-white p-4 rounded-lg shadow-sm border-l-4 border-green-500">
             <div className="flex justify-between">
               <div>
-                <p className="text-sm text-gray-500">Total Stock</p>
+                <p className="text-sm text-gray-500">Current Stock</p>
                 <p className="text-xl font-bold">
                   {batchStok.reduce(
-                    (acc, batch) =>
-                      acc +
-                      parseInt(batch.stock_quantity || 0) +
-                      parseInt(batch.initial_stock || 0),
+                    (acc, batch) => acc + (parseInt(batch.stock_quantity) || 0),
                     0
                   )}{" "}
                   pcs
@@ -198,29 +252,20 @@ const BatchStok = () => {
             </div>
           </div>
 
-          <div className="bg-white p-4 rounded-lg shadow-sm border-l-4 border-amber-500">
+          <div className="bg-white p-4 rounded-lg shadow-sm border-l-4 border-blue-500">
             <div className="flex justify-between">
               <div>
-                <p className="text-sm text-gray-500">Expiring Soon</p>
+                <p className="text-sm text-gray-500">Initial Stock</p>
                 <p className="text-xl font-bold">
-                  {
-                    batchStok.filter((batch) => {
-                      const today = new Date();
-                      const expDate = batch.exp_date
-                        ? new Date(batch.exp_date)
-                        : null;
-                      const diffDays = expDate
-                        ? Math.ceil((expDate - today) / (1000 * 60 * 60 * 24))
-                        : null;
-                      return (
-                        diffDays !== null && diffDays > 0 && diffDays <= 30
-                      );
-                    }).length
-                  }
+                  {batchStok.reduce(
+                    (acc, batch) => acc + (parseInt(batch.initial_stock) || 0),
+                    0
+                  )}{" "}
+                  pcs
                 </p>
               </div>
-              <div className="bg-amber-100 p-2 rounded-full">
-                <Clock className="h-6 w-6 text-amber-500" />
+              <div className="bg-blue-100 p-2 rounded-full">
+                <FileText className="h-6 w-6 text-blue-500" />
               </div>
             </div>
           </div>
@@ -231,11 +276,8 @@ const BatchStok = () => {
                 <p className="text-sm text-gray-500">Out of Stock</p>
                 <p className="text-xl font-bold">
                   {
-                    batchStok.filter(
-                      (batch) =>
-                        parseInt(batch.stock_quantity || 0) +
-                          parseInt(batch.initial_stock || 0) ===
-                        0
+                    batchStok.filter((batch) =>
+                      parseInt(batch.stock_quantity || 0)
                     ).length
                   }
                 </p>
@@ -249,14 +291,14 @@ const BatchStok = () => {
 
         <div className="mb-6">
           {/* Tabs Desktop */}
-          <div className="hidden md:flex md:justify-between items-center mb-4">
-            <div className="relative">
+          <div className="hidden md:flex md:flex-col lg:flex-row md:gap-4 lg:justify-between items-center mb-4">
+            <div className="relative w-full lg:w-64">
               <input
                 type="text"
                 placeholder="Search products..."
                 value={searchTerm}
                 onChange={handleSearchChange}
-                className="w-64 pl-10 pr-4 py-2 border rounded-lg shadow-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                className="w-full pl-10 pr-4 py-2 border rounded-lg shadow-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
               />
               <Search
                 className="absolute left-3 top-2.5 text-gray-400"
@@ -272,44 +314,44 @@ const BatchStok = () => {
               )}
             </div>
 
-            <div className="bg-white rounded-lg p-1 shadow-sm">
-              <div className="flex gap-3">
+            <div className="bg-white rounded-lg p-1 shadow-sm w-full lg:w-auto mt-4 lg:mt-0">
+              <div className="flex justify-center lg:justify-start gap-2">
                 <button
                   onClick={() => handleTabChange("all")}
-                  className={`px-4 py-2 rounded-md whitespace-nowrap ${
+                  className={`px-4 py-2 rounded-md text-sm whitespace-nowrap flex-1 lg:flex-initial ${
                     activeTab === "all"
                       ? "bg-blue-500 text-white"
-                      : "text-blue-900"
+                      : "text-blue-900 hover:bg-gray-50"
                   }`}
                 >
                   All Products
                 </button>
                 <button
                   onClick={() => handleTabChange("expiring")}
-                  className={`px-4 py-2 rounded-md whitespace-nowrap ${
+                  className={`px-4 py-2 rounded-md text-sm whitespace-nowrap flex-1 lg:flex-initial ${
                     activeTab === "expiring"
                       ? "bg-blue-500 text-white"
-                      : "text-blue-900"
+                      : "text-blue-900 hover:bg-gray-50"
                   }`}
                 >
                   Expiring Soon
                 </button>
                 <button
                   onClick={() => handleTabChange("low")}
-                  className={`px-4 py-2 rounded-md whitespace-nowrap ${
+                  className={`px-4 py-2 rounded-md text-sm whitespace-nowrap flex-1 lg:flex-initial ${
                     activeTab === "low"
                       ? "bg-blue-500 text-white"
-                      : "text-blue-900"
+                      : "text-blue-900 hover:bg-gray-50"
                   }`}
                 >
                   Low Stock
                 </button>
                 <button
                   onClick={() => handleTabChange("expired")}
-                  className={`px-4 py-2 rounded-md whitespace-nowrap ${
+                  className={`px-4 py-2 rounded-md text-sm whitespace-nowrap flex-1 lg:flex-initial ${
                     activeTab === "expired"
                       ? "bg-blue-500 text-white"
-                      : "text-blue-900"
+                      : "text-blue-900 hover:bg-gray-50"
                   }`}
                 >
                   Expired
@@ -317,7 +359,7 @@ const BatchStok = () => {
               </div>
             </div>
 
-            <div className="flex items-center gap-3">
+            <div className="flex items-center mt-4 lg:mt-0">
               <select
                 value={limit}
                 onChange={(e) => {
@@ -472,16 +514,7 @@ const BatchStok = () => {
                   </tr>
                 ) : batchStok.length > 0 ? (
                   batchStok.map((batch, index) => {
-                    const stockValue =
-                      parseInt(batch.stock_quantity || 0) +
-                      parseInt(batch.initial_stock || 0);
-                    const stockStatus =
-                      stockValue === 0
-                        ? "bg-red-50 text-red-500"
-                        : stockValue < 10
-                        ? "bg-amber-50 text-amber-500"
-                        : "bg-green-50 text-green-500";
-
+                    const stockStatus = getStockStatus(batch.stock_quantity);
                     const expStatus = getExpirationStatus(batch.exp_date);
 
                     return (
@@ -513,9 +546,9 @@ const BatchStok = () => {
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
                           <span
-                            className={`px-3 py-1 rounded-full text-xs font-medium ${stockStatus}`}
+                            className={`px-3 py-1 rounded-full text-xs font-medium ${stockStatus.color}`}
                           >
-                            {stockValue} pcs
+                            {stockStatus.text}
                           </span>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
@@ -544,8 +577,14 @@ const BatchStok = () => {
                       <div className="flex flex-col items-center space-y-2">
                         <Package className="h-10 w-10 text-gray-400" />
                         <p className="text-gray-500">No batch stock found</p>
-                        <button className="text-sm bg-blue-50 text-blue-600 px-4 py-1 rounded-full mt-2 hover:bg-blue-100">
-                          Add New Product
+                        <button
+                          onClick={handleAddNewOrder}
+                          disabled={isRoleLoading}
+                          className={`text-sm bg-blue-50 text-blue-600 px-4 py-1 rounded-full mt-2 hover:bg-blue-100 ${
+                            isRoleLoading ? "opacity-50 cursor-not-allowed" : ""
+                          }`}
+                        >
+                          Add New Order
                         </button>
                       </div>
                     </td>
@@ -555,14 +594,14 @@ const BatchStok = () => {
             </table>
           </div>
           <div className="hidden md:block">
-                      <Pagination
-                        currentPage={page}
-                        totalPages={totalPages}
-                        onPageChange={setPage}
-                        itemsPerPage={limit}
-                        totalItems={totalItems}
-                      />
-                    </div>
+            <Pagination
+              currentPage={page}
+              totalPages={totalPages}
+              onPageChange={setPage}
+              itemsPerPage={limit}
+              totalItems={totalItems}
+            />
+          </div>
         </div>
 
         {/* Mobile View */}
@@ -577,116 +616,122 @@ const BatchStok = () => {
               No batch stock found
             </div>
           ) : (
-            batchStok.map((batch) => (
-              <div
-                key={batch.batch_id}
-                className="bg-white rounded-xl shadow-lg overflow-hidden transition-all duration-200 hover:shadow-xl"
-              >
+            batchStok.map((batch) => {
+              const stockStatus = getStockStatus(batch.stock_quantity);
+              return (
                 <div
-                  className="flex items-center p-4 space-x-3 cursor-pointer"
-                  onClick={() => toggleRow(batch.batch_id)}
+                  key={batch.batch_id}
+                  className="bg-white rounded-xl shadow-lg overflow-hidden transition-all duration-200 hover:shadow-xl"
                 >
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center justify-between mb-1">
-                      <h3 className="text-xs px-2 py-1 rounded-full bg-blue-100 text-blue-700">
-                        {batch.batch_code}
-                      </h3>
-                      <span className="text-sm font-bold text-emerald-600 ml-2">
-                        Rp {Number(batch.purchase_price).toLocaleString()}
-                      </span>
+                  <div
+                    className="flex items-center p-4 space-x-3 cursor-pointer"
+                    onClick={() => toggleRow(batch.batch_id)}
+                  >
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between mb-1">
+                        <h3 className="text-xs px-2 py-1 rounded-full bg-blue-100 text-blue-700">
+                          {batch.batch_code}
+                        </h3>
+                        <span className="text-sm font-bold text-emerald-600 ml-2">
+                          Rp {Number(batch.purchase_price).toLocaleString()}
+                        </span>
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs px-2 py-1 rounded-full ">
+                          {formatLargeNumber(batch.code_product)}
+                        </span>
+                      </div>
                     </div>
 
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs px-2 py-1 rounded-full ">
-                        {formatLargeNumber(batch.code_product)}
-                      </span>
+                    <div className="flex-shrink-0 text-gray-400">
+                      {expandedRow === batch.batch_id ? (
+                        <ChevronUp className="h-5 w-5" />
+                      ) : (
+                        <ChevronDown className="h-5 w-5" />
+                      )}
                     </div>
                   </div>
 
-                  <div className="flex-shrink-0 text-gray-400">
-                    {expandedRow === batch.batch_id ? (
-                      <ChevronUp className="h-5 w-5" />
-                    ) : (
-                      <ChevronDown className="h-5 w-5" />
-                    )}
-                  </div>
-                </div>
-
-                {expandedRow === batch.batch_id && (
-                  <div className="px-4 pb-4 space-y-3 border-t border-gray-100 bg-gray-50">
-                    <div className="grid grid-cols-2 gap-4 pt-3">
-                      <div className="space-y-1">
-                        <p className="text-xs font-medium text-gray-500 uppercase">
-                          Initial Stock
-                        </p>
-                        <p className="text-sm text-gray-700">
-                          {batch.initial_stock || 0} pcs
-                        </p>
-                      </div>
-
-                      <div className="space-y-1">
-                        <p className="text-xs font-medium text-gray-500 uppercase">
-                          Stock Quantity
-                        </p>
-                        <p className="text-sm text-gray-700">
-                          {batch.stock_quantity || 0} pcs
-                        </p>
-                      </div>
-
-                      <div className="space-y-1">
-                        <p className="text-xs font-medium text-gray-500 uppercase">
-                          Arrival Date
-                        </p>
-                        <p className="text-sm text-gray-700">
-                          {batch.arrival_date
-                            ? new Date(batch.arrival_date).toLocaleDateString()
-                            : "-"}
-                        </p>
-                      </div>
-
-                      <div className="space-y-1">
-                        <p className="text-xs font-medium text-gray-500 uppercase">
-                          Expiration Date
-                        </p>
-                        <p className="text-sm text-gray-700">
-                          {batch.exp_date
-                            ? new Date(batch.exp_date).toLocaleDateString()
-                            : "-"}
-                        </p>
-                      </div>
-
-                      <div className="col-span-2">
+                  {expandedRow === batch.batch_id && (
+                    <div className="px-4 pb-4 space-y-3 border-t border-gray-100 bg-gray-50">
+                      <div className="grid grid-cols-2 gap-4 pt-3">
                         <div className="space-y-1">
                           <p className="text-xs font-medium text-gray-500 uppercase">
-                            Status
+                            Initial Stock
+                          </p>
+                          <p className="text-sm text-gray-700">
+                            {batch.initial_stock || 0} pcs
+                          </p>
+                        </div>
+
+                        <div className="space-y-1">
+                          <p className="text-xs font-medium text-gray-500 uppercase">
+                            Stock Quantity
                           </p>
                           <span
-                            className={`inline-flex px-2 py-1 rounded-full text-sm font-medium ${
-                              getExpirationStatus(batch.exp_date).color
-                            }`}
+                            className={`inline-flex px-2 py-1 rounded-full text-sm font-medium ${stockStatus.color}`}
                           >
-                            {getExpirationStatus(batch.exp_date).text}
+                            {stockStatus.text}
                           </span>
+                        </div>
+
+                        <div className="space-y-1">
+                          <p className="text-xs font-medium text-gray-500 uppercase">
+                            Arrival Date
+                          </p>
+                          <p className="text-sm text-gray-700">
+                            {batch.arrival_date
+                              ? new Date(
+                                  batch.arrival_date
+                                ).toLocaleDateString()
+                              : "-"}
+                          </p>
+                        </div>
+
+                        <div className="space-y-1">
+                          <p className="text-xs font-medium text-gray-500 uppercase">
+                            Expiration Date
+                          </p>
+                          <p className="text-sm text-gray-700">
+                            {batch.exp_date
+                              ? new Date(batch.exp_date).toLocaleDateString()
+                              : "-"}
+                          </p>
+                        </div>
+
+                        <div className="col-span-2">
+                          <div className="space-y-1">
+                            <p className="text-xs font-medium text-gray-500 uppercase">
+                              Status
+                            </p>
+                            <span
+                              className={`inline-flex px-2 py-1 rounded-full text-sm font-medium ${
+                                getExpirationStatus(batch.exp_date).color
+                              }`}
+                            >
+                              {getExpirationStatus(batch.exp_date).text}
+                            </span>
+                          </div>
                         </div>
                       </div>
                     </div>
-                  </div>
-                )}
-              </div>
-            ))
+                  )}
+                </div>
+              );
+            })
           )}
         </div>
 
-        
         <div className="mt-4 md:hidden">
-              <Pagination
-                currentPage={page}
-                totalPages={totalPages}
-                onPageChange={setPage}
-                itemsPerPage={limit}
-                totalItems={totalItems}
-              />
-            </div>
+          <Pagination
+            currentPage={page}
+            totalPages={totalPages}
+            onPageChange={setPage}
+            itemsPerPage={limit}
+            totalItems={totalItems}
+          />
+        </div>
       </div>
     </div>
   );

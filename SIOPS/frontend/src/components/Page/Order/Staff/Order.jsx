@@ -281,16 +281,16 @@ const Order = () => {
     if (selectedProduct) {
       try {
         const batchResponse = await api.get(
-          `/batch/product/${selectedProduct.code_product}`
+          `/orders/${selectedProduct.code_product}/batches`
         );
-        const batches = batchResponse.data.result || [];
+        const batches = batchResponse.data || [];
 
         handleDetailChange(index, "code_product", selectedProduct.code_product);
         handleDetailChange(index, "name_product", selectedProduct.name_product);
         handleDetailChange(
           index,
           "ordered_price",
-          selectedProduct.sell_price || ""
+          batches.length > 0 ? batches[0].purchase_price : ""
         );
         handleDetailChange(index, "available_batches", batches);
       } catch (error) {
@@ -764,7 +764,7 @@ const Order = () => {
                                   padding: "1px",
                                 }),
                               }}
-                              />
+                            />
 
                             <h4 className="font-medium text-gray-700 mb-2 flex items-center">
                               <Calendar size={14} className="mr-2" /> Filter by

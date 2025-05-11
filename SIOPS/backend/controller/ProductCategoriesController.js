@@ -146,7 +146,7 @@ export const importProductsFromCSV = async (req, res) => {
           min_stock: Math.floor(Math.random() * 10) + 1,
           purchase_price: parseFloat((row.HBeli || '0').toString().replace(',', '.')) || 0.0,
           initial_stock: parseInt(row.StAwal || '0') || 0,
-          stock_quantity: parseInt(row.StMasuk || '0') || 0,
+          stock_quantity: parseInt(row.StMasuk || '0') + parseInt(row.StAwal || '0'),
         };
 
         // Validasi field wajib
@@ -621,21 +621,26 @@ export const getProducts = async (req, res) => {
           [Op.in]: productCodes
         }
       },
-      attributes: ['code_product', 'stock_quantity', 'initial_stock']
+      attributes: ['code_product', 'initial_stock', 'stock_quantity']
     });
 
     // Calculate total stock for each product
     const stockMap = {};
+    const initialStockMap = {};
     batchStocks.forEach(batch => {
-      if (!stockMap[batch.code_product]) {
-        stockMap[batch.code_product] = 0;
+      const codeProduct = batch.code_product;
+      if (!stockMap[codeProduct]) {
+        stockMap[codeProduct] = 0;
+        initialStockMap[codeProduct] = 0;
       }
-      stockMap[batch.code_product] += parseInt(batch.stock_quantity || 0) + parseInt(batch.initial_stock || 0);
+      // Tambahkan stock_quantity ke total stock
+      stockMap[codeProduct] += parseInt(batch.stock_quantity || 0);
     });
 
     // Add total stock to products
     const productsWithStock = products.map(product => {
       const plainProduct = product.get({ plain: true });
+      // Gunakan total dari stock_quantity saja
       const totalStock = stockMap[plainProduct.code_product] || 0;
       const minStock = plainProduct.min_stock || 0;
 

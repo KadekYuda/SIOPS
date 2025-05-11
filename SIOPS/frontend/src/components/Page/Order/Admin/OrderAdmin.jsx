@@ -63,6 +63,9 @@ const OrderAdmin = () => {
     ],
   });
   const [filterMenuOpen, setFilterMenuOpen] = useState(false);
+  const [showExpDateModal, setShowExpDateModal] = useState(false);
+  const [processingOrderId, setProcessingOrderId] = useState(null);
+  const [expDateInputs, setExpDateInputs] = useState({});
 
   const checkUserRole = useCallback(async () => {
     try {
@@ -242,36 +245,78 @@ const OrderAdmin = () => {
   const handleReceive = async (orderId) => {
     try {
       if (!isAdmin) {
-        showAlert(
-          "error",
-          "Access Denied",
-          "Only administrators can mark orders as received"
-        );
+        showAlert("error", "Access Denied", "Only admin can receive orders");
         return;
       }
+
       const orderToUpdate = orders.find((order) => order.order_id === orderId);
       if (!orderToUpdate || orderToUpdate.order_status !== "approved") {
         showAlert(
           "error",
-          "Status update failed",
-          "Only approved orders can be marked as received"
+          "Invalid Operation",
+          "Only approved orders can be received"
         );
         return;
       }
+
+      // First mark as received
       await api.patch(`/orders/${orderId}/status`, {
         order_status: "received",
       });
-      showAlert(
-        "success",
-        "Order Received",
-        "Order has been marked as received and stock has been updated"
-      );
-      fetchOrders();
-      setShowOrderDetail(false);
+
+      // Then get order details and show exp date modal
+      const orderDetailsResponse = await api.get(`/orders/${orderId}/details`);
+      const orderDetails = orderDetailsResponse.data.result;
+      setProcessingOrderId(orderId);
+
+      // Initialize exp date inputs state
+      const initialExpDateInputs = {};
+      orderDetails.forEach((detail) => {
+        initialExpDateInputs[detail.order_detail_id] = {
+          hasExpDate: false,
+          expDate: "",
+        };
+      });
+      setExpDateInputs(initialExpDateInputs);
+
+      setOrderDetails(orderDetails);
+      setShowExpDateModal(true);
     } catch (error) {
       showAlert(
         "error",
         "Failed to update status",
+        error.response?.data?.msg || "Network error"
+      );
+    }
+  };
+
+  const handleExpDateSubmit = async () => {
+    try {
+      const expiration_dates = {};
+      Object.entries(expDateInputs).forEach(([detailId, input]) => {
+        if (input.hasExpDate && input.expDate) {
+          expiration_dates[detailId] = input.expDate;
+        }
+      });
+
+      // Create batches with expiration dates
+      await api.post(`/orders/${processingOrderId}/create-batches`, {
+        expiration_dates,
+      });
+
+      showAlert(
+        "success",
+        "Order Processed",
+        "Order has been received and batches created successfully"
+      );
+      setShowExpDateModal(false);
+      setProcessingOrderId(null);
+      setExpDateInputs({});
+      fetchOrders();
+    } catch (error) {
+      showAlert(
+        "error",
+        "Failed to create batches",
         error.response?.data?.msg || "Network error"
       );
     }
@@ -463,12 +508,26 @@ const OrderAdmin = () => {
     const selectedProduct = products.find(
       (p) => p.code_product === selectedOption.value
     );
-    handleDetailChange(index, "code_product", selectedOption.value);
-    handleDetailChange(
-      index,
-      "ordered_price",
-      selectedProduct?.sell_price || ""
-    );
+
+    // Fetch batch information to get purchase_price
+    api
+      .get(`/orders/${selectedOption.value}/batches`)
+      .then((response) => {
+        const batches = response.data;
+        handleDetailChange(index, "code_product", selectedOption.value);
+        // Use purchase_price from the first batch if available
+        if (batches && batches.length > 0) {
+          handleDetailChange(index, "ordered_price", batches[0].purchase_price);
+        }
+      })
+      .catch((error) => {
+        console.error("Error fetching batch data:", error);
+        showAlert(
+          "error",
+          "Failed to fetch batch data",
+          error.response?.data?.msg || "Network error"
+        );
+      });
   };
 
   const handleCreateOrder = async (e) => {
@@ -1353,6 +1412,118 @@ const OrderAdmin = () => {
                       </button>
                     </div>
                   </form>
+                </motion.div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          {/* Expiration Date Modal */}
+          <AnimatePresence>
+            {showExpDateModal && (
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50"
+              >
+                <motion.div
+                  initial={{ scale: 0.9 }}
+                  animate={{ scale: 1 }}
+                  exit={{ scale: 0.9 }}
+                  className="bg-white rounded-lg p-6 max-w-2xl w-full"
+                >
+                  <div className="flex justify-between items-center mb-6">
+                    <h3 className="text-xl font-bold">
+                      Set Product Expiration Dates
+                    </h3>
+                    <button
+                      onClick={() => setShowExpDateModal(false)}
+                      className="text-gray-400 hover:text-gray-500"
+                    >
+                      <X size={20} />
+                    </button>
+                  </div>
+
+                  <div className="space-y-4 max-h-[60vh] overflow-y-auto">
+                    {orderDetails.map((detail) => (
+                      <div
+                        key={detail.order_detail_id}
+                        className="p-4 border rounded-lg bg-gray-50"
+                      >
+                        <div className="flex items-center justify-between mb-3">
+                          <h4 className="font-medium">{detail.product_name}</h4>
+                          <span className="text-sm text-gray-500">
+                            Quantity: {detail.quantity}
+                          </span>
+                        </div>
+
+                        <div className="flex items-center gap-4">
+                          <label className="flex items-center space-x-2">
+                            <input
+                              type="checkbox"
+                              checked={
+                                expDateInputs[detail.order_detail_id]
+                                  ?.hasExpDate
+                              }
+                              onChange={(e) => {
+                                setExpDateInputs((prev) => ({
+                                  ...prev,
+                                  [detail.order_detail_id]: {
+                                    ...prev[detail.order_detail_id],
+                                    hasExpDate: e.target.checked,
+                                  },
+                                }));
+                              }}
+                              className="rounded border-gray-300 text-indigo-600 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50"
+                            />
+                            <span className="text-sm text-gray-700">
+                              Has expiration date
+                            </span>
+                          </label>
+
+                          {expDateInputs[detail.order_detail_id]
+                            ?.hasExpDate && (
+                            <input
+                              type="date"
+                              value={
+                                expDateInputs[detail.order_detail_id]
+                                  ?.expDate || ""
+                              }
+                              onChange={(e) => {
+                                setExpDateInputs((prev) => ({
+                                  ...prev,
+                                  [detail.order_detail_id]: {
+                                    ...prev[detail.order_detail_id],
+                                    expDate: e.target.value,
+                                  },
+                                }));
+                              }}
+                              className="flex-1 rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                            />
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="mt-6 flex justify-end space-x-3">
+                    <button
+                      onClick={() => {
+                        setShowExpDateModal(false);
+                        setProcessingOrderId(null);
+                        setExpDateInputs({});
+                      }}
+                      className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={handleExpDateSubmit}
+                      className="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700"
+                    >
+                      Create Batches
+                    </button>
+                  </div>
                 </motion.div>
               </motion.div>
             )}

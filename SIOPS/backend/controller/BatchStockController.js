@@ -10,10 +10,8 @@ export const getBatchStok = async (req, res) => {
         limit = parseInt(limit) || 2500; 
         const offset = page * limit;
 
-        // Kondisi pencarian
         const whereCondition = {};
         
-        // Jika ada pencarian
         if (search) {
             whereCondition[Op.or] = [
                 { batch_code: { [Op.like]: `%${search}%` } },
@@ -22,7 +20,6 @@ export const getBatchStok = async (req, res) => {
             ];
         }
 
-        // Get total count first
         const totalCount = await BatchStok.count({
             where: whereCondition,
             include: [{
@@ -33,7 +30,6 @@ export const getBatchStok = async (req, res) => {
             distinct: true
         });
 
-        // Get paginated batches
         const rows = await BatchStok.findAll({
             where: whereCondition,
             include: [{
@@ -42,36 +38,40 @@ export const getBatchStok = async (req, res) => {
                 required: false
             }],
             order: [
-                [{ model: Products }, 'name_product', 'ASC'], // Primary sort by product name
-                ['exp_date', 'ASC'], // Secondary sort by expiration date
-                ['batch_code', 'ASC'] // Tertiary sort by batch code
+                [{ model: Products }, 'name_product', 'ASC'],
+                ['exp_date', 'ASC'],
+                ['batch_code', 'ASC']
             ],
             limit: limit,
             offset: offset
         });
 
-        // Get all unique product codes from the results
         const productCodes = [...new Set(rows.map(item => item.code_product))];
 
-        // Calculate total stock for each product
+        // Menghitung total stock untuk setiap produk (hanya stock_quantity)
         const productTotalStocks = {};
+        const productInitialStocks = {};
+        
         for (const code of productCodes) {
             const allBatches = await BatchStok.findAll({
                 where: { code_product: code }
             });
             
-            const totalStock = allBatches.reduce((sum, batch) => {
-                return sum + (parseInt(batch.initial_stock) || 0) + (parseInt(batch.stock_quantity) || 0);
-            }, 0);
+            const totalStock = allBatches.reduce((sum, batch) => 
+                sum + (parseInt(batch.stock_quantity) || 0), 0
+            );
+            
+            const totalInitial = allBatches.reduce((sum, batch) => 
+                sum + (parseInt(batch.initial_stock) || 0), 0
+            );
             
             productTotalStocks[code] = totalStock;
+            productInitialStocks[code] = totalInitial;
         }
 
-        // Format response and add total_stock
         const formattedResponse = rows.map(item => {
             const plainItem = item.get({ plain: true });
             
-            // Format code_product as string
             if (plainItem.Product && plainItem.Product.code_product) {
                 plainItem.Product.code_product = String(plainItem.Product.code_product);
             }
@@ -79,11 +79,13 @@ export const getBatchStok = async (req, res) => {
                 plainItem.code_product = String(plainItem.code_product);
             }
 
-            // Add total_stock from all batches for this product
+            // Pisahkan total initial_stock dan stock_quantity
             plainItem.total_stock = productTotalStocks[plainItem.code_product] || 0;
+            plainItem.total_initial = productInitialStocks[plainItem.code_product] || 0;
             
-            // Calculate batch specific total
-            plainItem.batch_total = (parseInt(plainItem.initial_stock) || 0) + (parseInt(plainItem.stock_quantity) || 0);
+            // Batch specific totals (terpisah)
+            plainItem.batch_stock = parseInt(plainItem.stock_quantity) || 0;
+            plainItem.batch_initial = parseInt(plainItem.initial_stock) || 0;
 
             return plainItem;
         });

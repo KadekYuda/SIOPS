@@ -206,7 +206,7 @@ export const updateOrderStatus = async (req, res) => {
     const t = await db.transaction();
     
     try {
-        const { order_status, expiration_dates } = req.body;
+        const { order_status } = req.body;
         const orderId = req.params.id;
         
         // Check if user is admin for status updates
@@ -217,8 +217,7 @@ export const updateOrderStatus = async (req, res) => {
 
         const order = await Order.findByPk(orderId, {
             include: [{
-                model: OrderDetail,
-                include: [{ model: Product }]
+                model: OrderDetail
             }],
             transaction: t
         });
@@ -228,45 +227,10 @@ export const updateOrderStatus = async (req, res) => {
             return res.status(404).json({ msg: "Order not found" });
         }
 
-        // Handle received status - create batches and update stock quantities
-        if (order_status === 'received' && order.order_status === 'approved') {
-            for (const detail of order.OrderDetails) {
-                const product = await Product.findByPk(detail.code_product, { transaction: t });
-                if (!product) {
-                    await t.rollback();
-                    return res.status(400).json({ 
-                        msg: `Product not found for order detail ${detail.order_detail_id}` 
-                    });
-                }
-
-                // Get existing batches for batch code generation
-                const existingBatches = await BatchStock.findAll({
-                    where: { code_product: detail.code_product },
-                    transaction: t
-                });
-
-                const batchNumber = existingBatches.length + 1;
-                const batchCode = `${product.name_product.substring(0, 15)}-${String(batchNumber).padStart(3, '0')}`;
-                const currentDate = new Date();
-
-                // Create new batch with the specified expiration date
-                const newBatch = await BatchStock.create({
-                    code_product: detail.code_product,
-                    batch_code: batchCode,
-                    purchase_price: detail.ordered_price,
-                    initial_stock: parseInt(detail.quantity),
-                    stock_quantity: parseInt(detail.quantity),
-                    arrival_date: currentDate,
-                    exp_date: expiration_dates?.[detail.order_detail_id] ? new Date(expiration_dates[detail.order_detail_id]) : null,
-                    created_at: currentDate,
-                    updated_at: currentDate
-                }, { transaction: t });
-
-                // Update the order detail with the new batch ID
-                await detail.update({
-                    batch_id: newBatch.batch_id
-                }, { transaction: t });
-            }
+        // Check valid status transitions
+        if (order_status === 'received' && order.order_status !== 'approved') {
+            await t.rollback();
+            return res.status(400).json({ msg: "Order must be approved before being received" });
         }
         
         // Update order status
@@ -282,6 +246,145 @@ export const updateOrderStatus = async (req, res) => {
                 ...order.toJSON(),
                 order_status
             }
+        });
+    } catch (error) {
+        await t.rollback();
+        res.status(400).json({ msg: error.message });
+    }
+};
+
+// New endpoint to create batches for received order
+export const createOrderBatches = async (req, res) => {
+    const t = await db.transaction();
+    
+    try {
+        const { expiration_dates } = req.body;
+        const orderId = req.params.id;
+
+        // Get order with its details
+        const orderDetails = await OrderDetail.findAll({
+            where: { order_id: orderId },
+            include: [{ 
+                model: Product,
+                attributes: ['code_product', 'name_product']
+            }],
+            transaction: t
+        });
+
+        if (!orderDetails || orderDetails.length === 0) {
+            await t.rollback();
+            return res.status(404).json({ msg: "Order details not found" });
+        }
+
+        // Get the order to check status
+        const order = await Order.findByPk(orderId, { transaction: t });
+        if (!order) {
+            await t.rollback();
+            return res.status(404).json({ msg: "Order not found" });
+        }
+
+        if (order.order_status !== 'received') {
+            await t.rollback();
+            return res.status(400).json({ msg: "Order must be in received status" });
+        }
+
+        // Create or update batches for each order detail
+        for (const detail of orderDetails) {
+            const product = await Product.findByPk(detail.code_product, {
+                attributes: ['code_product', 'name_product'],
+                transaction: t
+            });
+
+            if (!product) {
+                await t.rollback();
+                return res.status(404).json({ msg: `Product with code ${detail.code_product} not found` });
+            }
+
+            // Check if there's an existing batch with same purchase price and valid expiry
+            const existingBatchWithPrice = await BatchStock.findOne({
+                where: { 
+                    code_product: detail.code_product,
+                    purchase_price: detail.ordered_price,
+                    [db.Sequelize.Op.or]: [
+                        {
+                            exp_date: {
+                                [db.Sequelize.Op.gt]: new Date()
+                            }
+                        },
+                        {
+                            exp_date: null
+                        }
+                    ]
+                },
+                transaction: t
+            });
+
+            const currentDate = new Date();
+            let batchToUse;
+
+            if (existingBatchWithPrice) {
+                // Jika batch sudah ada dan masih valid
+                const updateData = {
+                    initial_stock: existingBatchWithPrice.initial_stock + parseInt(detail.quantity),
+                    updated_at: currentDate
+                };
+
+                // Update exp_date hanya jika batch belum punya exp_date dan ada exp_date baru
+                if (!existingBatchWithPrice.exp_date && expiration_dates[detail.order_detail_id]) {
+                    updateData.exp_date = new Date(expiration_dates[detail.order_detail_id]);
+                }
+
+                await existingBatchWithPrice.update(updateData, { transaction: t });
+                batchToUse = existingBatchWithPrice;
+            } else {
+                // Buat batch baru - gunakan initial_stock untuk order pertama
+                const allBatches = await BatchStock.findAll({
+                    where: { code_product: detail.code_product },
+                    transaction: t
+                });
+
+                const batchNumber = allBatches.length + 1;
+                const batchCode = `${product.name_product}-${String(batchNumber).padStart(3, '0')}`;
+
+                const existingBatchesWithSamePrice = allBatches.filter(b => 
+                    parseFloat(b.purchase_price) === parseFloat(detail.ordered_price)
+                );
+
+                if (existingBatchesWithSamePrice.length > 0) {
+                    // Jika ada batch dengan harga yang sama, tambahkan ke stock_quantity
+                    const batchToUpdate = existingBatchesWithSamePrice[0];
+                    await batchToUpdate.update({
+                        stock_quantity: batchToUpdate.stock_quantity + parseInt(detail.quantity),
+                        updated_at: currentDate
+                    }, { transaction: t });
+                    batchToUse = batchToUpdate;
+                } else {
+                    // Jika batch baru dengan harga berbeda
+                    const quantity = parseInt(detail.quantity);
+                    batchToUse = await BatchStock.create({
+                        code_product: detail.code_product,
+                        batch_code: batchCode,
+                        purchase_price: detail.ordered_price,
+                        initial_stock: quantity,
+                        stock_quantity: quantity, // Set sama dengan initial_stock
+                        arrival_date: currentDate,
+                        exp_date: expiration_dates[detail.order_detail_id] ? new Date(expiration_dates[detail.order_detail_id]) : null,
+                        created_at: currentDate,
+                        updated_at: currentDate
+                    }, { transaction: t });
+                }
+            }
+
+            // Update the order detail with the batch ID
+            await detail.update({
+                batch_id: batchToUse.batch_id
+            }, { transaction: t });
+        }
+        
+        await t.commit();
+        res.status(200).json({ 
+            msg: "Batches created successfully",
+            order_id: orderId
         });
     } catch (error) {
         await t.rollback();
@@ -430,7 +533,7 @@ export const getOrderDetailsByOrderId = async (req, res) => {
 // Get available batches by product code
 export const getAvailableBatchesByProductCode = async (req, res) => {
     try {
-        const productCode = req.params.code_product; // Tetap menggunakan productId di route untuk kompatibilitas
+        const productCode = req.params.code_product;
         
         // Pastikan code_product valid
         const product = await Product.findByPk(productCode);
@@ -438,16 +541,13 @@ export const getAvailableBatchesByProductCode = async (req, res) => {
             return res.status(404).json({ msg: "Product not found" });
         }
         
-        // Dapatkan semua batch yang tersedia (stock > 0) untuk product ini
+        // Dapatkan semua batch yang tersedia untuk product ini
         const batches = await BatchStock.findAll({
             where: {
-                code_product: productCode, // Menggunakan code_product bukan product_id
-                stock_quantity: {
-                    [db.Sequelize.Op.gte]: 0  // stock harus lebih dari 0
-                }
+                code_product: productCode
             },
             attributes: ['batch_id', 'batch_code', 'stock_quantity', 'purchase_price', 'exp_date'],
-            order: [['exp_date', 'ASC']]  // Sort by expiration date ascending
+            order: [['exp_date', 'ASC']]
         });
         
         res.status(200).json(batches);

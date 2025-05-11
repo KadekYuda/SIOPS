@@ -8,7 +8,9 @@ import DashboardLayout from "../components/Page/Login/DashboardLayout";
 import UserProfile from "../components/Page/Profile/UserProfile";
 import Product from "../components/Page/Product/Product";
 import BatchStok from "../components/Page/Product/BatchStok";
-import OrderStock from "../components/Page/Order/OrderStock";
+import Sales from "../components/Page/Sales/Sales";
+import SalesDetail from "../components/Page/Sales/SalesDetail";
+
 import Order from "../components/Page/Order/Staff/Order";
 import OrderAdmin from "../components/Page/Order/Admin/OrderAdmin";
 import api from "../service/api";
@@ -156,15 +158,6 @@ function AppRoutes() {
         />
 
         <Route
-          path="/1"
-          element={
-            <ProtectedRoute allowedRoles={["staff", "admin"]}>
-              <OrderStock />
-            </ProtectedRoute>
-          }
-        />
-
-        <Route
           path="/batchstock"
           element={
             <ProtectedRoute allowedRoles={["staff", "admin"]}>
@@ -191,7 +184,24 @@ function AppRoutes() {
           }
         />
 
-       
+        <Route
+          path="/sales"
+          element={
+            <ProtectedRoute allowedRoles={["staff", "admin"]}>
+              <Sales />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/salesdetail/:id"
+          element={
+            <ProtectedRoute allowedRoles={["staff", "admin"]}>
+              <SalesDetail />
+            </ProtectedRoute>
+          }
+        />
+
         {/* Default route - redirect based on role */}
         <Route
           index

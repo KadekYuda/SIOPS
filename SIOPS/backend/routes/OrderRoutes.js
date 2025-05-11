@@ -8,7 +8,8 @@ import {
     deleteOrder,
     getOrderDetailsByOrderId,
     getAvailableBatchesByProductCode,
-    updateOrderItem
+    updateOrderItem,
+    createOrderBatches
 } from '../controller/OrderController.js';
 import { authenticateToken } from '../auth/authMiddleware.js';
 
@@ -27,5 +28,6 @@ router.patch('/:id/status', authenticateToken, updateOrderStatus);
 router.delete('/:id', authenticateToken, deleteOrder);
 router.get('/:code_product/batches', authenticateToken,  getAvailableBatchesByProductCode);
 router.put('/:id/details/:detailId', authenticateToken, updateOrderItem);
+router.post('/:id/create-batches', authenticateToken, createOrderBatches);
 
 export default router;
