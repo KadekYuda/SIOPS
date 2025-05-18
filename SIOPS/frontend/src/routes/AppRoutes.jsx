@@ -10,10 +10,11 @@ import Product from "../components/Page/Product/Product";
 import BatchStok from "../components/Page/Product/BatchStok";
 import Sales from "../components/Page/Sales/Sales";
 import SalesDetail from "../components/Page/Sales/SalesDetail";
-
+import BatchStoks from "../components/Page/Product/Batchstocks";
 import Order from "../components/Page/Order/Staff/Order";
 import OrderAdmin from "../components/Page/Order/Admin/OrderAdmin";
 import api from "../service/api";
+import LoadingComponent from "../components/LoadingComponent";
 
 function AppRoutes() {
   const [user, setUser] = useState(null);
@@ -57,7 +58,7 @@ function AppRoutes() {
   // Protected Route component
   const ProtectedRoute = ({ children, allowedRoles = [] }) => {
     if (loading) {
-      return <div>Loading...</div>;
+      return <LoadingComponent />;
     }
 
     if (!isAuthenticated()) {
@@ -75,18 +76,18 @@ function AppRoutes() {
 
     return children;
   };
-
   // Public Route component (accessible only when not authenticated)
   const PublicRoute = ({ children }) => {
     if (loading) {
-      return <div>Loading...</div>;
+      return <LoadingComponent />;
     }
 
+    // Always check authentication status and role
     if (isAuthenticated()) {
-      const redirectPath =
-        getUserRole() === "admin" ? "/dashboardAdmin" : "/dashboard";
-
-      return <Navigate to={redirectPath} replace />;
+      const role = getUserRole();
+      const redirectPath = role === "admin" ? "/dashboardAdmin" : "/dashboard";
+      // Force redirect if user is already authenticated
+      return <Navigate to={redirectPath} replace state={{ from: location }} />;
     }
 
     return children;
@@ -162,6 +163,15 @@ function AppRoutes() {
           element={
             <ProtectedRoute allowedRoles={["staff", "admin"]}>
               <BatchStok />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/batchstocks"
+          element={
+            <ProtectedRoute allowedRoles={["staff", "admin"]}>
+              <BatchStoks />
             </ProtectedRoute>
           }
         />

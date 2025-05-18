@@ -320,14 +320,18 @@ export const createOrderBatches = async (req, res) => {
             });
 
             const currentDate = new Date();
-            let batchToUse;
-
-            if (existingBatchWithPrice) {
-                // Jika batch sudah ada dan masih valid
+            let batchToUse;            if (existingBatchWithPrice) {
+              
                 const updateData = {
-                    initial_stock: existingBatchWithPrice.initial_stock + parseInt(detail.quantity),
                     updated_at: currentDate
                 };
+
+            
+                if (existingBatchWithPrice.initial_stock === 0) {
+                    updateData.initial_stock = parseInt(detail.quantity);
+                } else {
+                    updateData.stock_quantity = (existingBatchWithPrice.stock_quantity || 0) + parseInt(detail.quantity);
+                }
 
                 // Update exp_date hanya jika batch belum punya exp_date dan ada exp_date baru
                 if (!existingBatchWithPrice.exp_date && expiration_dates[detail.order_detail_id]) {
@@ -337,7 +341,7 @@ export const createOrderBatches = async (req, res) => {
                 await existingBatchWithPrice.update(updateData, { transaction: t });
                 batchToUse = existingBatchWithPrice;
             } else {
-                // Buat batch baru - gunakan initial_stock untuk order pertama
+             
                 const allBatches = await BatchStock.findAll({
                     where: { code_product: detail.code_product },
                     transaction: t
@@ -351,22 +355,21 @@ export const createOrderBatches = async (req, res) => {
                 );
 
                 if (existingBatchesWithSamePrice.length > 0) {
-                    // Jika ada batch dengan harga yang sama, tambahkan ke stock_quantity
+                   
                     const batchToUpdate = existingBatchesWithSamePrice[0];
                     await batchToUpdate.update({
                         stock_quantity: batchToUpdate.stock_quantity + parseInt(detail.quantity),
                         updated_at: currentDate
                     }, { transaction: t });
                     batchToUse = batchToUpdate;
-                } else {
-                    // Jika batch baru dengan harga berbeda
+                } else {                    
                     const quantity = parseInt(detail.quantity);
                     batchToUse = await BatchStock.create({
                         code_product: detail.code_product,
                         batch_code: batchCode,
                         purchase_price: detail.ordered_price,
                         initial_stock: quantity,
-                        stock_quantity: quantity, // Set sama dengan initial_stock
+                        stock_quantity: 0, 
                         arrival_date: currentDate,
                         exp_date: expiration_dates[detail.order_detail_id] ? new Date(expiration_dates[detail.order_detail_id]) : null,
                         created_at: currentDate,

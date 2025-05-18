@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { User, Mail, Phone, Lock, Edit, Save, X } from "lucide-react";
 import api from "../../../service/api";
+import LoadingComponent from "../../LoadingComponent";
 
 const UserProfile = () => {
   const [userData, setUserData] = useState(null);
@@ -19,16 +20,16 @@ const UserProfile = () => {
         // Get complete profile data in a single call
         const response = await api.get("/users/profile");
         const userData = response.data.user ?? response.data;
-        
+
         console.log("Complete profile data:", userData);
-        
+
         setUserData({
           user_id: userData.user_id || "",
           name: userData.name || "No name",
           email: userData.email || "No email",
           role: userData.role || "No role",
           phone_number: userData.phone_number || "No phone",
-          status: userData.status || "active"
+          status: userData.status || "active",
         });
 
         setFormData({
@@ -41,7 +42,7 @@ const UserProfile = () => {
         console.error("Error fetching user profile:", error);
       }
     };
-  
+
     fetchUserProfile();
   }, []);
 
@@ -57,9 +58,7 @@ const UserProfile = () => {
   const handleUpdateProfile = async (e) => {
     e.preventDefault();
     try {
-      const response = await api.put(`/users/${userData.user_id}`,
-        formData,
-      );
+      const response = await api.put(`/users/${userData.user_id}`, formData);
 
       const updatedUser = response.data.user;
 
@@ -79,11 +78,7 @@ const UserProfile = () => {
   };
 
   if (!userData) {
-    return (
-      <div className="flex justify-center items-center h-full">
-        <p className="text-gray-500">Loading...</p>
-      </div>
-    );
+    return <LoadingComponent />;
   }
 
   return (
@@ -196,41 +191,43 @@ const UserProfile = () => {
                 </motion.button>
               </div>
             </form>
-          ) :(
+          ) : (
             <div className="grid grid-cols-2 gap-6">
-            <div className="flex items-center space-x-4 bg-gray-50 p-4 rounded-lg">
-              <User className="text-blue-500" size={24} />
-              <div>
-                <p className="text-sm text-gray-500">Name</p>
-                <p className="text-base font-semibold">{userData.name}</p>
+              <div className="flex items-center space-x-4 bg-gray-50 p-4 rounded-lg">
+                <User className="text-blue-500" size={24} />
+                <div>
+                  <p className="text-sm text-gray-500">Name</p>
+                  <p className="text-base font-semibold">{userData.name}</p>
+                </div>
               </div>
-            </div>
 
-            <div className="flex items-center space-x-4 bg-gray-50 p-4 rounded-lg">
-              <Mail className="text-green-500" size={24} />
-              <div>
-                <p className="text-sm text-gray-500">Email</p>
-                <p className="text-base font-semibold">{userData.email}</p>
+              <div className="flex items-center space-x-4 bg-gray-50 p-4 rounded-lg">
+                <Mail className="text-green-500" size={24} />
+                <div>
+                  <p className="text-sm text-gray-500">Email</p>
+                  <p className="text-base font-semibold">{userData.email}</p>
+                </div>
               </div>
-            </div>
 
-            <div className="flex items-center space-x-4 bg-gray-50 p-4 rounded-lg">
-              <Phone className="text-purple-500" size={24} />
-              <div>
-                <p className="text-sm text-gray-500">Phone Number</p>
-                <p className="text-base font-semibold">{userData.phone_number}</p>
+              <div className="flex items-center space-x-4 bg-gray-50 p-4 rounded-lg">
+                <Phone className="text-purple-500" size={24} />
+                <div>
+                  <p className="text-sm text-gray-500">Phone Number</p>
+                  <p className="text-base font-semibold">
+                    {userData.phone_number}
+                  </p>
+                </div>
               </div>
-            </div>
 
-            <div className="flex items-center space-x-4 bg-gray-50 p-4 rounded-lg">
-              <Lock className="text-red-500" size={24} />
-              <div>
-                <p className="text-sm text-gray-500">Role</p>
-                <p className="text-base font-semibold">{userData.role}</p>
+              <div className="flex items-center space-x-4 bg-gray-50 p-4 rounded-lg">
+                <Lock className="text-red-500" size={24} />
+                <div>
+                  <p className="text-sm text-gray-500">Role</p>
+                  <p className="text-base font-semibold">{userData.role}</p>
+                </div>
               </div>
             </div>
-          </div>
-        )}
+          )}
         </div>
       </div>
     </div>

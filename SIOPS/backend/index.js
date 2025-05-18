@@ -1,7 +1,25 @@
 import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
-import db, { initDB } from "./config/Database.js";
+import { fileURLToPath } from 'url';
+import { dirname, join } from 'path';
+import * as fs from 'fs';
+
+// Get directory name
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+
+// Log directory contents
+console.log('Current directory:', process.cwd());
+console.log('Directory contents:', fs.readdirSync(process.cwd()));
+console.log('Config directory contents:', fs.readdirSync(join(process.cwd(), 'config')));
+
+// Use absolute path for imports
+const dbPath = join(__dirname, 'config', 'database.js');
+console.log('Database path:', dbPath);
+console.log('Database file exists:', fs.existsSync(dbPath));
+
+const { default: database, initDB } = await import(`file://${dbPath}`);
 import { initializeDatabase } from "./models/index.js";
 import UserRoute from "./routes/UserRoute.js";
 import OrderRoute from "./routes/OrderRoutes.js";
@@ -18,11 +36,32 @@ const app = express();
 
 // Middleware
 app.use(cors({
-    origin: ['http://localhost:3000', 'http://localhost:5000'],
+    origin: function(origin, callback) {
+        const allowedOrigins = [
+            'http://localhost:3000', 
+            'http://localhost:5000',
+            'https://simsop-frontend.vercel.app',
+            'https://simsop.vercel.app',
+            'https://siops-production.up.railway.app'
+        ];
+        // Allow requests with no origin (like mobile apps or curl requests)
+        if (!origin) return callback(null, true);
+        if (allowedOrigins.indexOf(origin) !== -1) {
+            callback(null, origin);
+        } else {
+            callback(new Error('Not allowed by CORS'));
+        }
+    },
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization']
+    allowedHeaders: ['Content-Type', 'Authorization', 'Origin', 'X-Requested-With', 'Accept'],
+    exposedHeaders: ['Set-Cookie'],
+    preflightContinue: false,
+    optionsSuccessStatus: 204
 }));
+
+// Handle OPTIONS preflight requests
+app.options('*', cors());
 
 // Body parser middleware
 app.use(express.json());
@@ -62,16 +101,12 @@ try {
 }
 
 // Start the application
-(async () => {
-    try {
-        // Initialize database first
-        await initDB();
-        
-        // Test database connection
-        await db.authenticate();
+(async () => {    try {        // Test database connection
+        await database.authenticate();
         console.log('Database connected...');
 
-        // Initialize models and update tables
+        // Initialize database and relationships
+        await initDB();
         await initializeDatabase();
         
         // Initialize admin user

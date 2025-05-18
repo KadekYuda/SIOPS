@@ -12,14 +12,18 @@ import {
   Clock,
   Calendar,
   RefreshCw,
-  ArrowLeft,
   Inbox,
   DollarSign,
   Tag,
+  Package2,
+  ChevronDown,
+  ChevronUp,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import api from "../../../../service/api";
 import OrderDetails from "../OrderDetails";
+import OrderCharts from "../Admin/OrderCharts";
+import LoadingComponent from "../../../../components/LoadingComponent";
 
 const Order = () => {
   const [orders, setOrders] = useState([]);
@@ -51,6 +55,16 @@ const Order = () => {
   const [selectedOrder, setSelectedOrder] = useState(null);
   const [orderDetails, setOrderDetails] = useState([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [orderStats, setOrderStats] = useState({
+    totalOrders: 0,
+    pendingOrders: 0,
+    approvedOrders: 0,
+    receivedOrders: 0,
+    cancelledOrders: 0,
+    totalValue: 0,
+    monthlyStats: [],
+  });
+  const [expandedBatchDetails, setExpandedBatchDetails] = useState({});
 
   const fetchUserProfile = useCallback(async () => {
     try {
@@ -387,6 +401,68 @@ const Order = () => {
     );
   };
 
+  // Add fetchOrderStats function to calculate statistics
+  const fetchOrderStats = useCallback(() => {
+    try {
+      const pendingCount = orders.filter(
+        (o) => o.order_status === "pending"
+      ).length;
+      const approvedCount = orders.filter(
+        (o) => o.order_status === "approved"
+      ).length;
+      const receivedCount = orders.filter(
+        (o) => o.order_status === "received"
+      ).length;
+      const cancelledCount = orders.filter(
+        (o) => o.order_status === "cancelled"
+      ).length;
+      const totalValue = orders.reduce(
+        (sum, o) => sum + parseFloat(o.total_amount || 0),
+        0
+      );
+
+      // Calculate monthly stats for the last 6 months
+      const monthlyStats = [];
+      const now = new Date();
+      for (let i = 5; i >= 0; i--) {
+        const month = new Date(now.getFullYear(), now.getMonth() - i, 1);
+        const nextMonth = new Date(
+          now.getFullYear(),
+          now.getMonth() - i + 1,
+          0
+        );
+
+        const monthOrders = orders.filter((order) => {
+          const orderDate = new Date(order.created_at);
+          return orderDate >= month && orderDate <= nextMonth;
+        });
+
+        monthlyStats.push({
+          date: month.toISOString(),
+          count: monthOrders.length,
+        });
+      }
+
+      setOrderStats({
+        totalOrders: orders.length,
+        pendingOrders: pendingCount,
+        approvedOrders: approvedCount,
+        receivedOrders: receivedCount,
+        cancelledOrders: cancelledCount,
+        totalValue: totalValue,
+        monthlyStats: monthlyStats,
+      });
+    } catch (error) {
+      console.error("Error calculating order stats:", error);
+    }
+  }, [orders]);
+
+  useEffect(() => {
+    if (orders.length > 0) {
+      fetchOrderStats();
+    }
+  }, [fetchOrderStats, orders]);
+
   const statusOptions = [
     { value: "", label: "All Statuses" },
     { value: "pending", label: "Pending" },
@@ -418,15 +494,17 @@ const Order = () => {
     }));
   };
 
+  const toggleBatchDetails = (detailIndex) => {
+    setExpandedBatchDetails((prev) => ({
+      ...prev,
+      [detailIndex]: !prev[detailIndex],
+    }));
+  };
+
   return (
     <>
       {isLoading ? (
-        <div className="flex items-center justify-center h-screen">
-          <div className="flex flex-col items-center space-y-4">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500"></div>
-            <p className="text-gray-600">Loading...</p>
-          </div>
-        </div>
+        <LoadingComponent />
       ) : !isStaff ? (
         <div className="flex items-center justify-center h-screen bg-gray-50">
           <div className="text-center bg-white p-8 rounded-lg shadow-lg max-w-md mx-auto">
@@ -461,17 +539,23 @@ const Order = () => {
             <div className="flex flex-col lg:flex-row gap-6">
               <div className="w-full lg:w-1/2">
                 <div className="bg-white rounded-xl shadow-md border border-gray-100 h-full">
-                  <div className="bg-gradient-to-r from-blue-600 to-blue-700 px-6 py-4">
+                  <div className="bg-gradient-to-r from-blue-500 to-blue-700 px-6 py-4">
                     <div className="flex items-center">
                       <ShoppingCart className="text-white mr-3" size={24} />
-                      <h2 className="text-xl font-bold text-white">
-                        Create New Order
-                      </h2>
+                      <h1 className="md:text-xl font-bold text-white">
+                        Order Management
+                      </h1>
+                      <p className="text-indigo-100 text-sm justify-end ml-auto md:block hidden">
+                      Manage and track all orders
+                    </p>
                     </div>
                   </div>
 
-                  <div className="p-6">
+                  <div className="py-3 px-4">
                     <div className="space-y-6">
+                      <div className="flex justify-between items-center">
+                      <h3 className="text-2xl font-bold ml-2">Create New Order</h3>
+                      </div>
                       {orderForm.order_details.map((detail, index) => {
                         const detailId = `order-detail-${
                           detail.code_product || Date.now()
@@ -558,15 +642,97 @@ const Order = () => {
                             </div>
 
                             {detail.code_product && (
-                              <div className="flex items-center p-3 bg-blue-50 border border-blue-100 rounded-lg text-sm text-blue-700 mb-4">
-                                <Package
-                                  size={14}
-                                  className="inline mr-2 flex-shrink-0"
-                                />
-                                <span>
-                                  A new batch will be created if no existing
-                                  batch matches the purchase price.
-                                </span>
+                              <div className="space-y-4">
+                                <div className="flex items-center p-3 bg-blue-50 border border-blue-100 rounded-lg text-sm text-blue-700">
+                                  <Package
+                                    size={14}
+                                    className="inline mr-2 flex-shrink-0"
+                                  />
+                                  <span>
+                                    A new batch will be created if no existing
+                                    batch matches the purchase price.
+                                  </span>
+                                </div>
+
+                                {detail.available_batches?.length > 0 && (
+                                  <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
+                                    <div className="flex items-center justify-between mb-3">
+                                      <div className="flex items-center gap-2">
+                                        <Package2
+                                          size={16}
+                                          className="text-gray-600"
+                                        />
+                                        <span className="text-sm font-medium text-gray-700">
+                                          Available Batches
+                                        </span>
+                                      </div>
+                                      <button
+                                        onClick={() =>
+                                          toggleBatchDetails(index)
+                                        }
+                                        className="text-xs text-blue-600 hover:text-blue-800 flex items-center gap-1"
+                                      >
+                                        {expandedBatchDetails[index] ? (
+                                          <>
+                                            <ChevronUp size={14} />
+                                            Hide Details
+                                          </>
+                                        ) : (
+                                          <>
+                                            <ChevronDown size={14} />
+                                            Show Details
+                                          </>
+                                        )}
+                                      </button>
+                                    </div>
+
+                                    {expandedBatchDetails[index] && (
+                                      <div className="space-y-2 mt-2">
+                                        {detail.available_batches.map(
+                                          (batch) => (
+                                            <div
+                                              key={batch.batch_id}
+                                              className="bg-white p-3 rounded-lg border border-gray-200 text-sm"
+                                            >
+                                              <div className="flex justify-between items-center mb-2">
+                                                <span className="font-medium text-gray-900">
+                                                  {batch.batch_code}
+                                                </span>
+                                                <span className="text-blue-600 font-medium">
+                                                  {formatPrice(
+                                                    batch.purchase_price
+                                                  )}
+                                                </span>
+                                              </div>
+                                              <div className="grid grid-cols-2 gap-4 text-xs">
+                                                <div>
+                                                  <span className="text-gray-500">
+                                                    Stock:{" "}
+                                                  </span>
+                                                  <span className="text-gray-900 font-medium">
+                                                    {batch.stock_quantity} pcs
+                                                  </span>
+                                                </div>
+                                                <div>
+                                                  <span className="text-gray-500">
+                                                    Expiry:{" "}
+                                                  </span>
+                                                  <span className="text-gray-900 font-medium">
+                                                    {batch.exp_date
+                                                      ? new Date(
+                                                          batch.exp_date
+                                                        ).toLocaleDateString()
+                                                      : "N/A"}
+                                                  </span>
+                                                </div>
+                                              </div>
+                                            </div>
+                                          )
+                                        )}
+                                      </div>
+                                    )}
+                                  </div>
+                                )}
                               </div>
                             )}
 
@@ -935,7 +1101,7 @@ const Order = () => {
               />
             )}
           </AnimatePresence>
-
+          <OrderCharts orderStats={orderStats} formatPrice={formatPrice} />
           <AnimatePresence>
             {alert && (
               <motion.div

@@ -14,7 +14,6 @@ import {
   CheckCircle,
   AlertCircle,
   AlertTriangle,
-  Boxes,
   ArrowRight,
 } from "lucide-react";
 import ProductModal from "../../modal/ProductModal";
@@ -24,6 +23,7 @@ import Categories from "./Categories";
 import CrudButton from "../../Button/CrudButton";
 import Pagination from "./Pagination";
 import api from "../../../service/api";
+import LoadingComponent from "../../LoadingComponent";
 
 const Product = () => {
   const navigate = useNavigate();
@@ -388,58 +388,72 @@ const Product = () => {
   };
 
   return (
-    <div className="container mx-auto px-4 py-8 pt-20">
-      {/* Header and Search Section */}
-      <div className="mb-6">
-        <div className="flex flex-col md:flex-row justify-between items-center mb-6 gap-4">
-          <div className="flex items-center gap-4">
-            <h1 className="text-2xl font-bold text-gray-800 flex items-center gap-2">
-              <Package className="h-6 w-6" />
-              Product Management
-            </h1>
-            <div className="flex items-center gap-2 px-4 py-2">
-                      <div className="flex items-center gap-4">
-                        <button
-                          onClick={() => navigate("/batchstock")}
-                          className="flex items-center gap-2 px-4 py-2 bg-white text-gray-700 rounded-lg hover:bg-gray-100 shadow-sm transition-all"
-                          title="Back to Products"
-                        >
-                          <ArrowRight className="h-5 w-5" />
-                          <span>Batch Stock</span>
-                        </button>
+    <div className="container mx-auto px-4 pt-20">
+      {/* Mobile View */}
+      <div className="md:hidden">
+        {/* Header */}
+        <div className="bg-gradient-to-r from-blue-500 to-blue-700 px-4 py-4 rounded-xl mb-4">
+          <div className="flex flex-col gap-4">
+            {/* Title & Batch Stock */}
+            <div className="flex items-center justify-between">
+              <div className="flex items-center">
+                <Package className="text-white mr-2" size={20} />
+                <h1 className="text-sm font-bold text-white">
+                  Product Management
+                </h1>
+              </div>
+              <button
+                onClick={() => navigate("/batchstock")}
+                className="flex items-center bg-white/20 text-white px-2 py-1.5 rounded-lg text-xs font-medium hover:bg-white/30 transition-colors"
+              >
+                <ArrowRight className="h-4 w-4 mr-1" />
+                Batch stock
+              </button>
+            </div>
 
-                      </div>
-                    </div>
-          </div>
-          <div className="flex gap-2">
-            <CrudButton
-              icon={Plus}
-              label="Add Product"
-              onClick={handleAddProduct}
-              buttonStyle="primary"
-            />
-            <div>
+            {/* Action Buttons */}
+            <div className="grid grid-cols-2 gap-2 mb-4 ">
+              <CrudButton
+                icon={Plus}
+                label="Create Product"
+                onClick={handleAddProduct}
+                buttonStyle="secondary"
+                className="w-full text-xs md:text-xl"
+              />
               <Categories onCategoriesChange={handleCategoriesChange} />
             </div>
-          </div>
-        </div>
 
-        <div className="flex flex-col md:flex-row gap-4 mb-6">
-          <div className="relative flex-1">
-            <Search className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
-            <input
-              type="text"
-              placeholder="Search products..."
-              value={search}
-              onChange={(e) => {
-                setSearch(e.target.value);
-                setPage(0);
-              }}
-              className="w-full pl-10 pr-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
-            />
-          </div>
+            {/* Search */}
+            <div className="flex gap-2">
+              <div className="relative flex-1">
+                <Search className="absolute left-2 top-2 h-4 w-4 text-gray-400" />
+                <input
+                  type="text"
+                  placeholder="Search products..."
+                  value={search}
+                  onChange={(e) => {
+                    setSearch(e.target.value);
+                    setPage(0);
+                  }}
+                  className="w-full pl-8 pr-3 py-1.5 bg-white border text-gray-700 border-white/20 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-white/30"
+                />
+              </div>
+              <select
+                value={limit}
+                onChange={(e) => {
+                  setLimit(Number(e.target.value));
+                  setPage(0);
+                }}
+                className="bg-white border border-white/20 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-white/30"
+              >
+                <option value={10}>10</option>
+                <option value={20}>20</option>
+                <option value={50}>50</option>
+                <option value={100}>100</option>
+              </select>
+            </div>
 
-          <div className="w-full md:w-60">
+            {/* Category Filter */}
             <Select
               value={categoryOptions.find(
                 (option) => option.value === categoryFilter
@@ -449,50 +463,264 @@ const Product = () => {
                 setPage(0);
               }}
               options={categoryOptions}
-              className="text-sm"
-              placeholder="Select Category"
+              placeholder="All Categories"
               isClearable={false}
-              styles={{
-                control: (base) => ({
-                  ...base,
-                  minHeight: "42px",
-                  borderColor: "#e5e7eb",
-                  "&:hover": {
-                    borderColor: "#3b82f6",
-                  },
-                }),
-                option: (base, state) => ({
-                  ...base,
-                  backgroundColor: state.isSelected
-                    ? "#3b82f6"
-                    : state.isFocused
-                    ? "#e5e7eb"
-                    : "white",
-                  color: state.isSelected ? "white" : "black",
-                }),
-              }}
+              className="text-sm"
             />
-          </div>
-
-          <div className="w-full md:w-40">
-            <select
-              value={limit}
-              onChange={(e) => {
-                setLimit(Number(e.target.value));
-                setPage(0);
-              }}
-              className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
-            >
-              <option value={10}>10 per page</option>
-              <option value={20}>20 per page</option>
-              <option value={50}>50 per page</option>
-              <option value={100}>100 per page</option>
-            </select>
           </div>
         </div>
 
-        {/* Desktop View */}
-        <div className="hidden md:block bg-white rounded-lg shadow overflow-hidden">
+        {/* Product List */}
+        <div className="space-y-3">
+          {loading ? (
+            <LoadingComponent />
+          ) : products.length === 0 ? (
+            <div className="text-center py-8 text-gray-500">
+              No products found
+            </div>
+          ) : (
+            products.map((product) => (
+              <div
+                key={product.code_product}
+                className="bg-white rounded-lg border border-gray-200 shadow-sm"
+              >
+                <button
+                  className="w-full text-left"
+                  onClick={() => toggleRow(product.code_product)}
+                >
+                  <div className="p-3">
+                    <div className="flex justify-between items-center">
+                      <div className="flex-1">
+                        <h3 className="text-sm font-medium text-gray-900 mb-1">
+                          {product.name_product}
+                        </h3>
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-700">
+                            {formatLargeNumber(product.code_product)}
+                          </span>
+                          <span className="text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-600">
+                            {categories.find(
+                              (c) =>
+                                c.code_categories === product.code_categories
+                            )?.name_categories || "Uncategorized"}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="flex flex-col items-end">
+                        <p className="text-sm font-medium text-emerald-600">
+                          Rp {Number(product.sell_price).toLocaleString()}
+                        </p>
+                        <div className="flex items-center gap-1.5">
+                          <span
+                            className={`text-xs px-1.5 py-0.5 rounded-full ${
+                              product.totalStock <= product.min_stock
+                                ? "bg-red-100 text-red-700"
+                                : product.totalStock - product.min_stock <= 5
+                                ? "bg-yellow-100 text-yellow-700"
+                                : "bg-green-100 text-green-700"
+                            }`}
+                          >
+                            {product.totalStock} pcs
+                          </span>
+                          {expandedRow === product.code_product ? (
+                            <ChevronUp className="h-4 w-4 text-gray-400" />
+                          ) : (
+                            <ChevronDown className="h-4 w-4 text-gray-400" />
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </button>
+
+                {expandedRow === product.code_product && (
+                  <div className="px-4 pb-4 space-y-3 border-t border-gray-100 bg-gray-50">
+                    <div className="grid grid-cols-2 gap-4 pt-3">
+                      <div className="space-y-1">
+                        <p className="text-xs font-medium text-gray-500 uppercase">
+                          Barcode
+                        </p>
+                        <p className="text-sm font-mono text-gray-700">
+                          {product.barcode || "-"}
+                        </p>
+                      </div>
+
+                      <div className="space-y-1">
+                        <p className="text-xs font-medium text-gray-500 uppercase">
+                          Min Stock
+                        </p>
+                        <p className="text-sm text-gray-700">
+                          {product.min_stock}
+                        </p>
+                      </div>
+
+                      <div className="col-span-2 space-y-1">
+                        <p className="text-xs font-medium text-gray-500 uppercase">
+                          Stock Status
+                        </p>
+                        <div className="flex items-center gap-2">
+                          <span
+                            className={`inline-flex px-2 py-1 rounded-full text-sm font-medium ${getStockColor(
+                              product.totalStock,
+                              product.min_stock
+                            )}`}
+                          >
+                            {product.totalStock} pcs
+                          </span>
+                          <span
+                            className={`text-sm ${
+                              product.totalStock <= product.min_stock
+                                ? "text-red-600"
+                                : product.totalStock - product.min_stock <= 5
+                                ? "text-yellow-600"
+                                : "text-green-600"
+                            }`}
+                          >
+                            {
+                              getStockMessage(
+                                product.totalStock,
+                                product.min_stock
+                              ).icon
+                            }
+                            {
+                              getStockMessage(
+                                product.totalStock,
+                                product.min_stock
+                              ).message
+                            }
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {isAdmin && (
+                      <div className="flex flex-row justify-end gap-2 mt-3">
+                        <CrudButton
+                          icon={Edit2}
+                          onClick={() => {
+                            setFormData(prepareEditData(product));
+                            setModalMode("edit");
+                            setShowModal(true);
+                          }}
+                          buttonStyle="primary"
+                          buttonType="product"
+                          actionType="edit"
+                        />
+                        <CrudButton
+                          icon={Trash2}
+                          onConfirm={() => handleDelete(product.code_product)}
+                          buttonStyle="danger"
+                          buttonType="product"
+                          actionType="delete"
+                          confirmMessage="Are you sure you want to delete this product?"
+                          dataMessage="This action will permanently delete this product and cannot be undone."
+                          title="Delete Product"
+                        />
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            ))
+          )}
+        </div>
+
+        {!loading && products.length > 0 && (
+          <div className="mt-4">
+            <Pagination
+              currentPage={page}
+              totalPages={totalPages}
+              onPageChange={setPage}
+              itemsPerPage={limit}
+              totalItems={totalItems}
+            />
+          </div>
+        )}
+      </div>
+
+      {/* Desktop View */}
+      <div className="hidden md:block bg-white rounded-xl shadow-md overflow-hidden">
+        <div className="bg-gradient-to-r from-blue-500 to-blue-700 px-6 py-4">
+          <div className="flex flex-col md:flex-row justify-between items-center gap-4">
+            <div className="flex items-center">
+              <Package className="text-white mr-3" size={24} />
+              <div>
+                <h1 className="text-xl md:text-2xl font-bold text-white">
+                  Product Management
+                </h1>
+              </div>
+            </div>
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => navigate("/batchstock")}
+                className="flex items-center bg-white/20 text-white px-3 py-1.5 rounded-lg text-sm font-medium hover:bg-white/30 transition-colors"
+              >
+                <ArrowRight className="h-4 w-4 mr-1.5" />
+                Batch Stock
+              </button>
+              <CrudButton
+                icon={Plus}
+                label="Create Product"
+                onClick={handleAddProduct}
+                buttonStyle="secondary"
+              />
+              <Categories />
+            </div>
+          </div>
+
+          <div className="mt-4">
+            <div className="flex flex-col md:flex-row gap-4">
+              <div className="relative flex-1">
+                <Search className="absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
+                <input
+                  type="text"
+                  placeholder="Search products..."
+                  value={search}
+                  onChange={(e) => {
+                    setSearch(e.target.value);
+                    setPage(0);
+                  }}
+                  className="w-full pl-10 pr-4 py-2 bg-white border border-gray-200 rounded-lg text-gray-700 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                />
+              </div>
+
+              <div className="w-full md:w-60">
+                <Select
+                  value={categoryOptions.find(
+                    (option) => option.value === categoryFilter
+                  )}
+                  onChange={(selectedOption) => {
+                    setCategoryFilter(selectedOption.value);
+                    setPage(0);
+                  }}
+                  options={categoryOptions}
+                  className="text-sm"
+                  placeholder="Select Category"
+                  isClearable={false}
+                />
+              </div>
+
+              <div className="w-full md:w-40">
+                <select
+                  value={limit}
+                  onChange={(e) => {
+                    setLimit(Number(e.target.value));
+                    setPage(0);
+                  }}
+                  className="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm text-gray-700"
+                >
+                  <option value={10}>10 per page</option>
+                  <option value={20}>20 per page</option>
+                  <option value={50}>50 per page</option>
+                  <option value={100}>100 per page</option>
+                </select>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-white rounded-b-xl shadow-md border border-gray-200 border-t-0">
           <div className="overflow-x-auto">
             <table className="min-w-full divide-y divide-gray-200">
               <thead className="bg-gray-50">
@@ -533,12 +761,16 @@ const Product = () => {
                   if (loading) {
                     return (
                       <tr>
-                        <td colSpan="8" className="px-4 py-4 text-center">
-                          <div className="flex justify-center items-center space-x-2">
-                            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-500"></div>
-                            <span>Loading...</span>
+                        <td colSpan="9" className="p-4">
+                        <div className="flex justify-center items-center py-8">
+                          <div className="flex items-center space-x-4">
+                            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
+                            <p className="text-gray-500 text-sm">
+                              Loading product data...
+                            </p>
                           </div>
-                        </td>
+                        </div>
+                      </td>
                       </tr>
                     );
                   }
@@ -662,8 +894,7 @@ const Product = () => {
             </table>
           </div>
 
-          {/* Desktop Pagination */}
-          <div className="hidden md:block">
+          <div className="hidden md:block ">
             <Pagination
               currentPage={page}
               totalPages={totalPages}
@@ -673,165 +904,9 @@ const Product = () => {
             />
           </div>
         </div>
-
-        {/* Mobile View */}
-        <div className="md:hidden space-y-3">
-          {loading ? (
-            <div className="bg-white p-6 rounded-xl shadow-lg flex justify-center items-center">
-              <div className="animate-spin rounded-full h-8 w-8 border-4 border-t-transparent border-blue-500"></div>
-              <span className="ml-3 text-gray-600">Loading...</span>
-            </div>
-          ) : products.length === 0 ? (
-            <div className="bg-white p-6 rounded-xl shadow-lg text-center text-gray-500">
-              No products found
-            </div>
-          ) : (
-            products.map((product) => (
-              <div
-                key={product.code_product}
-                className="bg-white rounded-xl shadow-lg overflow-hidden transition-all duration-200 hover:shadow-xl"
-              >
-                <div
-                  className="flex items-center p-4 space-x-3 cursor-pointer"
-                  onClick={() => toggleRow(product.code_product)}
-                >
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center justify-between mb-1">
-                      <h3 className="text-base font-semibold text-gray-900 truncate">
-                        {product.name_product}
-                      </h3>
-                      <span className="text-sm font-bold text-emerald-600 ml-2">
-                        Rp {Number(product.sell_price).toLocaleString()}
-                      </span>
-                    </div>
-
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs px-2 py-1 rounded-full bg-indigo-100 text-indigo-700">
-                        {formatLargeNumber(product.code_product)}
-                      </span>
-                      <span className="text-xs px-2 py-1 rounded-full bg-gray-100 text-gray-600">
-                        {categories.find(
-                          (c) => c.code_categories === product.code_categories
-                        )?.name_categories || "Uncategorized"}
-                      </span>
-                    </div>
-                  </div>
-
-                  <div className="flex-shrink-0 text-gray-400">
-                    {expandedRow === product.code_product ? (
-                      <ChevronUp className="h-5 w-5" />
-                    ) : (
-                      <ChevronDown className="h-5 w-5" />
-                    )}
-                  </div>
-                </div>
-
-                {expandedRow === product.code_product && (
-                  <div className="px-4 pb-4 space-y-3 border-t border-gray-100 bg-gray-50">
-                    <div className="grid grid-cols-2 gap-4 pt-3">
-                      <div className="space-y-1">
-                        <p className="text-xs font-medium text-gray-500 uppercase">
-                          Barcode
-                        </p>
-                        <p className="text-sm font-mono text-gray-700">
-                          {product.barcode || "-"}
-                        </p>
-                      </div>
-
-                      <div className="space-y-1">
-                        <p className="text-xs font-medium text-gray-500 uppercase">
-                          Min Stock
-                        </p>
-                        <p className="text-sm text-gray-700">
-                          {product.min_stock}
-                        </p>
-                      </div>
-
-                      <div className="col-span-2 space-y-1">
-                        <p className="text-xs font-medium text-gray-500 uppercase">
-                          {" "}
-                          Stok
-                        </p>
-                        <div className="flex items-center gap-2">
-                          <span
-                            className={`inline-flex px-2 py-1 rounded-full text-sm font-medium ${getStockColor(
-                              product.totalStock,
-                              product.min_stock
-                            )}`}
-                          >
-                            {product.totalStock} pcs
-                          </span>
-                          <span
-                            className={`text-sm ${
-                              product.totalStock <= product.min_stock
-                                ? "text-red-600"
-                                : product.totalStock - product.min_stock <= 5
-                                ? "text-yellow-600"
-                                : "text-green-600"
-                            }`}
-                          >
-                            {
-                              getStockMessage(
-                                product.totalStock,
-                                product.min_stock
-                              ).icon
-                            }
-                            {
-                              getStockMessage(
-                                product.totalStock,
-                                product.min_stock
-                              ).message
-                            }
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                    {isAdmin && (
-                    <div className="flex justify-end gap-3">
-                      <CrudButton
-                        icon={Edit2}
-                        onClick={() => {
-                          setFormData(prepareEditData(product));
-                          setModalMode("edit");
-                          setShowModal(true);
-                        }}
-                        buttonStyle="primary"
-                        buttonType="product"
-                        actionType="edit"
-                      />
-                      <CrudButton
-                        icon={Trash2}
-                        onConfirm={() => handleDelete(product.code_product)}
-                        buttonStyle="danger"
-                        buttonType="product"
-                        actionType="delete"
-                        confirmMessage="Are you sure you want to delete this product?"
-                        dataMessage="This action will permanently delete this product and cannot be undone."
-                        title="Delete Product"
-                      />
-                    </div>
-                    )}
-                  </div>
-                )}
-              </div>
-            ))
-          )}
-
-          {!loading && products.length > 0 && (
-            <div className="mt-4">
-              <Pagination
-                currentPage={page}
-                totalPages={totalPages}
-                onPageChange={setPage}
-                itemsPerPage={limit}
-                totalItems={totalItems}
-              />
-            </div>
-          )}
-        </div>
       </div>
 
-      {/* Add/Edit Modal */}
+      {/* Modals */}
       <ProductModal
         key={`${modalMode}-${formData.code_product || "new"}`}
         isOpen={showModal}
@@ -845,7 +920,6 @@ const Product = () => {
         categories={categories}
       />
 
-      {/* CSV Upload Modal */}
       {showUploadModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-lg max-w-md w-full">
@@ -903,10 +977,7 @@ const Product = () => {
                   }`}
                 >
                   {uploadLoading ? (
-                    <>
-                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                      <span>Uploading...</span>
-                    </>
+                    <LoadingComponent />
                   ) : (
                     <>
                       <Upload className="h-4 w-4" />
@@ -920,14 +991,12 @@ const Product = () => {
         </div>
       )}
 
-      {/* Success Modal */}
       <SuccessModal
         isOpen={successModal.isOpen}
         message={successModal.message}
         onClose={() => setSuccessModal({ isOpen: false, message: "" })}
       />
 
-      {/* Alert Modal */}
       <AlertModal
         isOpen={alertModal.isOpen}
         message={alertModal.message}

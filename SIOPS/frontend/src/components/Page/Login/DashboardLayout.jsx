@@ -6,37 +6,45 @@ import Sidebars from "../Sidebar/staff/Sidebars";
 import Headers from "../Sidebar/Headers";
 import api from "../../../service/api";
 import MinStockAlert from "../../modal/MinStockAlert";
-
+import LoadingComponent from "../../LoadingComponent";
 
 const DashboardLayout = () => {
   const [darkMode, setDarkMode] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isDesktopSidebarOpen, setIsDesktopSidebarOpen] = useState(true);
-  const [role, setRole] = useState('');
+  const [role, setRole] = useState("");
   const [loading, setLoading] = useState(true);
 
-
-  // Fetch user data dari server
   useEffect(() => {
     const fetchUserData = async () => {
       try {
-        const response = await api.get('/users/verify-token', );
-        
+        const response = await api.get("/users/verify-token");
+
         if (response.data.user && response.data.user.role) {
           setRole(response.data.user.role);
+        } else {
+          // No user data in response, redirect to login
+          window.location.href = "/login";
         }
       } catch (error) {
-        console.error('Error fetching user data:', error);
-        // Redirect ke halaman login jika unauthorized
+        console.error("Error fetching user data:", error);
+        // Always redirect to login on any auth error
         if (error.response?.status === 401 || error.response?.status === 403) {
-        window.location.href = '/login';
-      }
+          // Clear any stale auth data before redirecting
+          localStorage.removeItem("userRole"); // if you're using localStorage
+          window.location.href = "/login";
+        }
       } finally {
         setLoading(false);
       }
     };
 
+    // Fetch user data immediately and set up interval to check periodically
     fetchUserData();
+    const intervalId = setInterval(fetchUserData, 5 * 60 * 1000); // Check every 5 minutes
+
+    // Cleanup interval on unmount
+    return () => clearInterval(intervalId);
   }, []);
 
   // Toggle untuk Mobile Sidebar
@@ -61,14 +69,13 @@ const DashboardLayout = () => {
       }
     };
 
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
   }, []);
 
   const SidebarComponent = role === "admin" ? SidebarAdmin : Sidebars;
-
   if (loading) {
-    return <div>Loading...</div>; // Tambahkan loading indicator
+    return <LoadingComponent />;
   }
 
   return (

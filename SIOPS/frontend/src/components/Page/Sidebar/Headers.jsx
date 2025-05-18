@@ -12,6 +12,7 @@ import {
 import LogoAM1 from "../../../assets/LogoAM1.png";
 import { useNavigate } from "react-router-dom";
 import api from "../../../service/api";
+import LoadingComponent from "../../LoadingComponent";
 
 const Headers = ({
   darkMode,
@@ -21,17 +22,18 @@ const Headers = ({
 }) => {
   const [menuActive, setMenuActive] = useState(false);
   const [userDropdown, setUserDropdown] = useState(false);
-  const [userData, setUserData] = useState(null); 
+  const [userData, setUserData] = useState(null);
+  const [loading, setLoading] = useState(true);
   const dropdownRef = useRef(null);
   const navigate = useNavigate();
-
 
   const fetchUserProfile = useCallback(async () => {
     try {
       // Kirim permintaan tanpa header Authorization karena token sudah ada di cookie
-      const response = await api.get("/users/profile",);
+      const response = await api.get("/users/profile");
 
       setUserData(response.data.user);
+      setLoading(false);
     } catch (error) {
       console.error("Error fetching user profile:", error);
       if (error.response && error.response.status === 401) {
@@ -57,15 +59,14 @@ const Headers = ({
 
   const handleLogout = async () => {
     try {
-      await api.post("/users/logout", null, );
-      
+      await api.post("/users/logout", null);
+
       setUserData(null); // Reset state user
       navigate("/login"); // Pindah ke halaman login
     } catch (error) {
       console.error("Error logging out:", error);
     }
   };
-  
 
   const toggleDropdown = (e) => {
     e.stopPropagation();
@@ -160,7 +161,11 @@ const Headers = ({
                         />
                         <div>
                           <p className="text-sm font-semibold dark:text-white">
-                            {userData.name || "User Name"}
+                            {loading ? (
+                              <LoadingComponent />
+                            ) : (
+                              userData.name || "User Name"
+                            )}
                           </p>
                           <p className="text-xs text-gray-500 dark:text-gray-400 capitalize">
                             {userData.role || "Role"}
@@ -207,9 +212,7 @@ const Headers = ({
                       </div>
                     </>
                   ) : (
-                    <div className="p-4 text-center text-gray-500 dark:text-gray-400">
-                      Loading...
-                    </div>
+                    <LoadingComponent />
                   )}
                 </div>
               )}

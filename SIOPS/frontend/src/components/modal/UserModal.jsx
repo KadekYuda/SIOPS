@@ -151,9 +151,9 @@ const UserModal = ({ isOpen, onClose, onSubmit, user, title, mode }) => {
               type="submit"
               className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600"
             >
-              {mode === "add" ? "Add" : "Save Changes"}
+              {mode === "add" ? "save" : "Save Changes"}
             </button>
-          </div>
+          </div>  
         </form>
       </div>
     </div>

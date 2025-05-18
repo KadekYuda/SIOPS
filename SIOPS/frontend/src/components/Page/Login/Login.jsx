@@ -17,25 +17,24 @@ import {
 import { motion } from "framer-motion";
 import api from "../../../service/api";
 
-
 const EnterprisePortalCard = () => {
   // Features list with icons and colors
   const features = [
-    { 
-      icon: <BarChart2 size={24} />, 
+    {
+      icon: <BarChart2 size={24} />,
       text: "Real-time analytics dashboard",
-      color: "from-blue-400 to-blue-600"
+      color: "from-blue-400 to-blue-600",
     },
-    { 
-      icon: <Shield size={24} />, 
+    {
+      icon: <Shield size={24} />,
       text: "Enhanced security protocols",
-      color: "from-purple-400 to-purple-600" 
+      color: "from-purple-400 to-purple-600",
     },
-    { 
-      icon: <UserCheck size={24} />, 
+    {
+      icon: <UserCheck size={24} />,
       text: "Role-based access control",
-      color: "from-indigo-400 to-indigo-600"
-    }
+      color: "from-indigo-400 to-indigo-600",
+    },
   ];
 
   return (
@@ -43,7 +42,7 @@ const EnterprisePortalCard = () => {
       {/* Header with Icon */}
       <div className="flex flex-col items-center mb-8">
         <div className="w-20 h-20 bg-purple-500/30 rounded-full flex items-center justify-center backdrop-blur-sm mb-6">
-          <ShieldCheck  size={36} className="text-white" />
+          <ShieldCheck size={36} className="text-white" />
         </div>
 
         <h1 className="text-3xl font-bold text-center">Enterprise Portal</h1>
@@ -58,7 +57,9 @@ const EnterprisePortalCard = () => {
       <div className="space-y-5 mb-10">
         {features.map((feature, index) => (
           <div key={index} className="flex items-center">
-            <div className={`w-10 h-10 bg-gradient-to-br ${feature.color} rounded-full flex items-center justify-center mr-4 shadow-md`}>
+            <div
+              className={`w-10 h-10 bg-gradient-to-br ${feature.color} rounded-full flex items-center justify-center mr-4 shadow-md`}
+            >
               {feature.icon}
             </div>
             <span>{feature.text}</span>
@@ -91,6 +92,28 @@ const Login = ({ onLoginSuccess }) => {
   const navigate = useNavigate();
 
   useEffect(() => {
+    // Check if user is already authenticated
+    const checkAuthStatus = async () => {
+      try {
+        const response = await api.get("/users/verify-token");
+        if (response.data.user) {
+          // User is already authenticated, redirect based on role
+          const role = response.data.user.role;
+          const redirectPath =
+            role === "admin" ? "/dashboardAdmin" : "/dashboard";
+          navigate(redirectPath, { replace: true });
+        }
+      } catch (error) {
+        // Token verification failed - user is not authenticated
+        // Allow them to stay on login page
+        console.error("Token verification error:", error);
+      }
+    };
+
+    checkAuthStatus();
+  }, [navigate]);
+
+  useEffect(() => {
     // Trigger animation completion after a delay
     const timer = setTimeout(() => {
       setAnimationComplete(true);
@@ -108,7 +131,6 @@ const Login = ({ onLoginSuccess }) => {
         email,
         password,
       });
-      
 
       // Call callback to update user state in AppRoutes
       if (onLoginSuccess) {

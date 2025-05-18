@@ -108,21 +108,19 @@ const Categories = ({ onCategoriesChange }) => {
   };
 
   return (
-    <div className="max-w-5xl">
-      <div className="flex justify-between items-center">
-        <CrudButton
-          icon={Plus}
-          label="Add Category"
-          onClick={() => {
-            setEditing(false);
-            setCode("");
-            setName("");
-            setIsModalOpen(true);
-          }}
-          buttonStyle="secondary"
-          className="flex items-center gap-2"
-        />
-      </div>
+    <div className="h-full">
+      <CrudButton
+        icon={Plus}
+        label="Create Category"
+        onClick={() => {
+          setEditing(false);
+          setCode("");
+          setName("");
+          setIsModalOpen(true);
+        }}
+        buttonStyle="secondary"
+        className="w-full h-full"
+      />
 
       {/* Modal Categories */}
       {isModalOpen && (

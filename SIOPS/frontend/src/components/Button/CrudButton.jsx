@@ -36,14 +36,15 @@ const CrudButton = ({
     }
   };
 
+  // Responsive button classes with mobile-friendly sizing
   const buttonClasses = `
-    inline-flex items-center justify-center transition-all duration-200 
+    inline-flex items-center justify-center transition-all duration-200 text-sm
     ${
       buttonType === "product"
         ? `${
             actionType === "edit" || actionType === "delete"
-              ? "p-2 rounded-lg hover:shadow-sm"
-              : "px-4 py-2 rounded-lg shadow-sm hover:shadow"
+              ? "p-1.5 sm:p-2 rounded-lg hover:shadow-sm"
+              : "px-3 py-1.5 sm:px-4 sm:py-2 rounded-lg shadow-sm hover:shadow"
           }
         ${
           buttonStyle === "primary"
@@ -52,7 +53,7 @@ const CrudButton = ({
         }
         ${
           buttonStyle === "secondary"
-            ? "bg-emerald-500 text-white hover:bg-emerald-600"
+            ? "flex items-center bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors shadow-sm"
             : ""
         }
         ${
@@ -67,7 +68,8 @@ const CrudButton = ({
           }
         ${
           buttonStyle === "secondary"
-            ? "bg-emerald-500 text-white hover:bg-emerald-600"
+            ? "flex items-center bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors shadow-sm"
+      
             : ""
         }
         ${
@@ -75,7 +77,7 @@ const CrudButton = ({
             ? "bg-red-600 text-white hover:bg-red-700"
             : ""
         }
-        px-4 py-2 rounded-lg shadow-sm hover:shadow
+        px-3 py-1.5 sm:px-4 sm:py-2 rounded-lg shadow-sm hover:shadow
     `
     }
     ${className}
@@ -89,13 +91,13 @@ const CrudButton = ({
             size={
               buttonType === "product" &&
               (actionType === "edit" || actionType === "delete")
-                ? 18
-                : 20
+                ? 16
+                : 18
             }
-            className={label ? "mr-2" : ""}
+            className={label ? "mr-1.5 sm:mr-2" : ""}
           />
         )}
-        {label}
+        <span className="whitespace-nowrap">{label}</span>
       </button>
 
       {/* Modal Konfirmasi */}

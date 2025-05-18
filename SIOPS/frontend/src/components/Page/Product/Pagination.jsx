@@ -111,7 +111,7 @@ const Pagination = ({
   }, [currentPage, totalPages, onPageChange, windowWidth]);
 
   return (
-    <div className="flex flex-col items-center gap-3 mt-4 bg-white p-4 rounded-lg shadow w-full">
+    <div className="flex flex-col items-center gap-3 mt-4 bg-white p-4  shadow w-full border-t">
       <div className="flex flex-col gap-2 items-center justify-between w-full px-4 py-2 sm:flex-row">
         <div className="text-sm text-gray-700 whitespace-nowrap">
           {totalItems > 0 ? (

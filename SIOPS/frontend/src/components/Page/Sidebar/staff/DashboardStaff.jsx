@@ -2,23 +2,14 @@ import React, { useState, useEffect } from "react";
 import { ShoppingBag, Package, TrendingUp, Users } from "lucide-react";
 import api from "../../../../service/api";
 
+
 const DashboardStaff = () => {
   const [orders, setOrders] = useState([]);
-  const [user, setUser] = useState(null); // Simpan data user
+
 
   useEffect(() => {
-    fetchUserProfile(); // Ambil data user
-    fetchOrderData(); // Ambil data order
+    fetchOrderData(); 
   }, []);
-
-  const fetchUserProfile = async () => {
-    try {
-      const response = await api.get("/users/profile");
-      setUser(response.data); 
-    } catch (error) {
-      console.error("Error fetching user profile:", error.response ? error.response.data : error.message);
-    }
-  };
 
   const fetchOrderData = async () => {
     try {
@@ -28,7 +19,10 @@ const DashboardStaff = () => {
       );
       setOrders(sortedOrders);
     } catch (error) {
-      console.error("Error fetching order data:", error.response ? error.response.data : error.message);
+      console.error(
+        "Error fetching order data:",
+        error.response ? error.response.data : error.message
+      );
       setOrders([]);
     }
   };
@@ -47,7 +41,7 @@ const DashboardStaff = () => {
         {/* Page Header */}
         <div className="bg-white shadow-md rounded-xl p-6 mb-8">
           <h2 className="text-3xl font-bold mb-2 text-gray-800">
-            Welcome, {user ? user.name : "Loading..."}!
+            Welcome, 
           </h2>
           <p className="text-gray-500">
             Your personal stock and order management dashboard

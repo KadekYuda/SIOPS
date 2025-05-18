@@ -1,0 +1,9 @@
+[build]
+builder = "NIXPACKS"
+
+[deploy]
+startCommand = "npm start"
+nodejs_version = "18.20.5"
+
+[install]
+cmds = ["npm install"]

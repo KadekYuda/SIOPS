@@ -278,15 +278,10 @@ const DashboardAdmin = () => {
               {role === "admin" && (
                 <CrudButton
                   icon={FilePlus}
-                  label="Add Staff"
+                  label="Create Staff"
                   onClick={openAddModal}
                   buttonStyle="secondary"
-                  className="w-full sm:w-auto flex items-center justify-center 
-                  px-4 py-2 rounded-lg 
-                  bg-blue-500 text-white hover:bg-blue-600 
-                  transition duration-300 
-                  space-x-2 text-sm"
-                />
+                  />
               )}
             </div>
 
@@ -346,7 +341,7 @@ const DashboardAdmin = () => {
                           onClick={() => openEditModal(user)}
                           actionType="edit" 
                           buttonStyle="primary"
-                          className="p-2 rounded-lg bg-green-500 text-white hover:bg-green-600 transition w-full sm:w-auto"
+                         
                         />
                         <CrudButton
                           icon={Trash2}
@@ -377,11 +372,9 @@ const DashboardAdmin = () => {
                 {role === "admin" && (
                   <CrudButton 
                     icon={FilePlus}
-                    label="Add First Staff Member"
+                    label="Create First Staff Member"
                     onClick={openAddModal}
                     buttonStyle="secondary"
-                    className="mt-4 w-full sm:w-auto mx-auto inline-flex justify-center bg-blue-500 text-white px-4 py-2 rounded-lg 
-                    hover:bg-blue-600 transition duration-300"
                   />
                 )}
               </div>
@@ -395,7 +388,7 @@ const DashboardAdmin = () => {
           onClose={() => setIsModalOpen(false)}
           onSubmit={modalMode === "add" ? handleAddUser : handleEditUser}
           user={selectedUser}
-          title={modalMode === "add" ? "Add Staff" : "Edit Staff"}
+          title={modalMode === "add" ? "Create Staff" : "Edit Staff"}
           mode={modalMode}
         />
 
