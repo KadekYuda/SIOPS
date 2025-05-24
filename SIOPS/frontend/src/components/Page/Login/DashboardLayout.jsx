@@ -81,7 +81,7 @@ const DashboardLayout = () => {
   return (
     <div
       className={clsx(
-        "flex min-h-screen relative",
+        "flex min-h-screen relative ",
         darkMode ? "dark bg-gray-900" : "bg-gray-100"
       )}
     >
@@ -128,17 +128,24 @@ const DashboardLayout = () => {
         {/* Main Content Area */}
         <div
           className={clsx(
-            "flex-1 p-4 transition-all duration-300 ease-in-out",
+            "flex-1 p-4 transition-all duration-300 ease-in-out flex flex-col",
             {
               "lg:ml-64": isDesktopSidebarOpen,
               "lg:ml-0": !isDesktopSidebarOpen,
             }
           )}
-        >
-          <main className="h-full">
+        > 
+          <main className="h-full flex-1">
             <Outlet />
             <MinStockAlert />
           </main>
+          
+          {/* Footer */}
+          <div
+            className="text-center text-sm text-gray-400 py-4 mt-auto"
+          >
+            <p>&copy; 2025 Agik Mart. All rights reserved.</p>
+          </div>
         </div>
       </div>
     </div>

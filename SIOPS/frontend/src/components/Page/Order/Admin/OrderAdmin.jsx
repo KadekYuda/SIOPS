@@ -8,9 +8,6 @@ import {
   AlertTriangle,
   Plus,
   Package,
-  Package2,
-  ChevronDown,
-  ChevronUp,
   Filter,
   ShoppingCart,
   Clock,
@@ -24,6 +21,7 @@ import api from "../../../../service/api";
 import CrudButton from "../../../Button/CrudButton.jsx";
 import OrderDetails from "../OrderDetails";
 import LoadingComponent from "../../../../components/LoadingComponent";
+import Pagination from "../../Product/Pagination";
 
 import {
   Chart as ChartJS,
@@ -71,7 +69,6 @@ const OrderAdmin = () => {
 
   const [orders, setOrders] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [isDataLoading, setIsDataLoading] = useState(true);
   const [alert, setAlert] = useState(null);
   const [deleteOrderId, setDeleteOrderId] = useState(null);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
@@ -81,14 +78,13 @@ const OrderAdmin = () => {
   const [showEditModal, setShowEditModal] = useState(false);
   const [editingOrderDetail, setEditingOrderDetail] = useState(null);
   const [availableBatches, setAvailableBatches] = useState([]);
-  const [expandedBatchDetails, setExpandedBatchDetails] = useState({});
   const [filters, setFilters] = useState({
     user: "",
     order_status: "",
     start_date: "",
     end_date: "",
   });
-  const [isAdmin, setIsAdmin] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(null);
   const [showCreateOrderModal, setShowCreateOrderModal] = useState(false);
   const [products, setProducts] = useState([]);
   const [orderForm, setOrderForm] = useState({
@@ -107,6 +103,8 @@ const OrderAdmin = () => {
   const [showExpDateModal, setShowExpDateModal] = useState(false);
   const [processingOrderId, setProcessingOrderId] = useState(null);
   const [expDateInputs, setExpDateInputs] = useState({});
+  const [currentPage, setCurrentPage] = useState(0);
+  const [itemsPerPage] = useState(10);
 
   const fetchUserProfile = useCallback(async () => {
     try {
@@ -127,30 +125,28 @@ const OrderAdmin = () => {
 
   const checkUserRole = useCallback(async () => {
     try {
+      setIsLoading(true);
       const response = await api.get("/users/profile");
       const userRole = response.data.user?.role;
       setIsAdmin(userRole === "admin");
-      if (userRole !== "admin") {
+
+      if (userRole === "staff") {
         showAlert(
-          "warning",
-          "Access Warning",
-          "Please use the appropriate order management page for your role."
+          "error",
+          "Access Denied",
+          "You do not have permission to access this page"
         );
       }
     } catch (error) {
       console.error("Error checking user role:", error);
       setIsAdmin(false);
-      showAlert(
-        "error",
-        "Authentication Error",
-        "Failed to verify your access rights."
-      );
     } finally {
       setIsLoading(false);
     }
   }, []);
 
   useEffect(() => {
+    setIsLoading(true);
     checkUserRole();
   }, [checkUserRole]);
 
@@ -159,8 +155,7 @@ const OrderAdmin = () => {
   }, [fetchUserProfile]);
 
   const fetchOrders = useCallback(async () => {
-    if (!isAdmin) return;
-    setIsDataLoading(true);
+    setIsLoading(true);
     try {
       const queryParams = new URLSearchParams();
       if (filters.order_status)
@@ -178,15 +173,13 @@ const OrderAdmin = () => {
         error.response?.data?.msg || "Network error"
       );
     } finally {
-      setIsDataLoading(false);
+      setIsLoading(false);
     }
-  }, [filters, isAdmin]);
+  }, [filters]);
 
   useEffect(() => {
-    if (isAdmin) {
-      fetchOrders();
-    }
-  }, [fetchOrders, isAdmin]);
+    fetchOrders();
+  }, [fetchOrders]);
 
   const fetchOrderDetails = async (orderId) => {
     try {
@@ -237,11 +230,21 @@ const OrderAdmin = () => {
         return;
       }
 
-      if (order.order_status !== "pending" && newStatus !== "received") {
+      // Special validation for different status changes
+      if (newStatus === "approved" && order.order_status !== "pending") {
         showAlert(
           "error",
           "Status update failed",
-          "Only pending orders can be updated, except for receiving approved orders"
+          "Only pending orders can be approved"
+        );
+        return;
+      }
+
+      if (newStatus === "cancelled" && order.order_status !== "pending") {
+        showAlert(
+          "error",
+          "Status update failed",
+          "Only pending orders can be cancelled"
         );
         return;
       }
@@ -321,49 +324,74 @@ const OrderAdmin = () => {
         return;
       }
 
-      const orderToUpdate = orders.find((order) => order.order_id === orderId);
-      if (!orderToUpdate || orderToUpdate.order_status !== "approved") {
+      // Check current order status
+      const orderResponse = await api.get(`/orders/${orderId}`);
+      const currentOrder = orderResponse.data;
+
+      if (!currentOrder || currentOrder.order_status !== "approved") {
         showAlert(
           "error",
           "Invalid Operation",
           "Only approved orders can be received"
         );
+        await fetchOrders();
         return;
       }
 
-      // First mark as received
-      await api.patch(`/orders/${orderId}/status`, {
-        order_status: "received",
-      });
+      // Get order details for expiry dates
+      const detailsResponse = await api.get(`/orders/${orderId}/details`);
+      const details = detailsResponse.data.result;
 
-      // Then get order details and show exp date modal
-      const orderDetailsResponse = await api.get(`/orders/${orderId}/details`);
-      const orderDetails = orderDetailsResponse.data.result;
-      setProcessingOrderId(orderId);
-
-      // Initialize exp date inputs state
+      // Initialize expiration date inputs
       const initialExpDateInputs = {};
-      orderDetails.forEach((detail) => {
+      details.forEach((detail) => {
         initialExpDateInputs[detail.order_detail_id] = {
           hasExpDate: false,
           expDate: "",
         };
       });
-      setExpDateInputs(initialExpDateInputs);
 
-      setOrderDetails(orderDetails);
+      // Set up the expiry date modal
+      setProcessingOrderId(orderId);
+      setOrderDetails(details);
+      setExpDateInputs(initialExpDateInputs);
       setShowExpDateModal(true);
     } catch (error) {
       showAlert(
         "error",
-        "Failed to update status",
+        "Failed to process order",
         error.response?.data?.msg || "Network error"
       );
+      await fetchOrders();
     }
   };
 
   const handleExpDateSubmit = async () => {
     try {
+      if (!processingOrderId) {
+        showAlert("error", "Error", "No order is being processed");
+        return;
+      }
+
+      // Check if order is still in approved status before proceeding
+      const orderResponse = await api.get(`/orders/${processingOrderId}`);
+      const currentOrder = orderResponse.data;
+
+      if (!currentOrder || currentOrder.order_status !== "approved") {
+        showAlert(
+          "error",
+          "Status update failed",
+          "Order must be in approved status to be received"
+        );
+        setShowExpDateModal(false);
+        setProcessingOrderId(null);
+        setExpDateInputs({});
+        await fetchOrders();
+        return;
+      }
+
+      // Create batches with expiration dates
+      // This will also update the order status to received
       const expiration_dates = {};
       Object.entries(expDateInputs).forEach(([detailId, input]) => {
         if (input.hasExpDate && input.expDate) {
@@ -371,7 +399,6 @@ const OrderAdmin = () => {
         }
       });
 
-      // Create batches with expiration dates
       await api.post(`/orders/${processingOrderId}/create-batches`, {
         expiration_dates,
       });
@@ -384,13 +411,14 @@ const OrderAdmin = () => {
       setShowExpDateModal(false);
       setProcessingOrderId(null);
       setExpDateInputs({});
-      fetchOrders();
+      await fetchOrders();
     } catch (error) {
       showAlert(
         "error",
-        "Failed to create batches",
+        "Failed to process order",
         error.response?.data?.msg || "Network error"
       );
+      await fetchOrders();
     }
   };
 
@@ -745,34 +773,33 @@ const OrderAdmin = () => {
   }, [orders]);
 
   useEffect(() => {
-    if (orders.length > 0) {
-      fetchOrderStats();
-    }
-  }, [fetchOrderStats, orders]);
+    fetchOrderStats();
+  }, [fetchOrderStats]);
 
-  const toggleBatchDetails = (detailIndex) => {
-    setExpandedBatchDetails((prev) => ({
-      ...prev,
-      [detailIndex]: !prev[detailIndex],
-    }));
+  const getCurrentPageItems = () => {
+    const startIndex = currentPage * itemsPerPage;
+    const endIndex = startIndex + itemsPerPage;
+    return orders.slice(startIndex, endIndex);
   };
 
+  const totalPages = Math.ceil(orders.length / itemsPerPage);
+
   return (
-    <div className="min-h-screen bg-gray-50 py-20">
-      <div className="max-w-7xl mx-auto px-3 sm:px-4 lg:px-6">
-        {isLoading ? (
+    <div className="min-h-screen py-20">
+      <div className="max-w-7xl mx-auto">
+        {isLoading || isAdmin === null ? (
           <LoadingComponent />
         ) : !isAdmin ? (
-          <div className="flex items-center justify-center h-screen bg-gray-50">
+          <div className="flex items-center justify-center h-scree">
             <div className="text-center bg-white p-8 rounded-lg shadow-lg max-w-md mx-auto">
-              <div className="mb-4 text-yellow-500">
+              <div className="mb-4 text-red-500">
                 <AlertTriangle size={48} className="mx-auto" />
               </div>
-              <h1 className="text-2xl font-bold text-yellow-600 mb-4">
-                Access Warning
+              <h1 className="text-2xl font-bold text-red-600 mb-4">
+                Access Denied
               </h1>
               <p className="text-gray-600 mb-6">
-                Please use the appropriate order management page for your role.
+                You do not have permission to access this page.
               </p>
               <a
                 href="/dashboard"
@@ -783,10 +810,10 @@ const OrderAdmin = () => {
             </div>
           </div>
         ) : (
-          <div className="bg-gray-50">
-            <div className="max-w-7xl mx-auto px-4 sm:px-6">
+          <div>
+            <div className="px-4">
               {/* Order Management Card Header */}
-              <div className="bg-gradient-to-r from-blue-500 to-blue-700 rounded-t-lg shadow-md p-4 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+              <div className="bg-gradient-to-r from-blue-500 to-blue-700  rounded-t-lg shadow-md p-4 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
                 <div className="flex items-center">
                   <ShoppingCart className="text-white mr-3" />
                   <div>
@@ -926,9 +953,7 @@ const OrderAdmin = () => {
                       </div>
                     </div>{" "}
                     <div className="p-3 sm:p-4 max-h-[calc(100vh-200px)] overflow-y-auto">
-                      {isDataLoading ? (
-                        <LoadingComponent />
-                      ) : orders.length > 0 ? (
+                      {orders.length > 0 ? (
                         <>
                           {/* Desktop View */}
                           <div className="hidden md:block">
@@ -956,7 +981,7 @@ const OrderAdmin = () => {
                                 </tr>
                               </thead>
                               <tbody>
-                                {orders.map((order) => (
+                                {getCurrentPageItems().map((order) => (
                                   <tr
                                     key={order.order_id}
                                     className="border-b border-gray-100 hover:bg-gray-50"
@@ -1071,7 +1096,7 @@ const OrderAdmin = () => {
 
                           {/* Mobile View */}
                           <div className="md:hidden space-y-4">
-                            {orders.map((order) => (
+                            {getCurrentPageItems().map((order) => (
                               <div
                                 key={order.order_id}
                                 className="bg-white p-4 rounded-lg border border-gray-200 shadow-sm"
@@ -1213,6 +1238,17 @@ const OrderAdmin = () => {
                           )}
                         </div>
                       )}
+                    </div>
+                    {/* Pagination */}
+                    <div className="mt-4">
+                      <Pagination
+                        currentPage={currentPage}
+                        totalPages={totalPages}
+                        onPageChange={setCurrentPage}
+                        itemsPerPage={itemsPerPage}
+                        totalItems={orders.length}
+                        className="rounded-t-none"
+                      />
                     </div>
                   </div>
                 </div>
@@ -1596,64 +1632,6 @@ const OrderAdmin = () => {
                               </span>
                             </div>
                           )}
-{detail.available_batches?.length > 0 && (
-  <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
-    <div className="flex items-center justify-between mb-3">
-      <div className="flex items-center gap-2">
-        <Package2 size={16} className="text-gray-600" />
-        <span className="text-sm font-medium text-gray-700">Available Batches</span>
-      </div>
-      <button onClick={() => toggleBatchDetails(index)}
-        className="text-xs text-blue-600 hover:text-blue-800 flex items-center gap-1"
-      >
-        {expandedBatchDetails[index] ? (
-          <>
-            <ChevronUp size={14} />
-            Hide Details
-          </>
-        ) : (
-          <>
-            <ChevronDown size={14} />
-            Show Details
-          </>
-        )}
-      </button>
-    </div>
-
-    {expandedBatchDetails[index] && (
-      <div className="space-y-2 mt-2">
-        {detail.available_batches.map((batch) => (
-          <div key={batch.batch_id}
-            className="bg-white p-3 rounded-lg border border-gray-200 text-sm"
-          >
-            <div className="flex justify-between items-center mb-2">
-              <span className="font-medium text-gray-900">{batch.batch_code}</span>
-              <span className="text-blue-600 font-medium">
-                {formatPrice(batch.purchase_price)}
-              </span>
-            </div>
-            <div className="grid grid-cols-2 gap-4 text-xs">
-              <div>
-                <span className="text-gray-500">Stock: </span>
-                <span className="text-gray-900 font-medium">
-                  {batch.stock_quantity} pcs
-                </span>
-              </div>
-              <div>
-                <span className="text-gray-500">Expiry: </span>
-                <span className="text-gray-900 font-medium">
-                  {batch.exp_date 
-                    ? new Date(batch.exp_date).toLocaleDateString()
-                    : 'N/A'}
-                </span>
-              </div>
-            </div>
-          </div>
-        ))}
-      </div>
-    )}
-  </div>
-)}
                           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
                             <div>
                               <label

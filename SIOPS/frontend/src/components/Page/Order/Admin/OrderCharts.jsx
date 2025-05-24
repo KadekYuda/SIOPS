@@ -585,7 +585,7 @@ const OrderCharts = ({ orderStats }) => {
   );
 
   return (
-    <div className="space-y-4 sm:space-y-6 md:space-y-8 p-2 sm:p-4 bg-gray-50">
+    <div className="space-y-4 sm:space-y-6 md:space-y-8 p-4">
       {/* Header */}
       <div className="bg-white p-3 sm:p-4 md:p-6 rounded-lg sm:rounded-xl shadow-sm border border-gray-100">
         <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2 sm:gap-4 mb-4 sm:mb-6">

@@ -11,7 +11,7 @@ const api = axios.create({
 
 // Tambahkan interceptor untuk logging (debugging)
 api.interceptors.request.use(request => {
-  console.log('Request URL:', request.baseURL + request.url);
+  // console.log('Request URL:', request.baseURL + request.url);
   return request;
 });
 

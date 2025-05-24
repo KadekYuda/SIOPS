@@ -9,8 +9,7 @@ import UserProfile from "../components/Page/Profile/UserProfile";
 import Product from "../components/Page/Product/Product";
 import BatchStok from "../components/Page/Product/BatchStok";
 import Sales from "../components/Page/Sales/Sales";
-import SalesDetail from "../components/Page/Sales/SalesDetail";
-import BatchStoks from "../components/Page/Product/Batchstocks";
+import CSVImportTool from "../components/Page/ImportCsv";
 import Order from "../components/Page/Order/Staff/Order";
 import OrderAdmin from "../components/Page/Order/Admin/OrderAdmin";
 import api from "../service/api";
@@ -168,10 +167,10 @@ function AppRoutes() {
         />
 
         <Route
-          path="/batchstocks"
+          path="/import"
           element={
             <ProtectedRoute allowedRoles={["staff", "admin"]}>
-              <BatchStoks />
+              <CSVImportTool />
             </ProtectedRoute>
           }
         />
@@ -203,14 +202,7 @@ function AppRoutes() {
           }
         />
 
-        <Route
-          path="/salesdetail/:id"
-          element={
-            <ProtectedRoute allowedRoles={["staff", "admin"]}>
-              <SalesDetail />
-            </ProtectedRoute>
-          }
-        />
+      
 
         {/* Default route - redirect based on role */}
         <Route

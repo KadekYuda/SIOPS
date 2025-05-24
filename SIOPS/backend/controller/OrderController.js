@@ -207,14 +207,14 @@ export const updateOrderStatus = async (req, res) => {
     
     try {
         const { order_status } = req.body;
-        const orderId = req.params.id;
+        const { id: orderId } = req.params;
         
         // Check if user is admin for status updates
         if (!req.user || req.user.role !== 'admin') {
             await t.rollback();
             return res.status(403).json({ msg: "Only admin can update order status" });
         }
-
+        
         const order = await Order.findByPk(orderId, {
             include: [{
                 model: OrderDetail
@@ -227,10 +227,19 @@ export const updateOrderStatus = async (req, res) => {
             return res.status(404).json({ msg: "Order not found" });
         }
 
-        // Check valid status transitions
-        if (order_status === 'received' && order.order_status !== 'approved') {
+        // Validate status transitions
+        const allowedTransitions = {
+            'pending': ['approved', 'cancelled'],
+            'approved': ['received'],
+            'received': [],
+            'cancelled': []
+        };
+
+        if (!allowedTransitions[order.order_status]?.includes(order_status)) {
             await t.rollback();
-            return res.status(400).json({ msg: "Order must be approved before being received" });
+            return res.status(400).json({ 
+                msg: `Cannot change status from ${order.order_status} to ${order_status}. Invalid transition.`
+            });
         }
         
         // Update order status
@@ -274,19 +283,24 @@ export const createOrderBatches = async (req, res) => {
         if (!orderDetails || orderDetails.length === 0) {
             await t.rollback();
             return res.status(404).json({ msg: "Order details not found" });
-        }
-
-        // Get the order to check status
+        }        // Get the order to check status
         const order = await Order.findByPk(orderId, { transaction: t });
         if (!order) {
             await t.rollback();
             return res.status(404).json({ msg: "Order not found" });
         }
 
-        if (order.order_status !== 'received') {
+        // Verify the order is in approved status
+        if (order.order_status !== 'approved') {
             await t.rollback();
-            return res.status(400).json({ msg: "Order must be in received status" });
+            return res.status(400).json({ msg: "Order must be in approved status to receive items" });
         }
+
+        // Update order status to received as part of this transaction
+        await order.update({
+            order_status: 'received',
+            updated_at: new Date()
+        }, { transaction: t });
 
         // Create or update batches for each order detail
         for (const detail of orderDetails) {
@@ -363,13 +377,12 @@ export const createOrderBatches = async (req, res) => {
                     }, { transaction: t });
                     batchToUse = batchToUpdate;
                 } else {                    
-                    const quantity = parseInt(detail.quantity);
-                    batchToUse = await BatchStock.create({
+                    const quantity = parseInt(detail.quantity);                    batchToUse = await BatchStock.create({
                         code_product: detail.code_product,
                         batch_code: batchCode,
                         purchase_price: detail.ordered_price,
                         initial_stock: quantity,
-                        stock_quantity: 0, 
+                        stock_quantity: quantity, // Set initial stock_quantity sama dengan quantity
                         arrival_date: currentDate,
                         exp_date: expiration_dates[detail.order_detail_id] ? new Date(expiration_dates[detail.order_detail_id]) : null,
                         created_at: currentDate,

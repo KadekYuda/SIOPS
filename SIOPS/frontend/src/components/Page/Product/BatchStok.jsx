@@ -202,7 +202,7 @@ const BatchStok = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    
       <div className="container mx-auto px-4 py-6 pt-20">
         {/* Header Section */}
         <div className="mb-6">
@@ -1024,7 +1024,7 @@ const BatchStok = () => {
           </div>
         </div>
       </div>
-    </div>
+    
   );
 };
 

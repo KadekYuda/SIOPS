@@ -1,24 +1,23 @@
-import React, { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
-import Papa from "papaparse";
+import React, { useState, useEffect, useRef } from "react";
 import {
-  FaFileImport,
-  FaDownload,
-  FaPlus,
-  FaTrash,
-  FaSpinner,
-  FaEye,
-  FaCalendarAlt,
-  FaBox,
-  FaCoins,
-  FaTags,
-  FaClipboardList,
-  FaCheck,
-} from "react-icons/fa";
+  Upload,
+  Download,
+  Plus,
+  Trash2,
+  RefreshCw,
+  Eye,
+  Calendar,
+  Package,
+  DollarSign,
+  ClipboardList,
+  Check,
+} from "lucide-react";
 import AlertModal from "../../modal/AlertModal";
 import SuccessModal from "../../modal/SuccessModal";
-import api from "../../../service/api";
 import LoadingComponent from "../../LoadingComponent";
+import SalesDetails from "./SalesDetails";
+import ProductSelect from "./ProductSelect";
+import api from "../../../service/api";
 
 const Sales = () => {
   const [sales, setSales] = useState([]);
@@ -30,6 +29,8 @@ const Sales = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [csvFile, setCsvFile] = useState(null);
   const [activeTab, setActiveTab] = useState("manual"); // "manual" or "import"
+  const [selectedSaleId, setSelectedSaleId] = useState(null); // For modal
+  const fileInputRef = useRef(null);
 
   const [manualSale, setManualSale] = useState({
     sales_date: new Date().toISOString().split("T")[0],
@@ -46,18 +47,48 @@ const Sales = () => {
     ],
   });
 
-  const navigate = useNavigate();
+  const [userData, setUserData] = useState(null);
 
   useEffect(() => {
     fetchSales();
     fetchProducts();
+    fetchUserData();
   }, []);
+
+  const fetchUserData = async () => {
+    try {
+      const response = await api.get("/users/profile");
+      setUserData(response.data.user);
+    } catch (error) {
+      console.error("Error fetching user data:", error);
+    }
+  };
 
   const fetchSales = async () => {
     try {
       setIsLoading(true);
       const response = await api.get("/sales");
-      setSales(response.data);
+      const salesWithUserDetails = await Promise.all(
+        response.data.map(async (sale) => {
+          if (sale.user_id && !sale.user) {
+            try {
+              const userResponse = await api.get(`/users/${sale.user_id}`);
+              return {
+                ...sale,
+                user: userResponse.data,
+              };
+            } catch (error) {
+              console.error(
+                `Error fetching user data for sale ${sale.sales_id}:`,
+                error
+              );
+              return sale;
+            }
+          }
+          return sale;
+        })
+      );
+      setSales(salesWithUserDetails);
     } catch (error) {
       setAlertMessage(error.response?.data?.msg || "Error fetching sales");
       setShowAlert(true);
@@ -104,75 +135,72 @@ const Sales = () => {
       await fetchBatchesForProduct(product.code_product, index);
     }
   };
+  const handleUpload = async () => {
+    if (!csvFile) return;
+
+    try {
+      setIsLoading(true);
+      const formData = new FormData();
+      formData.append("file", csvFile);
+
+      const response = await api.post("/sales/import", formData, {
+        headers: {
+          "Content-Type": "multipart/form-data",
+        },
+      });
+
+      setSuccessMessage(
+        `✅ Import successful!\n${
+          response.data.msg || "Sales data imported successfully"
+        }`
+      );
+      setShowSuccess(true);
+      fetchSales();
+      clearCsvFile();
+    } catch (error) {
+      let errorMessage =
+        error.response?.data?.msg || error.message || "Error importing sales";
+
+      if (error.response?.data?.details) {
+        const details = error.response.data.details;
+        const sortedDetails = [...details].sort((a, b) => {
+          const productA = products.find(
+            (p) => p.code_product === a.code_product
+          );
+          const productB = products.find(
+            (p) => p.code_product === b.code_product
+          );
+          return (productA?.name_product || a.code_product).localeCompare(
+            productB?.name_product || b.code_product
+          );
+        });
+
+        errorMessage =
+          "❌ Insufficient stock for these products:\n\n" +
+          sortedDetails
+            .map((detail) => {
+              const product = products.find(
+                (p) => p.code_product === detail.code_product
+              );
+              const name = product ? product.name_product : "Unknown Product";
+              return `📦 ${name}\n   Product Code: ${detail.code_product}\n   Stock Available: ${detail.available}\n   Quantity Requested: ${detail.requested}`;
+            })
+            .join("\n\n") +
+          "\n\nPlease check the quantities in your CSV file.";
+      }
+
+      setAlertMessage(errorMessage);
+      setShowAlert(true);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const handleCSVUpload = (e) => {
     const file = e.target.files[0];
     if (file) {
       setCsvFile(file);
-      Papa.parse(file, {
-        complete: async (results) => {
-          try {
-            setIsLoading(true);
-            const salesData = transformPOSDataToSales(results.data);
-
-            for (const sale of salesData) {
-              await api.post("/sales", sale);
-            }
-
-            setSuccessMessage("Sales data imported successfully");
-            setShowSuccess(true);
-            fetchSales();
-          } catch (error) {
-            setAlertMessage(
-              error.response?.data?.msg || "Error importing sales"
-            );
-            setShowAlert(true);
-          } finally {
-            setIsLoading(false);
-          }
-        },
-        header: true,
-        skipEmptyLines: true,
-        transformHeader: (header) => {
-          const headerMap = {
-            Tanggal: "sales_date",
-            "Kode Barang": "code_product",
-            Barcode: "barcode",
-            "Nama Barang": "name_product",
-            Qty: "quantity",
-            "Harga Jual": "selling_price",
-            Jumlah: "subtotal",
-          };
-          return headerMap[header] || header;
-        },
-      });
     }
-  };
-
-  const transformPOSDataToSales = (data) => {
-    const salesByDate = data.reduce((acc, row) => {
-      const date = row.sales_date;
-      if (!acc[date]) {
-        acc[date] = {
-          sales_date: date,
-          total_amount: 0,
-          items: [],
-        };
-      }
-
-      const item = {
-        code_product: row.code_product,
-        quantity: Number(row.quantity),
-        selling_price: Number(row.selling_price),
-        subtotal: Number(row.subtotal || row.quantity * row.selling_price),
-      };
-
-      acc[date].items.push(item);
-      acc[date].total_amount += item.subtotal;
-      return acc;
-    }, {});
-
-    return Object.values(salesByDate);
   };
 
   const handleItemChange = (index, field, value) => {
@@ -223,39 +251,75 @@ const Sales = () => {
 
   const handleManualSubmit = async (e) => {
     e.preventDefault();
+    await recordSale();
+  };
+
+  const recordSale = async () => {
     try {
       setIsLoading(true);
-      const total_amount = manualSale.items.reduce(
-        (sum, item) => sum + (item.subtotal || 0),
-        0
-      );
 
+      // Prepare sale data
       const saleData = {
-        ...manualSale,
-        total_amount,
         sales_date: manualSale.sales_date,
+        items: manualSale.items.map((item) => ({
+          code_product: item.code_product,
+          quantity: parseInt(item.quantity, 10),
+          selling_price: parseFloat(item.selling_price),
+          subtotal: item.subtotal,
+        })),
       };
 
-      await api.post("/sales", saleData);
-      setSuccessMessage("Sale recorded successfully");
-      setShowSuccess(true);
-      setManualSale({
-        sales_date: new Date().toISOString().split("T")[0],
-        total_amount: 0,
-        items: [
-          {
-            code_product: "",
-            product_name: "",
-            quantity: "",
-            selling_price: "",
-            subtotal: 0,
-            available_batches: [],
-          },
-        ],
-      });
-      fetchSales();
+      // Log the request payload for debugging
+      console.log("Sending sale data:", saleData);
+
+      // Make the API call
+      const response = await api.post("/sales", saleData);
+
+      // Log the response for debugging
+      console.log("Response from backend:", response.data);
+
+      // Handle successful response
+      if (response.data && response.data.sales_id) {
+        // Show success message
+        setSuccessMessage(
+          `Sale #${response.data.sales_id} recorded successfully`
+        );
+        setShowSuccess(true);
+
+        // Reset the form
+        setManualSale({
+          sales_date: new Date().toISOString().split("T")[0],
+          items: [
+            {
+              code_product: "",
+              product_name: "",
+              quantity: "",
+              selling_price: "",
+              subtotal: 0,
+              available_batches: [],
+            },
+          ],
+        });
+
+        // Refresh the sales list
+        await fetchSales();
+      } else {
+        throw new Error("Invalid response format from server");
+      }
     } catch (error) {
-      setAlertMessage(error.response?.data?.msg || "Error recording sale");
+      // Enhanced error logging
+      console.error("Sale recording error:", {
+        message: error.message,
+        response: error.response?.data,
+        stack: error.stack,
+      });
+
+      // Show user-friendly error message
+      const errorMsg =
+        error.response?.data?.msg ||
+        error.message ||
+        "An error occurred while recording the sale";
+      setAlertMessage(errorMsg);
       setShowAlert(true);
     } finally {
       setIsLoading(false);
@@ -277,34 +341,38 @@ const Sales = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 py-20">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="bg-gradient-to-r from-blue-500 to-blue-700 px-4 py-4 rounded-xl sm:rounded-none sm:rounded-t-xl mb-6 sm:mb-0 flex flex-col sm:flex-row sm:justify-between sm:items-center">
-          <div>
-            <h1 className="text-2xl md:text-3xl font-bold text-white">
-              Sales Management
-            </h1>
-            <p className="mt-1 text-sm text-indigo-100">
-              Create, import, and manage sales transactions
-            </p>
+    <div className="min-h-screen py-20">
+      <div className="px-4">
+        {/* Sales Management Card Header */}
+        <div className="bg-gradient-to-r from-blue-500 to-blue-700 rounded-t-lg shadow-md p-4 sm:p-6 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+          <div className="flex items-center">
+            <ClipboardList className="text-white mr-3" size={24} />
+            <div>
+              <h1 className="text-xl md:text-2xl font-bold text-white">
+                Sales Management
+              </h1>
+              <p className="text-indigo-100 text-sm">
+                Create, import, and manage sales transactions
+              </p>
+            </div>
           </div>
-          <div className="flex gap-3 mt-4 sm:mt-0">
+          <div className="flex flex-wrap gap-2 sm:gap-3">
             <button
               onClick={() => setActiveTab("manual")}
-              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors duration-150 shadow-sm ${
+              className={`px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg text-sm font-medium ${
                 activeTab === "manual"
-                  ? "bg-white text-indigo-700 shadow"
-                  : "bg-indigo-500 text-white hover:bg-indigo-600"
+                  ? "bg-white text-indigo-700 shadow-sm"
+                  : "bg-indigo-500 text-white hover:bg-indigo-600 border border-indigo-400"
               }`}
             >
               Manual Entry
             </button>
             <button
               onClick={() => setActiveTab("import")}
-              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors duration-150 shadow-sm ${
+              className={`px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg text-sm font-medium ${
                 activeTab === "import"
-                  ? "bg-white text-indigo-700 shadow"
-                  : "bg-indigo-500 text-white hover:bg-indigo-600"
+                  ? "bg-white text-indigo-700 shadow-sm"
+                  : "bg-indigo-500 text-white hover:bg-indigo-600 border border-indigo-400"
               }`}
             >
               Import Sales
@@ -316,98 +384,164 @@ const Sales = () => {
         <div className="mb-8">
           {/* Import CSV Section */}
           {activeTab === "import" && (
-            <div className="bg-white rounded-xl shadow-md p-6 border border-gray-100">
-              <div className="flex items-center gap-2 mb-6">
-                <div className="h-10 w-10 rounded-full bg-blue-100 flex items-center justify-center">
-                  <FaFileImport className="text-blue-600" />
-                </div>
-                <div>
-                  <h2 className="text-xl font-semibold text-gray-800">
-                    Import Sales from CSV
-                  </h2>
-                  <p className="text-sm text-gray-500">
-                    Upload POS data or use our template
-                  </p>
-                </div>
-              </div>
-
-              <div className="bg-gray-50 p-6 rounded-lg border border-gray-100">
-                <div className="mb-6">
-                  <h3 className="text-sm font-medium text-gray-700 mb-2">
-                    Instructions
-                  </h3>
-                  <ol className="list-decimal list-inside text-sm text-gray-600 space-y-1">
-                    <li>Download our template or prepare your POS export</li>
-                    <li>Ensure your CSV has the required headers</li>
-                    <li>Upload the file using the button below</li>
-                  </ol>
+            <div className="bg-white border-gray-200 border rounded-xl shadow-lg mb-6 overflow-hidden">
+              <div className="p-6">
+                <div className="flex items-center mb-6">
+                  <div className="bg-indigo-100 text-indigo-600 p-3 rounded-full mr-4">
+                    <Upload className="w-6 h-6" />
+                  </div>
+                  <div>
+                    <h2 className="text-lg font-semibold">
+                      Import Sales from CSV
+                    </h2>
+                    <p className="text-sm text-gray-500">
+                      Upload POS data or use our template
+                    </p>
+                  </div>
                 </div>
 
-                <div className="flex flex-col sm:flex-row sm:items-center gap-4">
-                  <button
-                    onClick={downloadTemplate}
-                    className="flex items-center justify-center px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors shadow-sm"
-                    aria-label="Download CSV template"
-                  >
-                    <FaDownload className="mr-2" />
-                    Download Template
-                  </button>
-                  <label className="flex items-center justify-center px-4 py-2 bg-blue-600 text-white rounded-lg cursor-pointer hover:bg-blue-700 transition-colors shadow-sm">
-                    <FaFileImport className="mr-2" />
-                    Select CSV File
-                    <input
-                      type="file"
-                      accept=".csv"
-                      onChange={handleCSVUpload}
-                      className="hidden"
-                      disabled={isLoading}
-                    />
-                  </label>
-                </div>
-
-                {csvFile && (
-                  <div className="mt-4 p-3 bg-blue-50 rounded-lg border border-blue-100 flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <div className="h-8 w-8 rounded-full bg-blue-100 flex items-center justify-center">
-                        <FaFileImport className="text-blue-600 text-sm" />
-                      </div>
-                      <div>
-                        <p className="text-sm font-medium text-gray-700">
-                          {csvFile.name}
-                        </p>
-                        <p className="text-xs text-gray-500">
-                          {Math.round(csvFile.size / 1024)} KB
-                        </p>
+                <div
+                  className={`border-2 border-dashed ${
+                    isLoading
+                      ? "border-indigo-300 bg-indigo-50"
+                      : csvFile
+                      ? "border-green-300 bg-green-50"
+                      : "border-gray-300 hover:border-indigo-500 bg-gray-50 hover:bg-indigo-50"
+                  } rounded-lg p-8 text-center cursor-pointer transition-all duration-200`}
+                  onClick={() => fileInputRef.current.click()}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    const file = e.dataTransfer.files[0];
+                    if (file && file.type === "text/csv") {
+                      handleCSVUpload({ target: { files: [file] } });
+                    }
+                  }}
+                  onDragOver={(e) => e.preventDefault()}
+                >
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept=".csv"
+                    onChange={handleCSVUpload}
+                    className="hidden"
+                    disabled={isLoading}
+                  />
+                  {isLoading ? (
+                    <div className="flex flex-col items-center">
+                      <RefreshCw className="w-16 h-16 text-indigo-500 animate-spin mb-4" />
+                      <p className="text-sm text-indigo-600 font-medium">
+                        Processing your file...
+                      </p>
+                    </div>
+                  ) : csvFile ? (
+                    <div className="flex flex-col items-center">
+                      <Upload className="w-16 h-16 text-green-500 mb-4" />
+                      <p className="text-sm text-gray-600 font-medium mb-1">
+                        {csvFile.name}
+                      </p>
+                      <p className="text-xs text-gray-500 mb-3">
+                        {(csvFile.size / 1024).toFixed(1)}KB • CSV File
+                      </p>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            clearCsvFile();
+                          }}
+                          className="text-sm bg-gray-100 text-gray-600 px-4 py-2 rounded-lg hover:bg-gray-200 transition-colors"
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleUpload();
+                          }}
+                          disabled={isLoading}
+                          className="text-sm bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 transition-colors disabled:bg-indigo-300"
+                        >
+                          {isLoading ? (
+                            <span className="flex items-center">
+                              <RefreshCw className="animate-spin w-4 h-4 mr-2" />
+                              Importing...
+                            </span>
+                          ) : (
+                            "Import Data"
+                          )}
+                        </button>
                       </div>
                     </div>
-                    <button
-                      onClick={clearCsvFile}
-                      className="text-red-500 hover:text-red-700 p-1 rounded-full hover:bg-red-50"
-                      aria-label="Clear selected file"
-                    >
-                      <FaTrash />
-                    </button>
-                  </div>
-                )}
+                  ) : (
+                    <div>
+                      <Upload className="w-16 h-16 text-gray-400 mx-auto mb-4" />
+                      <p className="text-sm text-gray-600 font-medium mb-1">
+                        Drag and drop your CSV file here
+                      </p>
+                      <p className="text-xs text-gray-500">
+                        or click to browse
+                      </p>
+                    </div>
+                  )}
+                </div>
 
-                {isLoading && (
-                  <div className="mt-4 p-3 bg-yellow-50 rounded-lg border border-yellow-100 flex items-center gap-2">
-                    <FaSpinner className="animate-spin text-yellow-600" />
-                    <span className="text-sm text-yellow-700">
-                      Processing your file, please wait...
-                    </span>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-6">
+                  <div className="rounded-lg p-4 bg-indigo-50 border-l-4 border-indigo-500">
+                    <h3 className="font-medium mb-2">Supported Formats</h3>
+                    <p className="text-sm text-gray-600">
+                      CSV files with column headers. Must include date, product,
+                      quantity, and price.
+                    </p>
                   </div>
-                )}
+                  <div className="rounded-lg p-4 bg-indigo-50 border-l-4 border-indigo-500">
+                    <h3 className="font-medium mb-2">Data Rows</h3>
+                    <p className="text-sm text-gray-600">
+                      System can handle up to 5,000 rows in a single import.
+                    </p>
+                  </div>
+                  <div className="rounded-lg p-4 bg-indigo-50 border-l-4 border-indigo-500">
+                    <h3 className="font-medium mb-2">Duplicate Data</h3>
+                    <p className="text-sm text-gray-600">
+                      System will detect and prevent data duplication based on
+                      date and product.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="mt-6">
+                  <button
+                    onClick={downloadTemplate}
+                    className="w-full flex items-center justify-center px-6 py-4 bg-indigo-600 text-white text-base font-medium rounded-lg hover:bg-indigo-700 transition-colors"
+                  >
+                    <Download className="mr-2" size={18} />
+                    Download Template
+                  </button>
+                </div>
+
+                <div className="mt-6 p-4 rounded-lg bg-indigo-50">
+                  <div className="flex items-center mb-2">
+                    <Upload className="w-5 h-5 mr-2 text-indigo-500" />
+                    <h3 className="font-medium">Tips for Successful Import</h3>
+                  </div>
+                  <ul className="text-sm text-gray-600 space-y-1 pl-7 list-disc">
+                    <li>Ensure date column is in YYYY-MM-DD format</li>
+                    <li>Use comma (,) as separator for your CSV file</li>
+                    <li>
+                      Ensure all products are already registered in the system
+                    </li>
+                    <li>Avoid special characters in product names</li>
+                    <li>Use dot (.) as decimal separator for prices</li>
+                  </ul>
+                </div>
               </div>
             </div>
           )}
 
           {/* Manual Input Section */}
           {activeTab === "manual" && (
-            <div className="bg-white rounded-xl sm:rounded-none shadow-md p-6 border border-gray-100">
+            <div className="bg-white rounded-none shadow-md p-6 border border-gray-100">
               <div className="flex items-center gap-2 mb-6">
                 <div className="h-10 w-10 rounded-full bg-blue-100 flex items-center justify-center">
-                  <FaClipboardList className="text-blue-600" />
+                  <ClipboardList className="text-blue-600" />
                 </div>
                 <div>
                   <h2 className="text-xl font-semibold text-gray-800">
@@ -420,265 +554,254 @@ const Sales = () => {
               </div>
 
               <form onSubmit={handleManualSubmit}>
-                <div className="mb-6 bg-gray-50 p-4 rounded-lg border border-gray-100">
-                  <div className="flex items-center gap-2 mb-3">
-                    <FaCalendarAlt className="text-gray-500" />
-                    <label
-                      htmlFor="saleDate"
-                      className="text-sm font-medium text-gray-700"
-                    >
-                      Sale Date
-                    </label>
+                <div className="space-y-6">
+                  {/* Date Input */}
+                  <div className="bg-gray-50 p-4 rounded-lg border border-gray-100">
+                    <div className="flex items-center gap-2 mb-2">
+                      <Calendar className="text-gray-500" />
+                      <label
+                        htmlFor="saleDate"
+                        className="text-sm font-medium text-gray-700"
+                      >
+                        Sale Date
+                      </label>
+                    </div>
+                    <input
+                      id="saleDate"
+                      type="date"
+                      value={manualSale.sales_date}
+                      onChange={(e) =>
+                        setManualSale((prev) => ({
+                          ...prev,
+                          sales_date: e.target.value,
+                        }))
+                      }
+                      className="block w-full sm:w-64 rounded-lg border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+                      required
+                    />
                   </div>
-                  <input
-                    id="saleDate"
-                    type="date"
-                    value={manualSale.sales_date}
-                    onChange={(e) =>
-                      setManualSale((prev) => ({
-                        ...prev,
-                        sales_date: e.target.value,
-                      }))
-                    }
-                    className="block w-full sm:w-64 rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
-                    required
-                    aria-required="true"
-                  />
-                </div>
 
-                <div className="mb-4">
-                  <div className="flex items-center justify-between">
-                    <h3 className="text-lg font-medium text-gray-700 mb-2">
-                      Sale Items
-                    </h3>
-                    <button
-                      type="button"
-                      onClick={handleAddItem}
-                      className="flex items-center text-sm px-3 py-1 bg-green-100 text-green-700 rounded-lg hover:bg-green-200 transition-colors"
-                      aria-label="Add new item"
-                    >
-                      <FaPlus className="mr-1 text-xs" />
-                      Add Item
-                    </button>
-                  </div>
-                </div>
-
-                {manualSale.items.map((item, index) => (
-                  <div
-                    key={`sale-item-${index}`}
-                    className="mb-6 p-5 bg-white rounded-lg border border-gray-200 shadow-sm hover:shadow-md transition-shadow"
-                  >
+                  {/* Sale Items */}
+                  <div>
                     <div className="flex items-center justify-between mb-4">
-                      <div className="flex items-center gap-2">
-                        <div className="h-8 w-8 rounded-full bg-blue-100 flex items-center justify-center">
-                          <FaBox className="text-blue-600 text-sm" />
-                        </div>
-                        <h4 className="text-md font-medium text-gray-800">
-                          Item #{index + 1}
-                        </h4>
-                      </div>
-
-                      {index > 0 && (
-                        <button
-                          type="button"
-                          onClick={() => handleRemoveItem(index)}
-                          className="flex items-center text-sm px-3 py-1 bg-red-100 text-red-700 rounded-lg hover:bg-red-200 transition-colors"
-                          aria-label="Remove item"
-                        >
-                          <FaTrash className="mr-1 text-xs" />
-                          Remove
-                        </button>
-                      )}
+                      <h3 className="text-lg font-medium text-gray-800">
+                        Sale Items
+                      </h3>
+                      <button
+                        type="button"
+                        onClick={handleAddItem}
+                        className="flex items-center px-3 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"
+                      >
+                        <Plus className="mr-2" />
+                        Add Item
+                      </button>
                     </div>
 
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
-                      <div>
-                        <label
-                          htmlFor={`product-${index}`}
-                          className="flex items-center gap-1 text-sm font-medium text-gray-700 mb-1"
-                        >
-                          <FaTags className="text-gray-500 text-xs" />
-                          Product
-                        </label>
-                        <select
-                          id={`product-${index}`}
-                          value={item.code_product}
-                          onChange={(e) =>
-                            handleProductSelect(index, e.target.value)
-                          }
-                          className="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
-                          required
-                          aria-required="true"
-                        >
-                          <option value="">Select Product</option>
-                          {products.map((product) => (
-                            <option
-                              key={product.code_product}
-                              value={product.code_product}
+                    {/* Item List */}
+                    {manualSale.items.map((item, index) => (
+                      <div
+                        key={`sale-item-${index}`}
+                        className="mb-6 bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden"
+                      >
+                        <div className="bg-gray-50 px-4 py-3 border-b border-gray-200 flex items-center justify-between">
+                          <h4 className="font-medium text-gray-700 flex items-center gap-2">
+                            <Package className="text-gray-400" />
+                            Item #{index + 1}
+                          </h4>
+                          {index > 0 && (
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveItem(index)}
+                              className="text-sm text-red-600 hover:text-red-700 flex items-center gap-1"
                             >
-                              {product.name_product}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-
-                      <div>
-                        <label
-                          htmlFor={`quantity-${index}`}
-                          className="flex items-center gap-1 text-sm font-medium text-gray-700 mb-1"
-                        >
-                          <FaBox className="text-gray-500 text-xs" />
-                          Quantity
-                        </label>
-                        <input
-                          id={`quantity-${index}`}
-                          type="number"
-                          value={item.quantity}
-                          onChange={(e) =>
-                            handleItemChange(index, "quantity", e.target.value)
-                          }
-                          className="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
-                          min="1"
-                          required
-                          aria-required="true"
-                        />
-                      </div>
-
-                      <div>
-                        <label
-                          htmlFor={`price-${index}`}
-                          className="flex items-center gap-1 text-sm font-medium text-gray-700 mb-1"
-                        >
-                          <FaCoins className="text-gray-500 text-xs" />
-                          Price
-                        </label>
-                        <input
-                          id={`price-${index}`}
-                          type="number"
-                          value={item.selling_price}
-                          onChange={(e) =>
-                            handleItemChange(
-                              index,
-                              "selling_price",
-                              e.target.value
-                            )
-                          }
-                          className="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
-                          min="0"
-                          step="0.01"
-                          required
-                          aria-required="true"
-                        />
-                      </div>
-
-                      <div>
-                        <label
-                          htmlFor={`subtotal-display-${index}`}
-                          className="flex items-center gap-1 text-sm font-medium text-gray-700 mb-1"
-                        >
-                          <FaCoins className="text-gray-500 text-xs" />
-                          Subtotal
-                        </label>
-                        <div
-                          id={`subtotal-display-${index}`}
-                          className="block w-full py-2 px-3 text-sm bg-gray-50 border border-gray-200 rounded-md font-medium text-gray-900"
-                          aria-label={`Subtotal: ${item.subtotal.toLocaleString(
-                            "id-ID",
-                            { style: "currency", currency: "IDR" }
-                          )}`}
-                        >
-                          {item.subtotal.toLocaleString("id-ID", {
-                            style: "currency",
-                            currency: "IDR",
-                          })}
+                              <Trash2 className="text-xs" />
+                              Remove
+                            </button>
+                          )}
                         </div>
-                      </div>
-                    </div>
 
-                    {item.available_batches.length > 0 && (
-                      <div className="mt-4 bg-blue-50 p-4 rounded-lg">
-                        <label
-                          htmlFor={`batches-list-${index}`}
-                          className="flex items-center gap-1 text-sm font-medium text-gray-700 mb-3"
-                        >
-                          <FaBox className="text-blue-600 text-xs" />
-                          Available Batches
-                        </label>
-                        <div
-                          id={`batches-list-${index}`}
-                          className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3"
-                          aria-label={`Available batches for product ${
-                            item.product_name || "selected product"
-                          }`}
-                        >
-                          {item.available_batches.map((batch) => (
-                            <div
-                              key={batch.batch_id}
-                              className="bg-white p-3 rounded-lg border border-gray-200 shadow-sm"
-                            >
-                              <div className="text-sm font-medium text-gray-800 mb-1">
-                                {batch.batch_code}
-                              </div>
-                              <div className="flex justify-between">
-                                <div className="text-xs text-gray-600">
-                                  Stock: {batch.totalStock || 0}
-                                </div>
-                                <div className="text-xs text-gray-600">
-                                  Expires:{" "}
-                                  {new Date(
-                                    batch.exp_date
-                                  ).toLocaleDateString()}
-                                </div>
+                        <div className="p-4">
+                          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                            <ProductSelect
+                              index={index}
+                              item={item}
+                              products={products}
+                              onChange={handleProductSelect}
+                            />
+
+                            {/* Quantity, Price, Subtotal Fields */}
+                            <div>
+                              <label
+                                htmlFor={`quantity-${index}`}
+                                className="block text-sm font-medium text-gray-700 mb-1"
+                              >
+                                Quantity
+                              </label>
+                              <div className="relative">
+                                <input
+                                  id={`quantity-${index}`}
+                                  type="number"
+                                  value={item.quantity}
+                                  onChange={(e) =>
+                                    handleItemChange(
+                                      index,
+                                      "quantity",
+                                      e.target.value
+                                    )
+                                  }
+                                  className="w-full p-2 pr-10 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                                  min="1"
+                                  required
+                                />
+                                <span className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-500 text-sm">
+                                  pcs
+                                </span>
                               </div>
                             </div>
-                          ))}
+
+                            <div>
+                              <label
+                                htmlFor={`price-${index}`}
+                                className="block text-sm font-medium text-gray-700 mb-1"
+                              >
+                                Price
+                              </label>
+                              <div className="relative">
+                                <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-500">
+                                  Rp
+                                </span>
+                                <input
+                                  id={`price-${index}`}
+                                  type="text"
+                                  value={
+                                    item.selling_price
+                                      ? Number(
+                                          item.selling_price
+                                        ).toLocaleString("id-ID")
+                                      : ""
+                                  }
+                                  onChange={(e) => {
+                                    const value = e.target.value.replace(
+                                      /[^\d]/g,
+                                      ""
+                                    );
+                                    handleItemChange(
+                                      index,
+                                      "selling_price",
+                                      value
+                                    );
+                                  }}
+                                  className="w-full p-2 pl-10 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                                  min="0"
+                                  required
+                                />
+                              </div>
+                            </div>
+
+                            <div>
+                              <label className="flex items-center gap-1 text-sm font-medium text-gray-700 mb-1">
+                                <DollarSign className="text-gray-500 text-xs" />
+                                Subtotal
+                              </label>
+                              <div className="block w-full py-2 px-3 text-sm bg-gray-50 border border-gray-200 rounded-lg font-medium text-gray-900">
+                                {new Intl.NumberFormat("id-ID", {
+                                  style: "currency",
+                                  currency: "IDR",
+                                  minimumFractionDigits: 0,
+                                  maximumFractionDigits: 0,
+                                }).format(item.subtotal || 0)}
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Available Batches */}
+                          {item.available_batches.length > 0 && (
+                            <div className="mt-4 bg-blue-50 p-4 rounded-lg">
+                              <h5 className="text-sm font-medium text-blue-900 mb-3 flex items-center gap-1">
+                                <Package className="text-blue-500" />
+                                Available Batches
+                              </h5>
+                              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                                {item.available_batches.map((batch) => (
+                                  <div
+                                    key={batch.batch_id}
+                                    className="bg-white p-3 rounded-lg border border-blue-100 shadow-sm"
+                                  >
+                                    <div className="font-medium text-sm text-gray-800 mb-1">
+                                      Batch #{batch.batch_code}
+                                    </div>
+                                    <div className="grid grid-cols-2 gap-2 text-xs">
+                                      <div className="text-gray-600">
+                                        Stock: {batch.totalStock || 0}
+                                      </div>
+                                      <div className="text-gray-600">
+                                        Expires:{" "}
+                                        {new Date(
+                                          batch.exp_date
+                                        ).toLocaleDateString()}
+                                      </div>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
                         </div>
                       </div>
-                    )}
-                  </div>
-                ))}
+                    ))}
 
-                <div className="flex flex-col sm:flex-row items-center justify-between gap-4 mt-8 bg-blue-50 p-4 rounded-lg border border-blue-100">
-                  <div className="text-lg font-semibold text-gray-800">
-                    Total Amount:{" "}
-                    <span className="text-blue-700">
-                      {manualSale.items
-                        .reduce((sum, item) => sum + (item.subtotal || 0), 0)
-                        .toLocaleString("id-ID", {
-                          style: "currency",
-                          currency: "IDR",
-                        })}
-                    </span>
-                  </div>
+                    {/* Total Amount */}
+                    <div className="bg-blue-50 p-4 rounded-lg border border-blue-100 mt-6">
+                      <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+                        <div className="text-lg font-semibold text-gray-800">
+                          Total Amount:{" "}
+                          <span className="text-blue-700">
+                            {new Intl.NumberFormat("id-ID", {
+                              style: "currency",
+                              currency: "IDR",
+                              minimumFractionDigits: 0,
+                              maximumFractionDigits: 0,
+                            }).format(
+                              manualSale.items.reduce(
+                                (sum, item) => sum + (item.subtotal || 0),
+                                0
+                              )
+                            )}
+                          </span>
+                        </div>
 
-                  <div className="flex gap-3">
-                    <button
-                      type="button"
-                      onClick={handleAddItem}
-                      className="flex items-center px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors shadow-sm"
-                      aria-label="Add new item"
-                    >
-                      <FaPlus className="mr-2" />
-                      Add Item
-                    </button>
-                    <button
-                      type="submit"
-                      className="flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors shadow-sm disabled:bg-blue-400 disabled:cursor-not-allowed"
-                      disabled={isLoading}
-                      aria-label="Save sale"
-                    >
-                      {isLoading ? (
-                        <>
-                          <FaSpinner className="animate-spin mr-2" />
-                          Saving...
-                        </>
-                      ) : (
-                        <>
-                          <FaCheck className="mr-2" />
-                          Save Sale
-                        </>
-                      )}
-                    </button>
+                        <div className="flex justify-end space-x-3 mt-6">
+                          <button
+                            type="button"
+                            onClick={handleAddItem}
+                            className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg font-medium flex items-center text-sm transition-colors"
+                          >
+                            <Plus className="mr-2" size={14} />
+                            Add Item
+                          </button>
+                          <button
+                            type="submit"
+                            className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 font-medium flex items-center text-sm transition-colors"
+                            disabled={isLoading}
+                          >
+                            {isLoading ? (
+                              <>
+                                <RefreshCw
+                                  className="animate-spin mr-2"
+                                  size={14}
+                                />
+                                Saving...
+                              </>
+                            ) : (
+                              <>
+                                <Check className="mr-2" size={14} />
+                                Save Sale
+                              </>
+                            )}
+                          </button>
+                        </div>
+                      </div>
+                    </div>
                   </div>
                 </div>
               </form>
@@ -687,92 +810,107 @@ const Sales = () => {
         </div>
 
         {/* Sales List */}
-        <div className="bg-white rounded-xl shadow-md p-6 border border-gray-100 mt-6">
-          <div className="flex items-center gap-2 mb-6">
-            <div className="h-10 w-10 rounded-full bg-indigo-100 flex items-center justify-center">
-              <FaClipboardList className="text-indigo-600" />
-            </div>
-            <div>
-              <h2 className="text-xl font-semibold text-indigo-800">
-                Recent Sales
-              </h2>
-              <p className="text-sm text-gray-500">
-                View and manage your sales transactions
-              </p>
+        <div className="bg-white rounded-b-xl shadow-md border border-gray-100 border-t-0">
+          <div className="bg-white px-4 sm:px-6 py-4 sm:py-6 border-b">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div className="h-10 w-10 rounded-lg bg-indigo-50 flex items-center justify-center">
+                  <ClipboardList className="text-indigo-600" size={20} />
+                </div>
+                <div>
+                  <h2 className="text-lg font-semibold text-gray-900">
+                    Sales List
+                  </h2>
+                  <p className="text-sm text-gray-500">
+                    View and manage your sales transactions
+                  </p>
+                </div>
+              </div>
             </div>
           </div>
 
-          {isLoading ? (
-            <LoadingComponent />
-          ) : (
-            <div className="overflow-x-auto rounded-lg border border-gray-200">
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-indigo-50">
-                  <tr>
-                    <th className="px-6 py-3 text-left text-xs font-bold text-indigo-700 uppercase tracking-wider">
-                      Sale ID
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-bold text-indigo-700 uppercase tracking-wider">
-                      Date
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-bold text-indigo-700 uppercase tracking-wider">
-                      Total Amount
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-bold text-indigo-700 uppercase tracking-wider">
-                      Actions
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
-                  {sales.length === 0 ? (
-                    <tr>
-                      <td
-                        colSpan="4"
-                        className="px-6 py-12 text-center text-gray-500"
-                      >
-                        <div className="flex flex-col items-center">
-                          <FaClipboardList className="text-indigo-200 text-4xl mb-3" />
-                          <p className="text-lg font-medium">No sales found</p>
-                          <p className="text-sm">
-                            Create a new sale or import from CSV
-                          </p>
-                        </div>
-                      </td>
+          <div className="p-3 sm:p-4 max-h-[calc(100vh-200px)] overflow-y-auto">
+            {isLoading ? (
+              <LoadingComponent />
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="min-w-full">
+                  <thead>
+                    <tr className="border-b border-gray-200">
+                      <th className="text-left px-4 py-3 text-xs font-medium text-gray-500">
+                        NO
+                      </th>
+                      <th className="text-left px-4 py-3 text-xs font-medium text-gray-500">
+                        USER
+                      </th>
+                      <th className="text-left px-4 py-3 text-xs font-medium text-gray-500">
+                        DATE
+                      </th>
+                      <th className="text-right px-4 py-3 text-xs font-medium text-gray-500">
+                        TOTAL
+                      </th>
+                      <th className="text-right px-4 py-3 text-xs font-medium text-gray-500">
+                        ACTIONS
+                      </th>
                     </tr>
-                  ) : (
-                    sales.map((sale) => (
-                      <tr key={sale.sales_id} className="hover:bg-indigo-50">
-                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-indigo-700">
-                          #{sale.sales_id}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                          {new Date(sale.sales_date).toLocaleDateString()}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                          {sale.total_amount.toLocaleString("id-ID", {
-                            style: "currency",
-                            currency: "IDR",
-                          })}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm">
-                          <button
-                            onClick={() =>
-                              navigate(`/salesdetail/${sale.sales_id}`)
-                            }
-                            className="flex items-center px-3 py-1 bg-indigo-100 text-indigo-700 rounded-lg hover:bg-indigo-200 transition-colors"
-                            aria-label="View sale details"
-                          >
-                            <FaEye className="mr-2" />
-                            View Details
-                          </button>
+                  </thead>
+                  <tbody>
+                    {sales.length === 0 ? (
+                      <tr>
+                        <td colSpan="5" className="px-6 py-12 text-center">
+                          <div className="flex flex-col items-center gap-2">
+                            <ClipboardList className="text-gray-300 text-4xl mb-2" />
+                            <p className="text-lg font-medium text-gray-500">
+                              No sales found
+                            </p>
+                            <p className="text-sm text-gray-400">
+                              Create a new sale or import from CSV
+                            </p>
+                          </div>
                         </td>
                       </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </div>
-          )}
+                    ) : (
+                      sales.map((sale) => (
+                        <tr
+                          key={sale.sales_id}
+                          className="border-b border-gray-100 hover:bg-gray-50"
+                        >
+                          <td className="px-4 py-3 text-indigo-600 font-medium">
+                            #{sale.sales_id}
+                          </td>
+                          <td className="px-4 py-3 text-sm text-gray-600">
+                            {sale.user?.name || sale.user_id || "N/A"}
+                          </td>
+                          <td className="px-4 py-3 text-sm text-gray-600">
+                            {new Date(sale.sales_date).toLocaleString()}
+                          </td>
+                          <td className="px-4 py-3 text-right font-medium">
+                            {new Intl.NumberFormat("id-ID", {
+                              style: "currency",
+                              currency: "IDR",
+                              minimumFractionDigits: 0,
+                              maximumFractionDigits: 0,
+                            }).format(sale.total_amount)}
+                          </td>
+                          <td className="px-4 py-3">
+                            <div className="flex justify-end">
+                              <button
+                                onClick={() => setSelectedSaleId(sale.sales_id)}
+                                className="inline-flex items-center px-3 py-1.5 bg-indigo-50 text-indigo-700 rounded-lg hover:bg-indigo-100 transition-colors text-sm font-medium"
+                              >
+                                <Eye className="mr-1.5" size={12} />
+                                View Details
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Modals */}
@@ -786,6 +924,13 @@ const Sales = () => {
           message={successMessage}
           onClose={() => setShowSuccess(false)}
         />
+        {selectedSaleId && (
+          <SalesDetails
+            isOpen={true}
+            saleId={selectedSaleId}
+            onClose={() => setSelectedSaleId(null)}
+          />
+        )}
       </div>
     </div>
   );

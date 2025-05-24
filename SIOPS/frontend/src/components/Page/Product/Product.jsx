@@ -211,22 +211,42 @@ const Product = () => {
   useEffect(() => {
     fetchProducts();
   }, [fetchProducts]);
-
   const handleSubmitProduct = async (productData) => {
     try {
       if (productData.type === "csv") {
         const formData = new FormData();
         formData.append("file", productData.file);
 
-        await api.post("/products/import", formData, {
+        if (!productData.file) {
+          throw new Error("Please select a CSV file");
+        }
+
+        const response = await api.post("/products/import", formData, {
           headers: {
             "Content-Type": "multipart/form-data",
           },
         });
+        const successCount = response.data.success_count || 0;
+        const errorCount = response.data.error_count || 0;
+        const processTime = response.data.elapsed_time || "N/A";
+
+        let message = `📊 Import Summary (${processTime}):\n`;
+        message += `✅ ${successCount} products imported successfully\n`;
+
+        if (errorCount > 0) {
+          message += `❌ ${errorCount} products failed\n`;
+          // Show only first error as example if exists
+          if (response.data.errors && response.data.errors.length > 0) {
+            message += `\nExample error: ${response.data.errors[0].error}`;
+            if (response.data.errors.length > 1) {
+              message += `\n(${errorCount - 1} more errors not shown)`;
+            }
+          }
+        }
 
         setSuccessModal({
           isOpen: true,
-          message: "Products imported successfully",
+          message,
         });
       } else {
         if (modalMode === "add") {
@@ -298,7 +318,6 @@ const Product = () => {
       return;
     }
 
-    // Check if file is CSV
     if (!csvFile.name.endsWith(".csv")) {
       setAlertModal({ isOpen: true, message: "Only CSV files are allowed" });
       return;
@@ -308,7 +327,6 @@ const Product = () => {
       setUploadLoading(true);
       const formData = new FormData();
       formData.append("file", csvFile);
-
       const response = await api.post("/products/import", formData, {
         headers: {
           "Content-Type": "multipart/form-data",
@@ -316,12 +334,50 @@ const Product = () => {
       });
 
       setUploadLoading(false);
+
+      // Format import status message
+      const parts = [];
+
+      if (response.data.success_count > 0) {
+        parts.push(
+          `✅ ${response.data.success_count} products successfully imported`
+        );
+      }
+
+      if (response.data.duplicate_count > 0) {
+        parts.push(
+          `⚠️ ${response.data.duplicate_count} duplicate products skipped`
+        );
+      }
+
+      if (response.data.error_count > 0) {
+        parts.push(`❌ ${response.data.error_count} products failed to import`);
+
+        // Show the first error in a user-friendly way
+        if (response.data.errors?.length > 0) {
+          const firstError = response.data.errors[0].error;
+          // Remove row number prefix if present
+          const cleanError = firstError.replace(/^Row \d+:\s*/, "");
+          parts.push(`\nIssue found: ${cleanError}`);
+
+          // Indicate if there are more errors
+          if (response.data.errors.length > 1) {
+            parts.push(`and ${response.data.errors.length - 1} more error(s)`);
+          }
+        }
+      }
+
+      if (response.data.elapsed_time) {
+        parts.push(`\n⏱️ Completed in ${response.data.elapsed_time}s`);
+      }
+
       setShowUploadModal(false);
       setCsvFile(null);
       setSuccessModal({
         isOpen: true,
-        message: response.data.message || "Products imported successfully",
+        message: parts.join("\n"),
       });
+
       fetchProducts();
     } catch (error) {
       setUploadLoading(false);
@@ -762,15 +818,15 @@ const Product = () => {
                     return (
                       <tr>
                         <td colSpan="9" className="p-4">
-                        <div className="flex justify-center items-center py-8">
-                          <div className="flex items-center space-x-4">
-                            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
-                            <p className="text-gray-500 text-sm">
-                              Loading product data...
-                            </p>
+                          <div className="flex justify-center items-center py-8">
+                            <div className="flex items-center space-x-4">
+                              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
+                              <p className="text-gray-500 text-sm">
+                                Loading product data...
+                              </p>
+                            </div>
                           </div>
-                        </div>
-                      </td>
+                        </td>
                       </tr>
                     );
                   }
