@@ -8,7 +8,7 @@ import {
   Plus,
   Package,
   Eye,
-  ShoppingCart,
+  ShoppingBag,
   Clock,
   Calendar,
   RefreshCw,
@@ -540,21 +540,23 @@ const Order = () => {
             <div className="flex flex-col lg:flex-row gap-6">
               <div className="w-full lg:w-1/2">
                 <div className="bg-white rounded-xl shadow-md border border-gray-100 h-full">
-                  <div className="bg-gradient-to-r from-blue-600 to-blue-700 px-6 py-4 rounded-lg">
+                  <div className="bg-gradient-to-r from-blue-500 to-blue-700 px-6 py-4 rounded-t-lg flex flex-col md:flex-row md:items-center md:justify-between">
                     <div className="flex items-center">
-                      <ShoppingCart className="text-white mr-3" size={24} />
-                      <h1 className="text-xl md:text-2xl font-bold text-white">
-                      Order Management
-                    </h1>
-                    <p className="text-indigo-100 text-sm justify-end ml-auto">
+                      <ShoppingBag className="text-white mr-3" size={24} />
+                      <h1 className="text-sm md:text-xl font-bold text-white whitespace-nowrap">
+                        Sales Management
+                      </h1>
+                    </div>
+                    <p className="text-indigo-100 text-xs mt-2 md:mt-0 md:text-lg whitespace-nowrap md:ml-auto">
                       Manage and track all orders
                     </p>
-                    </div>
                   </div>
 
                   <div className="p-6">
                     <div className="space-y-6">
-                   <h3 className="text-2xl font-bold ml-2">Create New Order</h3>
+                      <h3 className="text-2xl font-bold ml-2">
+                        Create New Order
+                      </h3>
                       {orderForm.order_details.map((detail, index) => {
                         const detailId = `order-detail-${
                           detail.code_product || Date.now()
@@ -863,7 +865,7 @@ const Order = () => {
                           </>
                         ) : (
                           <>
-                            <ShoppingCart size={20} className="mr-2" /> Submit
+                            <ShoppingBag size={20} className="mr-2" /> Submit
                             Order
                           </>
                         )}
@@ -874,248 +876,257 @@ const Order = () => {
               </div>
 
               <div className="w-full lg:w-1/2">
-  <div className="bg-white rounded-xl shadow-md border border-gray-100 h-full">
-    {/* Header */}
-    <div className="bg-gradient-to-r from-indigo-600 to-indigo-700 px-4 sm:px-6 py-3 sm:py-4 rounded-t-xl">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center">
-          <Inbox className="text-white mr-2 sm:mr-3" size={20} />
-          <h2 className="text-lg sm:text-xl font-bold text-white">
-            Orders List
-          </h2>
-        </div>
-        <div className="relative">
-          <button
-            onClick={() => setFilterMenuOpen(!filterMenuOpen)}
-            className="flex items-center text-xs font-medium bg-white/20 text-white px-2 sm:px-3 py-1 sm:py-1.5 rounded-lg hover:bg-white/30 transition-colors"
-          >
-            <Filter size={12} className="mr-1 sm:mr-1.5" /> Filter
-          </button>
-          {filterMenuOpen && (
-            <motion.div
-              initial={{ opacity: 0, y: -10 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -10 }}
-              className="absolute top-full right-0 mt-2 w-64 sm:w-72 bg-white rounded-lg shadow-xl p-3 sm:p-4 z-10 border border-gray-200"
-            >
-              <h4 className="text-sm font-medium text-gray-700 mb-2 flex items-center">
-                <Tag size={12} className="mr-1.5" /> Filter by Status
-              </h4>
-              <Select
-                value={
-                  filters.order_status
-                    ? statusOptions.find(
-                        (option) => option.value === filters.order_status
-                      )
-                    : null
-                }
-                onChange={(option) => handleFilterChange("order_status", option)}
-                options={statusOptions}
-                className="mb-3"
-                placeholder="Select status"
-                isClearable
-                styles={{
-                  control: (base) => ({
-                    ...base,
-                    borderRadius: "0.5rem",
-                    borderColor: "#e5e7eb",
-                    boxShadow: "none",
-                    "&:hover": {
-                      borderColor: "#3b82f6",
-                    },
-                    minHeight: "32px",
-                    padding: "0px",
-                  }),
-                  valueContainer: (base) => ({
-                    ...base,
-                    padding: "0 8px",
-                  }),
-                  input: (base) => ({
-                    ...base,
-                    margin: "0",
-                    padding: "0",
-                  }),
-                  dropdownIndicator: (base) => ({
-                    ...base,
-                    padding: "4px",
-                  }),
-                  clearIndicator: (base) => ({
-                    ...base,
-                    padding: "4px",
-                  }),
-                  menu: (base) => ({
-                    ...base,
-                    fontSize: "0.75rem",
-                  }),
-                }}
-              />
+                <div className="bg-white rounded-xl shadow-md border border-gray-100 h-full">
+                  {/* Header */}
+                  <div className="bg-gradient-to-r from-indigo-600 to-indigo-700 px-4 sm:px-6 py-3 sm:py-4 rounded-t-xl">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center">
+                        <Inbox className="text-white mr-2 sm:mr-3" size={36} />
+                        <h2 className="text-lg sm:text-xl font-bold text-white">
+                          Orders List
+                        </h2>
+                      </div>
+                      <div className="relative">
+                        <button
+                          onClick={() => setFilterMenuOpen(!filterMenuOpen)}
+                          className="flex items-center text-xs font-medium bg-white/20 text-white px-2 sm:px-3 py-1 sm:py-1.5 rounded-lg hover:bg-white/30 transition-colors"
+                        >
+                          <Filter size={12} className="mr-1 sm:mr-1.5" /> Filter
+                        </button>
+                        {filterMenuOpen && (
+                          <motion.div
+                            initial={{ opacity: 0, y: -10 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            exit={{ opacity: 0, y: -10 }}
+                            className="absolute top-full right-0 mt-2 w-64 sm:w-72 bg-white rounded-lg shadow-xl p-3 sm:p-4 z-10 border border-gray-200"
+                          >
+                            <h4 className="text-sm font-medium text-gray-700 mb-2 flex items-center">
+                              <Tag size={12} className="mr-1.5" /> Filter by
+                              Status
+                            </h4>
+                            <Select
+                              value={
+                                filters.order_status
+                                  ? statusOptions.find(
+                                      (option) =>
+                                        option.value === filters.order_status
+                                    )
+                                  : null
+                              }
+                              onChange={(option) =>
+                                handleFilterChange("order_status", option)
+                              }
+                              options={statusOptions}
+                              className="mb-3"
+                              placeholder="Select status"
+                              isClearable
+                              styles={{
+                                control: (base) => ({
+                                  ...base,
+                                  borderRadius: "0.5rem",
+                                  borderColor: "#e5e7eb",
+                                  boxShadow: "none",
+                                  "&:hover": {
+                                    borderColor: "#3b82f6",
+                                  },
+                                  minHeight: "32px",
+                                  padding: "0px",
+                                }),
+                                valueContainer: (base) => ({
+                                  ...base,
+                                  padding: "0 8px",
+                                }),
+                                input: (base) => ({
+                                  ...base,
+                                  margin: "0",
+                                  padding: "0",
+                                }),
+                                dropdownIndicator: (base) => ({
+                                  ...base,
+                                  padding: "4px",
+                                }),
+                                clearIndicator: (base) => ({
+                                  ...base,
+                                  padding: "4px",
+                                }),
+                                menu: (base) => ({
+                                  ...base,
+                                  fontSize: "0.75rem",
+                                }),
+                              }}
+                            />
 
-              <h4 className="text-sm font-medium text-gray-700 mb-2 flex items-center">
-                <Calendar size={12} className="mr-1.5" /> Filter by Date Range
-              </h4>
-              <div className="grid grid-cols-2 gap-2 sm:gap-4 mb-3">
-                <div>
-                  <label className="block text-xs text-gray-600 mb-1">
-                    Start Date
-                  </label>
-                  <input
-                    type="date"
-                    value={filters.start_date || ''}
-                    onChange={(e) =>
-                      handleFilterChange("start_date", {
-                        value: e.target.value,
-                      })
-                    }
-                    className="p-1 sm:p-2 w-full border border-gray-300 rounded-lg focus:ring-1 focus:ring-blue-500 focus:border-blue-500 text-xs"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs text-gray-600 mb-1">
-                    End Date
-                  </label>
-                  <input
-                    type="date"
-                    value={filters.end_date || ''}
-                    onChange={(e) =>
-                      handleFilterChange("end_date", {
-                        value: e.target.value,
-                      })
-                    }
-                    className="p-1 sm:p-2 w-full border border-gray-300 rounded-lg focus:ring-1 focus:ring-blue-500 focus:border-blue-500 text-xs"
-                  />
-                </div>
-              </div>
+                            <h4 className="text-sm font-medium text-gray-700 mb-2 flex items-center">
+                              <Calendar size={12} className="mr-1.5" /> Filter
+                              by Date Range
+                            </h4>
+                            <div className="grid grid-cols-2 gap-2 sm:gap-4 mb-3">
+                              <div>
+                                <label className="block text-xs text-gray-600 mb-1">
+                                  Start Date
+                                </label>
+                                <input
+                                  type="date"
+                                  value={filters.start_date || ""}
+                                  onChange={(e) =>
+                                    handleFilterChange("start_date", {
+                                      value: e.target.value,
+                                    })
+                                  }
+                                  className="p-1 sm:p-2 w-full border border-gray-300 rounded-lg focus:ring-1 focus:ring-blue-500 focus:border-blue-500 text-xs"
+                                />
+                              </div>
+                              <div>
+                                <label className="block text-xs text-gray-600 mb-1">
+                                  End Date
+                                </label>
+                                <input
+                                  type="date"
+                                  value={filters.end_date || ""}
+                                  onChange={(e) =>
+                                    handleFilterChange("end_date", {
+                                      value: e.target.value,
+                                    })
+                                  }
+                                  className="p-1 sm:p-2 w-full border border-gray-300 rounded-lg focus:ring-1 focus:ring-blue-500 focus:border-blue-500 text-xs"
+                                />
+                              </div>
+                            </div>
 
-              <div className="flex justify-end space-x-2">
-                <button
-                  className="px-2 sm:px-3 py-1 sm:py-1.5 text-xs bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-md"
-                  onClick={() => {
-                    setFilters({
-                      code_product: "",
-                      order_status: "",
-                      start_date: "",
-                      end_date: "",
-                    });
-                    setFilterMenuOpen(false);
-                  }}
-                >
-                  Reset
-                </button>
-                <button
-                  className="px-2 sm:px-3 py-1 sm:py-1.5 text-xs bg-indigo-600 hover:bg-indigo-700 text-white rounded-md"
-                  onClick={() => setFilterMenuOpen(false)}
-                >
-                  Apply
-                </button>
-              </div>
-            </motion.div>
-          )}
-        </div>
-      </div>
-    </div>
-
-    {/* Content */}
-    <div className="p-3 sm:p-6 max-h-[calc(100vh-200px)] overflow-y-auto">
-      {orders.length > 0 ? (
-        <>
-          <div className="space-y-3 sm:space-y-4">
-            {getCurrentPageItems().map((order) => (
-              <div
-                key={order.order_id}
-                className="bg-white rounded-lg border border-gray-200 overflow-hidden hover:shadow-md transition-shadow"
-              >
-                <div className="p-3 sm:p-4">
-                  <div className="flex flex-col md:flex-row md:justify-between md:items-center mb-2 sm:mb-3">
-                    <div className="flex items-center mb-2 md:mb-0">
-                      <span className="bg-blue-100 text-blue-800 text-xs font-semibold rounded-full px-2 py-0.5 sm:px-2.5 sm:py-1 mr-2">
-                        #{order.order_id}
-                      </span>
-                      <span
-                        className={`flex items-center space-x-1 text-xs font-medium px-2 py-0.5 sm:px-2.5 sm:py-1 rounded-full ${getStatusClassName(
-                          order.order_status
-                        )}`}
-                      >
-                        {getStatusIcon(order.order_status)}
-                        <span className="ml-1 capitalize">
-                          {order.order_status}
-                        </span>
-                      </span>
-                    </div>
-                    <div className="text-xs sm:text-sm text-gray-500 flex items-center">
-                      <Clock size={12} className="mr-1" />
-                      {new Date(order.created_at).toLocaleString()}
+                            <div className="flex justify-end space-x-2">
+                              <button
+                                className="px-2 sm:px-3 py-1 sm:py-1.5 text-xs bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-md"
+                                onClick={() => {
+                                  setFilters({
+                                    code_product: "",
+                                    order_status: "",
+                                    start_date: "",
+                                    end_date: "",
+                                  });
+                                  setFilterMenuOpen(false);
+                                }}
+                              >
+                                Reset
+                              </button>
+                              <button
+                                className="px-2 sm:px-3 py-1 sm:py-1.5 text-xs bg-indigo-600 hover:bg-indigo-700 text-white rounded-md"
+                                onClick={() => setFilterMenuOpen(false)}
+                              >
+                                Apply
+                              </button>
+                            </div>
+                          </motion.div>
+                        )}
+                      </div>
                     </div>
                   </div>
 
-                  <div className="flex justify-between items-center">
-                    <span className="text-base sm:text-lg font-bold text-gray-800">
-                      {formatPrice(order.total_amount)}
-                    </span>
-                    <button
-                      onClick={() => viewOrderDetails(order)}
-                      className="flex items-center text-xs font-medium text-blue-600 hover:text-blue-800 transition-colors"
-                    >
-                      <Eye size={12} className="mr-1" /> View Details
-                    </button>
+                  {/* Content */}
+                  <div className="p-3 sm:p-6 max-h-[calc(100vh-200px)] overflow-y-auto">
+                    {orders.length > 0 ? (
+                      <>
+                        <div className="space-y-3 sm:space-y-4">
+                          {getCurrentPageItems().map((order) => (
+                            <div
+                              key={order.order_id}
+                              className="bg-white rounded-lg border border-gray-200 overflow-hidden hover:shadow-md transition-shadow"
+                            >
+                              <div className="p-3 sm:p-4">
+                                <div className="flex flex-col md:flex-row md:justify-between md:items-center mb-2 sm:mb-3">
+                                  <div className="flex items-center mb-2 md:mb-0">
+                                    <span className="bg-blue-100 text-blue-800 text-xs font-semibold rounded-full px-2 py-0.5 sm:px-2.5 sm:py-1 mr-2">
+                                      #{order.order_id}
+                                    </span>
+                                    <span
+                                      className={`flex items-center space-x-1 text-xs font-medium px-2 py-0.5 sm:px-2.5 sm:py-1 rounded-full ${getStatusClassName(
+                                        order.order_status
+                                      )}`}
+                                    >
+                                      {getStatusIcon(order.order_status)}
+                                      <span className="ml-1 capitalize">
+                                        {order.order_status}
+                                      </span>
+                                    </span>
+                                  </div>
+                                  <div className="text-xs sm:text-sm text-gray-500 flex items-center">
+                                    <Clock size={12} className="mr-1" />
+                                    {new Date(
+                                      order.created_at
+                                    ).toLocaleString()}
+                                  </div>
+                                </div>
+
+                                <div className="flex justify-between items-center">
+                                  <span className="text-base sm:text-lg font-bold text-gray-800">
+                                    {formatPrice(order.total_amount)}
+                                  </span>
+                                  <button
+                                    onClick={() => viewOrderDetails(order)}
+                                    className="flex items-center text-xs font-medium text-blue-600 hover:text-blue-800 transition-colors"
+                                  >
+                                    <Eye size={12} className="mr-1" /> View
+                                    Details
+                                  </button>
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </>
+                    ) : (
+                      <div className="text-center py-6 sm:py-8">
+                        <ShoppingBag
+                          size={36}
+                          className="mx-auto text-gray-300 mb-3 sm:mb-4"
+                        />
+                        <h3 className="text-base sm:text-lg font-medium text-gray-500 mb-1">
+                          No orders found
+                        </h3>
+                        <p className="text-xs sm:text-sm text-gray-400">
+                          {Object.values(filters).some((filter) => filter)
+                            ? "Try changing your filters"
+                            : "Create your first order to get started"}
+                        </p>
+                        {Object.values(filters).some((filter) => filter) && (
+                          <button
+                            onClick={() => {
+                              setFilters({
+                                code_product: "",
+                                order_status: "",
+                                start_date: "",
+                                end_date: "",
+                              });
+                            }}
+                            className="mt-3 sm:mt-4 text-xs sm:text-sm text-indigo-600 hover:text-indigo-800 font-medium flex items-center justify-center mx-auto"
+                          >
+                            <RefreshCw size={12} className="mr-1" /> Reset
+                            Filters
+                          </button>
+                        )}
+                        {!Object.values(filters).some((filter) => filter) && (
+                          <button
+                            onClick={() => setActiveTab("create")}
+                            className="mt-3 sm:mt-4 text-xs sm:text-sm bg-blue-600 hover:bg-blue-700 text-white px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg font-medium flex items-center justify-center mx-auto"
+                          >
+                            <Plus size={12} className="mr-1" /> Create New Order
+                          </button>
+                        )}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Pagination */}
+                  <div className="mt-3 sm:mt-5 px-3 sm:px-6 pb-3 sm:pb-4 flex justify-between items-center">
+                    <Pagination
+                      currentPage={currentPage}
+                      totalPages={totalPages}
+                      onPageChange={setCurrentPage}
+                      itemsPerPage={itemsPerPage}
+                      totalItems={orders.length}
+                    />
                   </div>
                 </div>
               </div>
-            ))}
-          </div>
-        </>
-      ) : (
-        <div className="text-center py-6 sm:py-8">
-          <ShoppingCart
-            size={36}
-            className="mx-auto text-gray-300 mb-3 sm:mb-4"
-          />
-          <h3 className="text-base sm:text-lg font-medium text-gray-500 mb-1">
-            No orders found
-          </h3>
-          <p className="text-xs sm:text-sm text-gray-400">
-            {Object.values(filters).some((filter) => filter)
-              ? "Try changing your filters"
-              : "Create your first order to get started"}
-          </p>
-          {Object.values(filters).some((filter) => filter) && (
-            <button
-              onClick={() => {
-                setFilters({
-                  code_product: "",
-                  order_status: "",
-                  start_date: "",
-                  end_date: "",
-                });
-              }}
-              className="mt-3 sm:mt-4 text-xs sm:text-sm text-indigo-600 hover:text-indigo-800 font-medium flex items-center justify-center mx-auto"
-            >
-              <RefreshCw size={12} className="mr-1" /> Reset Filters
-            </button>
-          )}
-          {!Object.values(filters).some((filter) => filter) && (
-            <button
-              onClick={() => setActiveTab("create")}
-              className="mt-3 sm:mt-4 text-xs sm:text-sm bg-blue-600 hover:bg-blue-700 text-white px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg font-medium flex items-center justify-center mx-auto"
-            >
-              <Plus size={12} className="mr-1" /> Create New Order
-            </button>
-          )}
-        </div>
-      )}
-    </div>
-    
-    {/* Pagination */}
-    <div className="mt-3 sm:mt-5 px-3 sm:px-6 pb-3 sm:pb-4 flex justify-between items-center">
-      <Pagination
-        currentPage={currentPage}
-        totalPages={totalPages}
-        onPageChange={setCurrentPage}
-        itemsPerPage={itemsPerPage}
-        totalItems={orders.length}
-      />
-    </div>
-  </div>
-</div>
             </div>
           </div>
 

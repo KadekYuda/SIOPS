@@ -27,33 +27,28 @@ const Opname = db.define('opnames', {
             key: 'batch_id'
         }
     },
-    system_stock: { 
-        type: DataTypes.INTEGER, 
-        allowNull: false 
+  scheduled_date: DataTypes.DATEONLY,
+  system_stock: {
+    type: DataTypes.INTEGER,
+    allowNull: false
+  },
+  physical_stock: DataTypes.INTEGER,
+  expired_stock: DataTypes.INTEGER,
+  damaged_stock: DataTypes.INTEGER,
+  difference: {
+    type: DataTypes.INTEGER,
+    allowNull: true,
+    set() {
+      if (this.physical_stock !== null && this.system_stock !== null) {
+        this.setDataValue('difference', this.system_stock - this.physical_stock);
+      }
     },
-    physical_stock: { 
-        type: DataTypes.INTEGER, 
-        allowNull: false 
-    },
-    difference: { 
-        type: DataTypes.INTEGER, 
-        allowNull: false 
-    },
-    expired_stock: { 
-        type: DataTypes.INTEGER, 
-        allowNull: false 
-    },
-    damaged_stock: { 
-        type: DataTypes.INTEGER, 
-        allowNull: false 
-    },
-    opname_date: { 
-        type: DataTypes.DATE, 
-        allowNull: false, 
-        defaultValue: Sequelize.NOW 
-    },
-    created_at: DataTypes.DATE,
-    updated_at: DataTypes.DATE,
+  },
+  status: {
+    type: DataTypes.ENUM('scheduled', 'submitted', 'reviewed', 'adjusted'),
+    defaultValue: 'scheduled'
+  },
+  notes: DataTypes.TEXT
 }, { 
     freezeTableName: true 
 });

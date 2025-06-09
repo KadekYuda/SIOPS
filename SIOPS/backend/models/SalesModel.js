@@ -27,4 +27,10 @@ const Sales = db.define('sales', {
     updated_at: DataTypes.DATE,
 }, { freezeTableName: true });  
 
+// Add User association
+Sales.belongsTo(Users, {
+    foreignKey: 'user_id',
+    as: 'User'  // This alias must match what we use in queries
+});
+
 export default Sales;

@@ -1,5 +1,6 @@
 import BatchStok from "../models/BatchstockModel.js";
 import Products from "../models/ProductModel.js";
+import Categories from "../models/CategoriesModel.js";
 import { Op } from "sequelize";
 
 export const getBatchStok = async (req, res) => {
@@ -18,24 +19,28 @@ export const getBatchStok = async (req, res) => {
                 { code_product: { [Op.like]: `%${search}%` } },
                 { '$Product.name_product$': { [Op.like]: `%${search}%` } }
             ];
-        }
-
-        const totalCount = await BatchStok.count({
+        }        const totalCount = await BatchStok.count({
             where: whereCondition,
             include: [{
                 model: Products,
-                attributes: ['code_product', 'name_product'],
-                required: false
+                attributes: ['code_product', 'name_product', 'code_categories'],
+                required: false,
+                include: [{
+                    model: Categories,
+                    attributes: ['code_categories', 'name_categories']
+                }]
             }],
             distinct: true
-        });
-
-        const rows = await BatchStok.findAll({
+        });const rows = await BatchStok.findAll({
             where: whereCondition,
             include: [{
                 model: Products,
-                attributes: ['code_product', 'name_product'],
-                required: false
+                attributes: ['code_product', 'name_product', 'code_categories'],
+                required: false,
+                include: [{
+                    model: Categories,
+                    attributes: ['code_categories', 'name_categories']
+                }]
             }],
             order: [
                 [{ model: Products }, 'name_product', 'ASC'],

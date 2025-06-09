@@ -11,13 +11,14 @@ import {
   DollarSign,
   ClipboardList,
   Check,
+  ShoppingCart,
 } from "lucide-react";
 import AlertModal from "../../modal/AlertModal";
 import SuccessModal from "../../modal/SuccessModal";
-import LoadingComponent from "../../LoadingComponent";
-import SalesDetails from "./SalesDetails";
-import ProductSelect from "./ProductSelect";
 import api from "../../../service/api";
+import Pagination from "../Product/Pagination";
+import ProductSelect from "./ProductSelect";
+import SalesDetails from "./SalesDetails";
 
 const Sales = () => {
   const [sales, setSales] = useState([]);
@@ -47,48 +48,69 @@ const Sales = () => {
     ],
   });
 
-  const [userData, setUserData] = useState(null);
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(0);
+  const itemsPerPage = 10;
+  const getCurrentPageItems = () => {
+    // Sort sales by date ASC (lama ke baru), lalu ID ASC
+    const sortedSalesAsc = [...sales].sort((a, b) => {
+      const dateA = new Date(a.sales_date);
+      const dateB = new Date(b.sales_date);
+      if (dateA.getTime() !== dateB.getTime()) {
+        return dateA.getTime() - dateB.getTime(); // Lama dulu
+      }
+      return a.sales_id - b.sales_id; // ID kecil dulu
+    });
+    // Beri nomor urut historis (terlama = 1)
+    const salesWithNumber = sortedSalesAsc.map((item, idx) => ({
+      ...item,
+      running_number: idx + 1,
+    }));
+    // Sort ulang untuk tampilan (baru di atas)
+    const sortedDisplay = [...salesWithNumber].sort((a, b) => {
+      const dateA = new Date(a.sales_date);
+      const dateB = new Date(b.sales_date);
+      if (dateA.getTime() !== dateB.getTime()) {
+        return dateB.getTime() - dateA.getTime(); // Baru dulu
+      }
+      return b.sales_id - a.sales_id;
+    });
+    const start = currentPage * itemsPerPage;
+    const end = start + itemsPerPage;
+    return sortedDisplay.slice(start, end);
+  };
 
   useEffect(() => {
     fetchSales();
     fetchProducts();
-    fetchUserData();
   }, []);
-
-  const fetchUserData = async () => {
-    try {
-      const response = await api.get("/users/profile");
-      setUserData(response.data.user);
-    } catch (error) {
-      console.error("Error fetching user data:", error);
-    }
-  };
-
   const fetchSales = async () => {
     try {
       setIsLoading(true);
+
+      // Get sales with user data included from backend
       const response = await api.get("/sales");
-      const salesWithUserDetails = await Promise.all(
-        response.data.map(async (sale) => {
-          if (sale.user_id && !sale.user) {
-            try {
-              const userResponse = await api.get(`/users/${sale.user_id}`);
-              return {
-                ...sale,
-                user: userResponse.data,
-              };
-            } catch (error) {
-              console.error(
-                `Error fetching user data for sale ${sale.sales_id}:`,
-                error
-              );
-              return sale;
-            }
-          }
-          return sale;
+      // Map sales with formatted dates
+      const salesWithDates = response.data
+        .map((sale) => {
+          const saleDate = new Date(sale.sales_date);
+          const user = sale.User || { name: sale.user?.name || "Unknown" };
+          return {
+            ...sale,
+            sales_date: saleDate.toISOString(),
+            User: user,
+            user: user, // Keep both for compatibility
+          };
         })
-      );
-      setSales(salesWithUserDetails);
+        .sort((a, b) => {
+          const dateA = new Date(a.sales_date);
+          const dateB = new Date(b.sales_date);
+          if (dateA > dateB) return -1;
+          if (dateA < dateB) return 1;
+          return b.sales_id - a.sales_id;
+        });
+
+      setSales(salesWithDates);
     } catch (error) {
       setAlertMessage(error.response?.data?.msg || "Error fetching sales");
       setShowAlert(true);
@@ -340,13 +362,22 @@ const Sales = () => {
     setCsvFile(null);
   };
 
+  const formatPrice = (price) => {
+    if (!price) return "Rp 0";
+    return `Rp ${Number(price).toLocaleString("id-ID")}`;
+  };
+
+  const viewSaleDetails = (sale) => {
+    setSelectedSaleId(sale.sales_id);
+  };
+
   return (
     <div className="min-h-screen py-20">
       <div className="px-4">
         {/* Sales Management Card Header */}
         <div className="bg-gradient-to-r from-blue-500 to-blue-700 rounded-t-lg shadow-md p-4 sm:p-6 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
           <div className="flex items-center">
-            <ClipboardList className="text-white mr-3" size={24} />
+            <ShoppingCart className="text-white mr-3" size={36} />
             <div>
               <h1 className="text-xl md:text-2xl font-bold text-white">
                 Sales Management
@@ -728,7 +759,7 @@ const Sales = () => {
                                     className="bg-white p-3 rounded-lg border border-blue-100 shadow-sm"
                                   >
                                     <div className="font-medium text-sm text-gray-800 mb-1">
-                                      Batch #{batch.batch_code}
+                                      {batch.batch_code}
                                     </div>
                                     <div className="grid grid-cols-2 gap-2 text-xs">
                                       <div className="text-gray-600">
@@ -811,17 +842,16 @@ const Sales = () => {
 
         {/* Sales List */}
         <div className="bg-white rounded-b-xl shadow-md border border-gray-100 border-t-0">
-          <div className="bg-white px-4 sm:px-6 py-4 sm:py-6 border-b">
+          <div className="bg-gradient-to-r from-indigo-500 to-indigo-700 px-4 sm:px-6 py-4 sm:py-6 border-b rounded-t-lg">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <div className="h-10 w-10 rounded-lg bg-indigo-50 flex items-center justify-center">
-                  <ClipboardList className="text-indigo-600" size={20} />
-                </div>
+                <ClipboardList className="text-white mr-2 sm:mr-3" size={30} />
+
                 <div>
-                  <h2 className="text-lg font-semibold text-gray-900">
+                  <h2 className="text-lg font-semibold text-white">
                     Sales List
                   </h2>
-                  <p className="text-sm text-gray-500">
+                  <p className="text-sm text-gray-200">
                     View and manage your sales transactions
                   </p>
                 </div>
@@ -829,85 +859,124 @@ const Sales = () => {
             </div>
           </div>
 
-          <div className="p-3 sm:p-4 max-h-[calc(100vh-200px)] overflow-y-auto">
-            {isLoading ? (
-              <LoadingComponent />
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="min-w-full">
-                  <thead>
-                    <tr className="border-b border-gray-200">
-                      <th className="text-left px-4 py-3 text-xs font-medium text-gray-500">
-                        NO
-                      </th>
-                      <th className="text-left px-4 py-3 text-xs font-medium text-gray-500">
-                        USER
-                      </th>
-                      <th className="text-left px-4 py-3 text-xs font-medium text-gray-500">
-                        DATE
-                      </th>
-                      <th className="text-right px-4 py-3 text-xs font-medium text-gray-500">
-                        TOTAL
-                      </th>
-                      <th className="text-right px-4 py-3 text-xs font-medium text-gray-500">
-                        ACTIONS
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {sales.length === 0 ? (
-                      <tr>
-                        <td colSpan="5" className="px-6 py-12 text-center">
-                          <div className="flex flex-col items-center gap-2">
-                            <ClipboardList className="text-gray-300 text-4xl mb-2" />
-                            <p className="text-lg font-medium text-gray-500">
-                              No sales found
-                            </p>
-                            <p className="text-sm text-gray-400">
-                              Create a new sale or import from CSV
-                            </p>
-                          </div>
-                        </td>
+          <div className="p-3 sm:p-4">
+            {sales.length > 0 ? (
+              <>
+                {/* Desktop Table */}
+                <div className="hidden md:block overflow-x-auto">
+                  <table className="min-w-full bg-white">
+                    <thead>
+                      <tr className="border-b border-gray-200">
+                        <th className="text-left px-4 py-3 text-xs font-medium text-gray-500">
+                          NO
+                        </th>
+                        <th className="text-left px-4 py-3 text-xs font-medium text-gray-500">
+                          USER
+                        </th>
+                        <th className="text-left px-4 py-3 text-xs font-medium text-gray-500">
+                          DATE
+                        </th>
+                        <th className="text-right px-4 py-3 text-xs font-medium text-gray-500">
+                          TOTAL
+                        </th>
+                        <th className="text-right px-4 py-3 text-xs font-medium text-gray-500">
+                          ACTIONS
+                        </th>
                       </tr>
-                    ) : (
-                      sales.map((sale) => (
-                        <tr
-                          key={sale.sales_id}
-                          className="border-b border-gray-100 hover:bg-gray-50"
-                        >
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                      {getCurrentPageItems().map((sale) => (
+                        <tr key={sale.sales_id} className="hover:bg-gray-50">
                           <td className="px-4 py-3 text-indigo-600 font-medium">
-                            #{sale.sales_id}
+                            #{sale.running_number}
                           </td>
                           <td className="px-4 py-3 text-sm text-gray-600">
-                            {sale.user?.name || sale.user_id || "N/A"}
+                            {sale.user?.name}
                           </td>
                           <td className="px-4 py-3 text-sm text-gray-600">
                             {new Date(sale.sales_date).toLocaleString()}
                           </td>
                           <td className="px-4 py-3 text-right font-medium">
-                            {new Intl.NumberFormat("id-ID", {
-                              style: "currency",
-                              currency: "IDR",
-                              minimumFractionDigits: 0,
-                              maximumFractionDigits: 0,
-                            }).format(sale.total_amount)}
+                            {formatPrice(sale.total_amount)}
                           </td>
                           <td className="px-4 py-3">
-                            <div className="flex justify-end">
+                            <div className="flex justify-end gap-2">
                               <button
-                                onClick={() => setSelectedSaleId(sale.sales_id)}
-                                className="inline-flex items-center px-3 py-1.5 bg-indigo-50 text-indigo-700 rounded-lg hover:bg-indigo-100 transition-colors text-sm font-medium"
+                                onClick={() => viewSaleDetails(sale)}
+                                className="text-xs bg-indigo-50 text-indigo-600 px-2 py-1 rounded hover:bg-indigo-100"
                               >
-                                <Eye className="mr-1.5" size={12} />
+                                <Eye size={12} className="inline mr-1" />
                                 View Details
                               </button>
                             </div>
                           </td>
                         </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                {/* Mobile Card View */}{" "}
+                <div className="md:hidden space-y-4">
+                  {getCurrentPageItems().map((sale) => (
+                    <div
+                      key={sale.sales_id}
+                      className="bg-white p-4 rounded-lg border border-gray-200 shadow-sm"
+                    >
+                      <div className="flex justify-between items-start mb-3">
+                        <div className="flex flex-col">
+                          {" "}
+                          <div className="flex items-center mb-1">
+                            <span className="text-indigo-600 font-medium">
+                              #{sale.running_number}
+                            </span>
+                            <span className="mx-2 text-gray-300">|</span>
+                            <span className="text-sm text-black font-semibold">
+                              {sale.User?.name || sale.user?.name}
+                            </span>
+                          </div>
+                          <div className="text-xs text-gray-500">
+                            {new Date(sale.sales_date).toLocaleString()}
+                          </div>
+                        </div>
+                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                          {formatPrice(sale.total_amount)}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-end gap-2">
+                        <button
+                          onClick={() => viewSaleDetails(sale)}
+                          className="text-xs bg-indigo-50 text-indigo-600 px-2 py-1 rounded hover:bg-indigo-100 flex items-center"
+                        >
+                          <Eye size={12} className="mr-1" />
+                          View Details
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                {/* Pagination */}
+                <div className="mt-4">
+                  <Pagination
+                    currentPage={currentPage}
+                    totalPages={Math.ceil(sales.length / itemsPerPage)}
+                    onPageChange={setCurrentPage}
+                    itemsPerPage={itemsPerPage}
+                    totalItems={sales.length}
+                  />
+                </div>
+              </>
+            ) : (
+              <div className="text-center py-8">
+                <ShoppingCart
+                  size={48}
+                  className="mx-auto text-gray-300 mb-4"
+                />
+                <h3 className="text-lg font-medium text-gray-500 mb-1">
+                  No sales found
+                </h3>
+                <p className="text-gray-400 text-sm">
+                  There are no recorded sales yet
+                </p>
               </div>
             )}
           </div>

@@ -314,41 +314,36 @@ export const createOrderBatches = async (req, res) => {
                 return res.status(404).json({ msg: `Product with code ${detail.code_product} not found` });
             }
 
-            // Check if there's an existing batch with same purchase price and valid expiry
+            // Check if there's an existing batch with same purchase price
             const existingBatchWithPrice = await BatchStock.findOne({
                 where: { 
                     code_product: detail.code_product,
-                    purchase_price: detail.ordered_price,
-                    [db.Sequelize.Op.or]: [
-                        {
-                            exp_date: {
-                                [db.Sequelize.Op.gt]: new Date()
-                            }
-                        },
-                        {
-                            exp_date: null
-                        }
-                    ]
+                    purchase_price: detail.ordered_price
                 },
                 transaction: t
             });
 
             const currentDate = new Date();
-            let batchToUse;            if (existingBatchWithPrice) {
-              
+            let batchToUse;
+
+            if (existingBatchWithPrice) {
+                // Update data baik untuk batch yang expired maupun belum
                 const updateData = {
                     updated_at: currentDate
                 };
 
-            
                 if (existingBatchWithPrice.initial_stock === 0) {
                     updateData.initial_stock = parseInt(detail.quantity);
                 } else {
                     updateData.stock_quantity = (existingBatchWithPrice.stock_quantity || 0) + parseInt(detail.quantity);
                 }
 
-                // Update exp_date hanya jika batch belum punya exp_date dan ada exp_date baru
-                if (!existingBatchWithPrice.exp_date && expiration_dates[detail.order_detail_id]) {
+                // Update exp_date jika:
+                // 1. Batch belum punya exp_date dan ada exp_date baru, atau
+                // 2. Batch sudah expired dan ada exp_date baru
+                if (expiration_dates[detail.order_detail_id] && 
+                    (!existingBatchWithPrice.exp_date || 
+                     (existingBatchWithPrice.exp_date && existingBatchWithPrice.exp_date <= currentDate))) {
                     updateData.exp_date = new Date(expiration_dates[detail.order_detail_id]);
                 }
 
@@ -369,12 +364,20 @@ export const createOrderBatches = async (req, res) => {
                 );
 
                 if (existingBatchesWithSamePrice.length > 0) {
-                   
                     const batchToUpdate = existingBatchesWithSamePrice[0];
-                    await batchToUpdate.update({
+                    const updateData = {
                         stock_quantity: batchToUpdate.stock_quantity + parseInt(detail.quantity),
                         updated_at: currentDate
-                    }, { transaction: t });
+                    };
+
+                    // Update exp_date jika batch expired dan ada exp_date baru
+                    if (expiration_dates[detail.order_detail_id] && 
+                        (!batchToUpdate.exp_date || 
+                         (batchToUpdate.exp_date && batchToUpdate.exp_date <= currentDate))) {
+                        updateData.exp_date = new Date(expiration_dates[detail.order_detail_id]);
+                    }
+
+                    await batchToUpdate.update(updateData, { transaction: t });
                     batchToUse = batchToUpdate;
                 } else {                    
                     const quantity = parseInt(detail.quantity);                    batchToUse = await BatchStock.create({
@@ -529,6 +532,7 @@ export const getOrderDetailsByOrderId = async (req, res) => {
                 code_product: detail.code_product,
                 batch_id: detail.batch_id,
                 batch_code: batchData ? batchData.batch_code : 'Unknown Batch',
+                exp_date: batchData ? batchData.exp_date : null,
                 quantity: detail.quantity,
                 ordered_price: detail.ordered_price,
                 subtotal: detail.subtotal

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import clsx from "clsx";
 import {
-   Moon,
+  Moon,
   Sun,
   Menu,
   UserCircle,
@@ -12,7 +12,6 @@ import {
   ChevronDown,
   Store,
 } from "lucide-react";
-import LogoAM1 from "../../../assets/LogoAM1.png";
 import { useNavigate } from "react-router-dom";
 import api from "../../../service/api";
 import LoadingComponent from "../../LoadingComponent";
@@ -41,21 +40,24 @@ const UserAvatarWithStatus = ({ name = "User", status = "online" }) => {
   );
 };
 
+// Komponen Headers yang Diperbarui
 const Headers = ({
   darkMode,
   toggleDarkMode,
   toggleSidebar,
   toggleDesktopSidebar,
 }) => {
-const [menuActive, setMenuActive] = useState(false);
+  const [menuActive, setMenuActive] = useState(false);
   const [userDropdown, setUserDropdown] = useState(false);
   const [notificationDropdown, setNotificationDropdown] = useState(false);
+
   const [userData, setUserData] = useState(null);
   const [loading, setLoading] = useState(true);
   const dropdownRef = useRef(null);
   const notificationRef = useRef(null);
   const navigate = useNavigate();
-   // Data notifikasi (contoh)
+
+  // Data notifikasi (contoh)
   const notifications = [
     {
       id: 1,
@@ -82,9 +84,7 @@ const [menuActive, setMenuActive] = useState(false);
 
   const fetchUserProfile = useCallback(async () => {
     try {
-      // Kirim permintaan tanpa header Authorization karena token sudah ada di cookie
       const response = await api.get("/users/profile");
-
       setUserData(response.data.user);
       setLoading(false);
     } catch (error) {
@@ -104,6 +104,12 @@ const [menuActive, setMenuActive] = useState(false);
       if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
         setUserDropdown(false);
       }
+      if (
+        notificationRef.current &&
+        !notificationRef.current.contains(event.target)
+      ) {
+        setNotificationDropdown(false);
+      }
     };
 
     document.addEventListener("mousedown", handleClickOutside);
@@ -113,13 +119,13 @@ const [menuActive, setMenuActive] = useState(false);
   const handleLogout = async () => {
     try {
       await api.post("/users/logout", null);
-
-      setUserData(null); // Reset state user
-      navigate("/login"); // Pindah ke halaman login
+      setUserData(null);
+      navigate("/login");
     } catch (error) {
       console.error("Error logging out:", error);
     }
   };
+
   const toggleDropdown = (e) => {
     e.stopPropagation();
     setUserDropdown((prev) => !prev);
@@ -132,23 +138,18 @@ const [menuActive, setMenuActive] = useState(false);
     setUserDropdown(false);
   };
 
-
   return (
     <nav
       className={clsx(
-        "fixed top-0 z-50 w-full bg-white",
-        "border-b border-gray-200 dark:bg-gray-800 dark:border-gray-700"
+        "fixed top-0 z-50 w-full bg-white/95 backdrop-blur-xl border-b border-gray-200/60 dark:bg-gray-900/95 dark:border-gray-700/60 shadow-lg shadow-gray-200/20 dark:shadow-gray-900/20"
       )}
     >
       <div className="px-2 py-3 lg:px-5 lg:pl-3">
         <div className="flex items-center justify-between">
-          <div className="flex items-center justify-start rtl:justify-end">
-            {/* Mobile menu button */}
+          {/* Left Section */}
+          <div className="flex items-center justify-start rtl:justify-end space-x-2">
+            {/* Mobile Menu Button */}
             <button
-              data-drawer-target="logo-sidebar"
-              data-drawer-toggle="logo-sidebar"
-              aria-controls="logo-sidebar"
-              type="button"
               className="inline-flex items-center p-2 text-sm text-gray-500 rounded-lg lg:hidden hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-gray-200 dark:text-gray-400 dark:hover:bg-gray-700 dark:focus:ring-gray-600"
               onClick={toggleSidebar}
             >
@@ -157,19 +158,19 @@ const [menuActive, setMenuActive] = useState(false);
             </button>
 
             {/* Logo */}
-             <a href="/#" className="flex items-center space-x-2 ml-2 my-2">
-                          <div className="relative">
-                            <div className="w-10 h-10 bg-gradient-to-br from-blue-500 via-purple-500 to-pink-500 rounded-2xl flex items-center justify-center shadow-lg group-hover:shadow-xl transition-all duration-300 group-hover:scale-105">
-                              <Store className="w-6 h-6 text-white" />
-                            </div>
-                            <div className="absolute -top-1 -right-1 w-4 h-4 bg-gradient-to-r from-green-400 to-blue-500 rounded-full animate-pulse"></div>
-                          </div>
-                          <h1 className="text-2xl font-bold bg-gradient-to-r from-gray-900 via-blue-800 to-purple-800 bg-clip-text text-transparent dark:from-white dark:via-blue-200 dark:to-purple-200">
-                            SIMSOP
-                          </h1>
-                        </a>
+            <a href="/#" className="flex items-center space-x-2 ml-2 my-2">
+              <div className="relative">
+                <div className="w-10 h-10 bg-gradient-to-br from-blue-500 via-purple-500 to-pink-500 rounded-2xl flex items-center justify-center shadow-lg group-hover:shadow-xl transition-all duration-300 group-hover:scale-105">
+                  <Store className="w-6 h-6 text-white" />
+                </div>
+                <div className="absolute -top-1 -right-1 w-4 h-4 bg-gradient-to-r from-green-400 to-blue-500 rounded-full animate-pulse"></div>
+              </div>
+              <h1 className="text-2xl font-bold bg-gradient-to-r from-gray-900 via-blue-800 to-purple-800 bg-clip-text text-transparent dark:from-white dark:via-blue-200 dark:to-purple-200">
+                SIMSOP
+              </h1>
+            </a>
 
-            {/* Desktop menu button */}
+            {/* Desktop Menu Button */}
             <button
               className={clsx(
                 menuActive ? "" : "mx-20",

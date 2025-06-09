@@ -11,11 +11,10 @@ const SalesDetails = ({ isOpen, saleId, onClose }) => {
   const [alertMessage, setAlertMessage] = useState("");
   const fetchSaleDetails = useCallback(async () => {
     try {
+      // Fetch sale details with user info included
       const response = await api.get(`/sales/${saleId}`);
-      if (response.data?.user_id) {
-        // Fetch user details
-        const userResponse = await api.get(`/users/${response.data.user_id}`);
-        response.data.user = userResponse.data;
+      if (!response.data.User) {
+        response.data.User = { name: "Unknown" }; // Fallback if no user data
       }
       setSale(response.data);
     } catch (error) {
@@ -54,7 +53,13 @@ const SalesDetails = ({ isOpen, saleId, onClose }) => {
             {/* Header */}
             <div className="sticky top-0 bg-white z-10 px-6 py-4 border-b flex justify-between items-center">
               <h4 className="text-xl font-bold text-gray-900 flex items-center">
-                Sale Details #{sale.sales_id}
+                Sale Details
+                <div className="ml-3">
+                  <span className="text-base font-normal text-black bg-gray-100 px-2.5 py-1 rounded-full">
+                    {" "}
+                    #{sale.sales_id}
+                  </span>
+                </div>
               </h4>
               <button
                 onClick={onClose}
@@ -67,23 +72,6 @@ const SalesDetails = ({ isOpen, saleId, onClose }) => {
             <div className="p-6">
               {/* Sale Summary Cards */}
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-                {/* User Info Card */}
-                <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-200">
-                  <div className="flex items-start space-x-3">
-                    <div className="h-8 w-8 rounded-lg bg-orange-100 flex items-center justify-center text-orange-600">
-                      <User size={18} />
-                    </div>
-                    <div>
-                      <h6 className="text-xs font-medium text-gray-500 uppercase tracking-wide">
-                        User Info
-                      </h6>
-                      <p className="mt-1 text-sm font-semibold text-gray-900">
-                        {sale?.user?.name || "N/A"}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-
                 {/* Sale Info Card */}
                 <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-200">
                   <div className="flex items-start space-x-3">
@@ -112,7 +100,30 @@ const SalesDetails = ({ isOpen, saleId, onClose }) => {
                         Date
                       </h6>
                       <p className="mt-1 text-sm font-semibold text-gray-900">
-                        {new Date(sale?.sales_date).toLocaleDateString()}
+                        {new Date(sale?.sales_date).toLocaleDateString(
+                          "en-US",
+                          {
+                            day: "numeric",
+                            month: "long",
+                            year: "numeric",
+                          }
+                        )}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+                {/* User Info Card */}
+                <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-200">
+                  <div className="flex items-start space-x-3">
+                    <div className="h-8 w-8 rounded-lg bg-orange-100 flex items-center justify-center text-orange-600">
+                      <User size={18} />
+                    </div>
+                    <div>
+                      <h6 className="text-xs font-medium text-gray-500 uppercase tracking-wide">
+                        User
+                      </h6>{" "}
+                      <p className="mt-1 text-sm font-semibold text-gray-900">
+                        {sale?.User?.name || sale?.user?.name || "N/A"}
                       </p>
                     </div>
                   </div>
@@ -137,10 +148,11 @@ const SalesDetails = ({ isOpen, saleId, onClose }) => {
               </div>
 
               {/* Sale Details Table */}
-              <div className="mt-8">
-                <h5 className="text-base font-semibold text-gray-900 mb-4 flex items-center justify-between">
+              <div className="mb-8">
+                <h5 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
+                  <Package className="h-5 w-5 mr-2 text-blue-600" />
                   Sale Items
-                  <span className="text-sm font-medium text-gray-500 bg-gray-100 px-2.5 py-1 rounded-full">
+                  <span className="ml-auto text-base font-normal text-gray-500 bg-gray-100 px-2 py-0.5 rounded-full">
                     {sale.sales_details.length}
                   </span>
                 </h5>
@@ -290,6 +302,28 @@ const SalesDetails = ({ isOpen, saleId, onClose }) => {
                     </div>
                   ))}
                 </div>
+              </div>
+
+              {/* Total Amount */}
+              <div className="bg-blue-500 p-4 rounded-xl mb-6 shadow-sm mt-6">
+                <div className="flex justify-between items-center">
+                  <span className="text-lg font-semibold text-white">
+                    Total Amount
+                  </span>
+                  <span className="text-2xl font-bold text-white">
+                    {formatPrice(sale?.total_amount)}
+                  </span>
+                </div>
+              </div>
+
+              {/* Actions */}
+              <div className="flex flex-col sm:flex-row justify-between items-center gap-4">
+                <button
+                  onClick={onClose}
+                  className="w-full sm:w-auto px-6 py-2.5 bg-white border border-gray-300 rounded-lg text-sm font-semibold text-gray-700 hover:bg-gray-50 transition-colors"
+                >
+                  Close
+                </button>
               </div>
             </div>
           </>

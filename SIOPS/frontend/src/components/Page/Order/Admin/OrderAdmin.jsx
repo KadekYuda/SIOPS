@@ -9,6 +9,8 @@ import {
   Plus,
   Package,
   Filter,
+  ShoppingBag,
+  ClipboardList,
   ShoppingCart,
   Clock,
   Calendar,
@@ -105,6 +107,7 @@ const OrderAdmin = () => {
   const [expDateInputs, setExpDateInputs] = useState({});
   const [currentPage, setCurrentPage] = useState(0);
   const [itemsPerPage] = useState(10);
+  const [expandedBatchDetails, setExpandedBatchDetails] = useState({});
 
   const fetchUserProfile = useCallback(async () => {
     try {
@@ -603,36 +606,51 @@ const OrderAdmin = () => {
     });
   };
 
-  const handleProductSelect = (index, selectedOption) => {
-    if (!selectedOption) {
-      // Handle clearing the selection
+  const toggleBatchDetails = (index) => {
+    setExpandedBatchDetails((prev) => ({
+      ...prev,
+      [index]: !prev[index],
+    }));
+  };
+
+  const handleProductSelect = async (index, option) => {
+    if (!option) {
       handleDetailChange(index, "code_product", "");
       handleDetailChange(index, "ordered_price", "");
+      handleDetailChange(index, "available_batches", []);
       return;
     }
-    const selectedProduct = products.find(
-      (p) => p.code_product === selectedOption.value
-    );
 
-    // Fetch batch information to get purchase_price
-    api
-      .get(`/orders/${selectedOption.value}/batches`)
-      .then((response) => {
-        const batches = response.data;
-        handleDetailChange(index, "code_product", selectedOption.value);
-        // Use purchase_price from the first batch if available
-        if (batches && batches.length > 0) {
-          handleDetailChange(index, "ordered_price", batches[0].purchase_price);
-        }
-      })
-      .catch((error) => {
+    const selectedProduct = products.find(
+      (p) => p.code_product === option.value
+    );
+    if (selectedProduct) {
+      try {
+        const batchResponse = await api.get(
+          `/orders/${selectedProduct.code_product}/batches`
+        );
+        const batches = batchResponse.data || [];
+
+        handleDetailChange(index, "code_product", selectedProduct.code_product);
+        handleDetailChange(
+          index,
+          "ordered_price",
+          batches.length > 0
+            ? batches[0].purchase_price
+            : selectedProduct.purchase_price
+        );
+        handleDetailChange(index, "available_batches", batches);
+      } catch (error) {
         console.error("Error fetching batch data:", error);
         showAlert(
           "error",
           "Failed to fetch batch data",
           error.response?.data?.msg || "Network error"
         );
-      });
+      } finally {
+        // Add this finally block to ensure the function completes
+      }
+    }
   };
 
   const handleCreateOrder = async (e) => {
@@ -815,7 +833,7 @@ const OrderAdmin = () => {
               {/* Order Management Card Header */}
               <div className="bg-gradient-to-r from-blue-500 to-blue-700  rounded-t-lg shadow-md p-4 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
                 <div className="flex items-center">
-                  <ShoppingCart className="text-white mr-3" />
+                  <ShoppingBag className="text-white mr-3" size={36} />
                   <div>
                     <h1 className="text-xl md:text-2xl font-bold text-white">
                       Order Management
@@ -841,9 +859,14 @@ const OrderAdmin = () => {
                   <div className="bg-white rounded-b-xl shadow-md border border-gray-100 border-t-0">
                     <div className="bg-white px-4 sm:px-6 py-3 sm:py-4 border-b">
                       <div className="flex items-center justify-between">
-                        <h2 className="text-lg font-semibold text-gray-900">
-                          Orders List
-                        </h2>
+                        <div className="flex items-center gap-3">
+                          <div className="h-10 w-10 rounded-full bg-blue-100 flex items-center justify-center">
+                            <ClipboardList className="text-blue-600" />
+                          </div>
+                          <h2 className="text-lg font-semibold text-gray-900">
+                            Orders List
+                          </h2>
+                        </div>
                         <div className="relative">
                           <button
                             onClick={() => setFilterMenuOpen(!filterMenuOpen)}
@@ -1024,7 +1047,7 @@ const OrderAdmin = () => {
                                             size={12}
                                             className="inline mr-1"
                                           />
-                                          View
+                                          View Details
                                         </button>
                                         {canModifyOrder(order) && (
                                           <>
@@ -1120,24 +1143,23 @@ const OrderAdmin = () => {
                                       ).toLocaleString()}
                                     </div>
                                   </div>
-                                  <span
-                                    className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusClassName(
-                                      order.order_status
-                                    )}`}
-                                  >
-                                    {getStatusIcon(order.order_status)}
-                                    <span className="ml-1 capitalize">
-                                      {order.order_status}
-                                    </span>
-                                  </span>
-                                </div>
-                                <div className="flex justify-between items-center mb-4">
-                                  <span className="text-sm text-gray-600">
-                                    Total Amount:
-                                  </span>
-                                  <span className="font-bold">
-                                    {formatPrice(order.total_amount)}
-                                  </span>
+                                  <div className="mb-4">
+                                    <div className="flex flex-col items-start gap-2">
+                                      <span
+                                        className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusClassName(
+                                          order.order_status
+                                        )}`}
+                                      >
+                                        {getStatusIcon(order.order_status)}
+                                        <span className="ml-1 capitalize">
+                                          {order.order_status}
+                                        </span>
+                                      </span>
+                                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                                        {formatPrice(order.total_amount)}
+                                      </span>
+                                    </div>
+                                  </div>
                                 </div>
                                 <div className="flex flex-wrap gap-2">
                                   <button
@@ -1145,7 +1167,7 @@ const OrderAdmin = () => {
                                     className="text-xs bg-indigo-50 text-indigo-600 px-2 py-1 rounded hover:bg-indigo-100"
                                   >
                                     <Eye size={12} className="inline mr-1" />
-                                    View
+                                    View Details
                                   </button>
                                   {canModifyOrder(order) && (
                                     <>
@@ -1621,15 +1643,118 @@ const OrderAdmin = () => {
                             />
                           </div>
                           {detail.code_product && (
-                            <div className="flex items-center p-3 bg-indigo-50 border border-indigo-100 rounded-lg text-sm text-indigo-700 mb-4">
-                              <Package
-                                size={14}
-                                className="inline mr-2 flex-shrink-0"
-                              />
-                              <span>
-                                A new batch will be created if no existing batch
-                                matches the purchase price.
-                              </span>
+                            <div className="space-y-4">
+                              <div className="flex items-center p-3 bg-indigo-50 border border-indigo-100 rounded-lg text-sm text-indigo-700">
+                                <Package
+                                  size={14}
+                                  className="inline mr-2 flex-shrink-0"
+                                />
+                                <span>
+                                  A new batch will be created if no existing
+                                  batch matches the purchase price.
+                                </span>
+                              </div>
+
+                              {detail.available_batches?.length > 0 && (
+                                <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
+                                  <div className="flex items-center justify-between mb-3">
+                                    <div className="flex items-center gap-2">
+                                      <Package
+                                        size={16}
+                                        className="text-gray-600"
+                                      />
+                                      <span className="text-sm font-medium text-gray-700">
+                                        Available Batches
+                                      </span>
+                                    </div>
+                                    <button
+                                      type="button"
+                                      onClick={() => toggleBatchDetails(index)}
+                                      className="text-xs text-indigo-600 hover:text-indigo-800 flex items-center gap-1"
+                                    >
+                                      {expandedBatchDetails[index] ? (
+                                        <>
+                                          <svg
+                                            xmlns="http://www.w3.org/2000/svg"
+                                            width="14"
+                                            height="14"
+                                            viewBox="0 0 24 24"
+                                            fill="none"
+                                            stroke="currentColor"
+                                            strokeWidth="2"
+                                            strokeLinecap="round"
+                                            strokeLinejoin="round"
+                                          >
+                                            <path d="m18 15-6-6-6 6" />
+                                          </svg>
+                                          Hide Details
+                                        </>
+                                      ) : (
+                                        <>
+                                          <svg
+                                            xmlns="http://www.w3.org/2000/svg"
+                                            width="14"
+                                            height="14"
+                                            viewBox="0 0 24 24"
+                                            fill="none"
+                                            stroke="currentColor"
+                                            strokeWidth="2"
+                                            strokeLinecap="round"
+                                            strokeLinejoin="round"
+                                          >
+                                            <path d="m6 9 6 6 6-6" />
+                                          </svg>
+                                          Show Details
+                                        </>
+                                      )}
+                                    </button>
+                                  </div>
+
+                                  {expandedBatchDetails[index] && (
+                                    <div className="space-y-2 mt-2">
+                                      {detail.available_batches.map((batch) => (
+                                        <div
+                                          key={batch.batch_id}
+                                          className="bg-white p-3 rounded-lg border border-gray-200 text-sm"
+                                        >
+                                          <div className="flex justify-between items-center mb-2">
+                                            <span className="font-medium text-gray-900">
+                                              {batch.batch_code}
+                                            </span>
+                                            <span className="text-indigo-600 font-medium">
+                                              {formatPrice(
+                                                batch.purchase_price
+                                              )}
+                                            </span>
+                                          </div>
+                                          <div className="grid grid-cols-2 gap-4 text-xs">
+                                            <div>
+                                              <span className="text-gray-500">
+                                                Stock:{" "}
+                                              </span>
+                                              <span className="text-gray-900 font-medium">
+                                                {batch.stock_quantity} pcs
+                                              </span>
+                                            </div>
+                                            <div>
+                                              <span className="text-gray-500">
+                                                Expiry:{" "}
+                                              </span>
+                                              <span className="text-gray-900 font-medium">
+                                                {batch.exp_date
+                                                  ? new Date(
+                                                      batch.exp_date
+                                                    ).toLocaleDateString()
+                                                  : "N/A"}
+                                              </span>
+                                            </div>
+                                          </div>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  )}
+                                </div>
+                              )}
                             </div>
                           )}
                           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">

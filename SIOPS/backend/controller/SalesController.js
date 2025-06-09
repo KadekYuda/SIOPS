@@ -2,6 +2,7 @@ import Sales from "../models/SalesModel.js";
 import SalesDetail from "../models/SalesDetailModel.js";
 import BatchStock from "../models/BatchstockModel.js";
 import Product from "../models/ProductModel.js";
+import User from "../models/UserModel.js";
 import db from "../config/Database.js";
 import fs from "fs";
 import { parse } from "csv-parse";
@@ -58,12 +59,36 @@ const normalizeProductCode = (code) => {
 
 // Helper function to validate stock availability
 const validateStockAvailability = async (items, t) => {
-    const stockValidation = [];
-    
+    // Group items by code_product (or name_product if fallback)
+    const groupMap = {};
     for (const item of items) {
-        const code_product = normalizeProductCode(item.code_product);
-        const quantity = parseInt(item.quantity);
-
+        let code_product = normalizeProductCode(item.code_product);
+        let product = null;
+        if (code_product) {
+            product = await Product.findOne({ where: { code_product }, transaction: t });
+        }
+        if ((!product || !code_product) && item.name_product) {
+            product = await Product.findOne({ where: { name_product: item.name_product }, transaction: t });
+            if (product) {
+                code_product = product.code_product;
+            }
+        }
+        const key = code_product || item.name_product;
+        // --- FIX: Only sum quantity, never subtotal, and avoid double counting ---
+        if (!groupMap[key]) {
+            groupMap[key] = {
+                code_product,
+                name_product: item.name_product,
+                requested: 0
+            };
+        }
+        // Make sure to only sum the quantity as integer
+        groupMap[key].requested += Number(item.quantity);
+    }
+    // Validate stock per product
+    const stockValidation = [];
+    for (const key in groupMap) {
+        const { code_product, name_product, requested } = groupMap[key];
         // Get total available stock
         const availableBatches = await BatchStock.findAll({
             where: {
@@ -74,18 +99,15 @@ const validateStockAvailability = async (items, t) => {
             },
             transaction: t
         });
-
-        const totalStock = availableBatches.reduce((sum, batch) => 
-            sum + parseInt(batch.stock_quantity || 0), 0);
-
+        const totalStock = availableBatches.reduce((sum, batch) => sum + parseInt(batch.stock_quantity || 0), 0);
         stockValidation.push({
             code_product,
+            name_product,
             available: totalStock,
-            requested: quantity,
-            sufficient: totalStock >= quantity
+            requested, // this is now the correct total quantity requested per product
+            sufficient: totalStock >= requested
         });
     }
-
     return stockValidation;
 };
 
@@ -95,7 +117,6 @@ const groupSalesByDate = (salesData) => {
         const date = item.sales_date;
         if (!acc[date]) {
             acc[date] = {
-                sales_date: date,
                 items: []
             };
         }
@@ -187,11 +208,7 @@ const processDailySale = async (date, saleData, user_id, t) => {
 // Helper to create a single sale with its items
 const createSingleSale = async (saleData, user_id, normalizedItems, t) => {
     // Create the sale record
-    console.log('Creating sale with data:', {
-        user_id,
-        sales_date: saleData.sales_date,
-        total_amount: normalizedItems.reduce((sum, item) => sum + parseFloat(item.subtotal), 0)
-    });
+    
     
     const sale = await Sales.create({
         user_id,
@@ -212,6 +229,72 @@ const createSingleSale = async (saleData, user_id, normalizedItems, t) => {
     }
 
     return sale;
+};
+
+// Helper untuk normalisasi items dengan fallback ke name_product
+const normalizeItemsWithFallback = async (items, t) => {
+    const normalized = [];
+    for (const item of items) {
+        let code_product = normalizeProductCode(item.code_product);
+        let product = null;
+        if (code_product) {
+            product = await Product.findOne({ where: { code_product }, transaction: t });
+        }
+        if ((!product || !code_product) && item.name_product) {
+            product = await Product.findOne({ where: { name_product: item.name_product }, transaction: t });
+            if (product) {
+                code_product = product.code_product;
+            }
+        }
+        normalized.push({
+            ...item,
+            code_product,
+        });
+    }
+    return normalized;
+};
+
+// Helper to check for duplicate sales
+const checkDuplicateSale = async (items, sales_date, user_id, t) => {
+    const startOfDay = new Date(sales_date);
+    startOfDay.setHours(0, 0, 0, 0);
+    const endOfDay = new Date(sales_date);
+    endOfDay.setHours(23, 59, 59, 999);
+
+    // Get all sales for this user on this date
+    const existingSales = await Sales.findAll({
+        where: {
+            user_id,
+            sales_date: {
+                [db.Sequelize.Op.between]: [startOfDay, endOfDay]
+            }
+        },
+        include: [{
+            model: SalesDetail,
+            include: [{ model: Product }]
+        }],
+        transaction: t
+    });
+
+    // Check each existing sale's items against current items
+    for (const sale of existingSales) {
+        if (!sale.SalesDetails || !Array.isArray(sale.SalesDetails)) {
+            continue; // Skip this sale if it has no details
+        }
+
+        const matchingItems = items.filter(newItem => {
+            return sale.SalesDetails.some(detail => 
+                detail.code_product === newItem.code_product && 
+                parseFloat(detail.selling_price) === parseFloat(newItem.selling_price) &&
+                parseInt(detail.quantity) === parseInt(newItem.quantity)
+            );
+        });
+
+        if (matchingItems.length === items.length) {
+            return true; // Found a duplicate sale
+        }
+    }
+    return false;
 };
 
 export const importSalesFromCSV = async (req, res) => {
@@ -259,56 +342,53 @@ export const importSalesFromCSV = async (req, res) => {
                 .on("data", (row) => {
                     processedCount++;
                     try {
-                        // Transform and validate row data
-                        const code_product = normalizeProductCode(row['Kode Barang']);
-                        if (!code_product) {
-                            errors.push({
-                                row: processedCount,
-                                error: 'Product code is required'
-                            });
-                            return;
-                        }
-
-                        const quantity = parseInt(row['Jumlah']);
-                        if (isNaN(quantity) || quantity <= 0) {
-                            errors.push({
-                                row: processedCount,
-                                error: 'Invalid quantity'
-                            });
-                            return;
-                        }
-
-                        const selling_price = parseFloat(row['Harga Jual'].replace(/,/g, '.'));
-                        if (isNaN(selling_price) || selling_price <= 0) {
-                            errors.push({
-                                row: processedCount,
-                                error: 'Invalid selling price'
-                            });
-                            return;
-                        }
-
+                        // Ambil data sesuai header user
                         const sales_date = new Date(row['Tanggal']);
-                        if (isNaN(sales_date.getTime())) {
-                            errors.push({
-                                row: processedCount,
-                                error: 'Invalid date format'
-                            });
+                        const code_product = normalizeProductCode(row['Kode Bara'] || row['Kode Barang'] || row['code_product']);
+                        const name_product = row['Nama Bar'] || row['Nama Barang'] || row['name_product'] || null;
+                        const quantity = parseInt(row['Qty'] || row['quantity']);
+                        const selling_price = parseFloat((row['Harga Jual'] || row['selling_price'] || '').toString().replace(/,/g, '.'));
+                        const subtotal = parseInt(row['Jumlah'] || row['subtotal']);
+
+                        // Validasi minimal
+                        if (!name_product && !code_product) {
+                            errors.push({ row: processedCount, error: 'Product code or name is required' });
                             return;
+                        }
+                        if (isNaN(quantity) || quantity <= 0) {
+                            errors.push({ row: processedCount, error: 'Invalid quantity' });
+                            return;
+                        }
+                        if (isNaN(selling_price) || selling_price <= 0) {
+                            errors.push({ row: processedCount, error: 'Invalid selling price' });
+                            return;
+                        }
+                        if (isNaN(subtotal) || subtotal <= 0) {
+                            errors.push({ row: processedCount, error: 'Invalid subtotal' });
+                            return;
+                        }
+                        if (isNaN(sales_date.getTime())) {
+                            errors.push({ row: processedCount, error: 'Invalid date format' });
+                            return;
+                        }
+
+                        // Jika subtotal = quantity * selling_price, gunakan quantity asli
+                        // Jika quantity * selling_price != subtotal, coba hitung quantity dari subtotal/selling_price
+                        let final_quantity = quantity;
+                        if (quantity * selling_price !== subtotal && subtotal % selling_price === 0) {
+                            final_quantity = subtotal / selling_price;
                         }
 
                         salesData.push({
                             sales_date,
                             code_product,
-                            quantity,
+                            name_product,
+                            quantity: final_quantity,
                             selling_price,
-                            subtotal: quantity * selling_price
+                            subtotal
                         });
-
                     } catch (error) {
-                        errors.push({
-                            row: processedCount,
-                            error: `Error processing row: ${error.message}`
-                        });
+                        errors.push({ row: processedCount, error: `Error processing row: ${error.message}` });
                     }
                 })
                 .on("error", (error) => reject(error))
@@ -331,25 +411,32 @@ export const importSalesFromCSV = async (req, res) => {
 
         // Validate all stock before processing
         const allItems = Object.values(salesByDate).flatMap(sale => sale.items);
-        const stockValidation = await validateStockAvailability(allItems, t);
-        
-        const insufficientStock = stockValidation.filter(v => !v.sufficient);
-        if (insufficientStock.length > 0) {
+        const normalizedAllItems = await normalizeItemsWithFallback(allItems, t);
+        const stockValidation = await validateStockAvailability(normalizedAllItems, t);
+        // Filter hanya yang stok cukup
+        const sufficientItems = normalizedAllItems.filter(item => {
+            const found = stockValidation.find(v => (v.code_product === item.code_product || v.name_product === item.name_product));
+            return found && found.sufficient;
+        });
+        // Jika tidak ada item yang valid sama sekali, rollback
+        if (sufficientItems.length === 0) {
             await t.rollback();
             return res.status(400).json({
-                msg: "Insufficient stock for some products",
-                details: insufficientStock
+                msg: "No valid sales to import (all insufficient stock or not found)",
+                details: stockValidation.filter(v => !v.sufficient)
             });
         }
-
-        // Process each day's sales
+        // Group ulang hanya yang valid
+        const validSalesByDate = groupSalesByDate(sufficientItems);
+        // Process each day's sales (hanya yang valid)
         const results = [];
-        for (const [date, saleData] of Object.entries(salesByDate)) {
+        for (const [date, saleData] of Object.entries(validSalesByDate)) {
             try {
+                const normalizedItems = await normalizeItemsWithFallback(saleData.items, t);
                 const sale = await createSingleSale(
                     { sales_date: new Date(date) },
-                    user_id,
-                    saleData.items,
+                    req.user?.user_id,
+                    normalizedItems,
                     t
                 );
                 results.push(sale);
@@ -360,6 +447,16 @@ export const importSalesFromCSV = async (req, res) => {
                     error: `Error processing sale: ${error.message}`
                 });
             }
+        }
+
+        // Jika ada produk yang gagal, tetap tampilkan di errors
+        const failedProducts = stockValidation.filter(v => !v.sufficient);
+        if (failedProducts.length > 0) {
+            errors.push({
+                row: processedCount,
+                error: `Some products were not found or insufficient in stock`,
+                details: failedProducts
+            });
         }
 
         // If we have any successful imports but some failed, we still commit
@@ -411,16 +508,19 @@ export const createSale = async (req, res) => {
             return res.status(400).json({ msg: "Items array is required" });
         }
 
-        // Normalize items
-        const normalizedItems = items.map(item => ({
-            ...item,
-            code_product: normalizeProductCode(item.code_product)
-        }));
+        // Check for duplicate sales
+        const isDuplicate = await checkDuplicateSale(items, sales_date, user_id, t);
+        if (isDuplicate) {
+            await t.rollback();
+            return res.status(400).json({ msg: "Duplicate sale detected. This exact sale appears to already exist." });
+        }
+
+        // Normalize items with fallback
+        const normalizedItems = await normalizeItemsWithFallback(items, t);
 
         // Validate stock
         const stockValidation = await validateStockAvailability(normalizedItems, t);
         const insufficientStock = stockValidation.filter(v => !v.sufficient);
-        
         if (insufficientStock.length > 0) {
             await t.rollback();
             return res.status(400).json({
@@ -464,17 +564,29 @@ export const createSale = async (req, res) => {
 
 export const getSales = async (req, res) => {
     try {
-        const response = await Sales.findAll({
-            include: [{
-                model: SalesDetail,
-                include: [{
-                    model: Product,
-                    attributes: ['name_product']
-                }, {
-                    model: BatchStock,
-                    attributes: ['batch_code', 'exp_date']
-                }]
-            }],
+        // Build where clause based on user role
+        let whereClause = {};
+        if (req.user.role === 'staff') {
+            whereClause.user_id = req.user.user_id;
+        }        const response = await Sales.findAll({
+            where: whereClause,
+            include: [
+                {
+                    model: User,
+                    as: "User", // Make sure the alias matches your model association
+                    attributes: ['user_id', 'name', 'email', 'role']
+                },
+                {
+                    model: SalesDetail,
+                    include: [{
+                        model: Product,
+                        attributes: ['name_product']
+                    }, {
+                        model: BatchStock,
+                        attributes: ['batch_code', 'exp_date']
+                    }]
+                }
+            ],
             order: [['sales_date', 'DESC']]
         });
         res.status(200).json(response);
@@ -487,16 +599,23 @@ export const getSaleById = async (req, res) => {
     try {
         const sale = await Sales.findOne({
             where: { sales_id: req.params.id },
-            include: [{
-                model: SalesDetail,
-                include: [{
-                    model: Product,
-                    attributes: ['code_product', 'name_product']
-                }, {
-                    model: BatchStock,
-                    attributes: ['batch_code', 'exp_date']
-                }]
-            }]
+            include: [
+                {
+                    model: User,
+                    as: 'User',
+                    attributes: ['user_id', 'name', 'email', 'role']
+                },
+                {
+                    model: SalesDetail,
+                    include: [{
+                        model: Product,
+                        attributes: ['code_product', 'name_product']
+                    }, {
+                        model: BatchStock,
+                        attributes: ['batch_code', 'exp_date']
+                    }]
+                }
+            ]
         });
         
         if (!sale) {

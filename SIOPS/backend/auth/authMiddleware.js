@@ -154,3 +154,25 @@ export const authorizeUserOrAdmin = (req, res, next) => {
   }
 };
 
+
+export const authorizeAssignedStaff = async (req, res, next) => {
+  try {
+    const user = req.user; // Dari authenticateToken
+    if (user.role !== 'staff') {
+      return res.status(403).json({ msg: 'Access denied: Only staff can perform this action' });
+    }
+
+    const opnameId = req.params.id; // Untuk /submit/:id
+    if (opnameId) {
+      const opname = await Opname.findByPk(opnameId);
+      if (!opname || opname.user_id !== user.user_id) {
+        return res.status(403).json({ msg: 'Access denied: Not assigned to this opname' });
+      }
+    }
+
+    next();
+  } catch (error) {
+    console.error('Error in authorizeAssignedStaff:', error);
+    return res.status(500).json({ msg: 'Server error' });
+  }
+};
