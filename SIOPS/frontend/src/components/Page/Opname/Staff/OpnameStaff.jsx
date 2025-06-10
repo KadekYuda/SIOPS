@@ -28,9 +28,7 @@ const OpnameStaff = () => {
       // Validasi dan transformasi data
       const validTasks = response.data.filter((task) => {
         const isValid =
-          task &&
-          task.BatchStock?.Product?.name_product &&
-          task.status === "scheduled";
+          task?.batch_stock?.code_product && task?.status === "scheduled";
 
         if (!isValid) {
           console.log("Invalid task data:", task);
@@ -94,27 +92,27 @@ const OpnameStaff = () => {
     setNotes("");
   }; // Filter dan validasi task sebelum ditampilkan
   const filteredTasks = tasks.filter((task) => {
-    if (!task || !task.BatchStock || !task.BatchStock.Product) {
+    if (!task?.batch_stock?.code_product) {
       console.log("Invalid task structure:", task);
       return false;
     }
 
     const searchTerm = search.toLowerCase();
-    const productName = task.BatchStock.Product.name_product.toLowerCase();
-    const batchCode = task.BatchStock.batch_code.toLowerCase();
+    const productName = task.batch_stock?.code_product.toLowerCase();
+    const batchCode = task.batch_stock?.batch_code.toLowerCase();
 
     return productName.includes(searchTerm) || batchCode.includes(searchTerm);
   });
   const getProductName = (task) => {
     console.log("Getting product name for task:", task);
-    const name = task?.BatchStock?.Product?.name_product || "Unnamed Product";
+    const name = task?.batch_stock?.code_product || "Unnamed Product";
     console.log("Product name:", name);
     return name;
   };
 
   const getSystemStock = (task) => {
     console.log("Getting system stock for task:", task);
-    const stock = task?.system_stock || task?.BatchStock?.stock_quantity || 0;
+    const stock = task?.system_stock || task?.batch_stock?.stock_quantity || 0;
     console.log("System stock:", stock);
     return stock;
   };
@@ -149,9 +147,9 @@ const OpnameStaff = () => {
           <div className="text-center py-4 text-gray-500">Tidak ada tugas</div>
         ) : (
           filteredTasks.map((task) => (
-            <div
+            <button
               key={task.opname_id}
-              className="bg-white rounded-lg border shadow-sm p-3 mb-2"
+              className="w-full text-left bg-white rounded-lg border shadow-sm p-3 mb-2"
               onClick={() => setSelectedTask(task)}
             >
               <h3 className="text-sm font-medium">{getProductName(task)}</h3>
@@ -159,9 +157,9 @@ const OpnameStaff = () => {
                 Stok Sistem: {getSystemStock(task)}
               </p>
               <p className="text-xs text-gray-600">
-                Batch: {task.BatchStock?.batch_code || "N/A"}
+                Batch: {task.batch_stock?.batch_code || "N/A"}
               </p>
-            </div>
+            </button>
           ))
         )}
       </div>
@@ -223,9 +221,9 @@ const OpnameStaff = () => {
                       </td>
                       <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-800">
                         {getProductName(task)}
-                      </td>
+                      </td>{" "}
                       <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-800">
-                        {task.BatchStock?.batch_code || "N/A"}
+                        {task.batch_stock?.batch_code || "N/A"}
                       </td>
                       <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-800">
                         {getSystemStock(task)}
@@ -253,9 +251,9 @@ const OpnameStaff = () => {
             <div className="bg-blue-50 p-4 rounded-lg mb-4">
               <h3 className="font-medium text-blue-900 mb-2">
                 {getProductName(selectedTask)}
-              </h3>
+              </h3>{" "}
               <p className="text-sm text-blue-800">
-                Batch: {selectedTask.BatchStock?.batch_code || "N/A"}
+                Batch: {selectedTask.batch_stock?.batch_code || "N/A"}
               </p>
               <p className="text-sm text-blue-800">
                 Stok Sistem: {getSystemStock(selectedTask)}
@@ -263,10 +261,14 @@ const OpnameStaff = () => {
             </div>
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700">
+                <label
+                  htmlFor="physicalStock"
+                  className="block text-sm font-medium text-gray-700"
+                >
                   Stok Fisik
                 </label>
                 <input
+                  id="physicalStock"
                   type="number"
                   value={physicalStock}
                   onChange={(e) => setPhysicalStock(e.target.value)}
@@ -274,36 +276,45 @@ const OpnameStaff = () => {
                   required
                   min="0"
                 />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700">
+
+                <label
+                  htmlFor="expiredStock"
+                  className="block text-sm font-medium text-gray-700"
+                >
                   Stok Kadaluarsa (Opsional)
                 </label>
                 <input
+                  id="expiredStock"
                   type="number"
                   value={expiredStock}
                   onChange={(e) => setExpiredStock(e.target.value)}
                   className="w-full p-2 border rounded-md focus:ring-2 focus:ring-blue-500"
                   min="0"
                 />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700">
+
+                <label
+                  htmlFor="damagedStock"
+                  className="block text-sm font-medium text-gray-700"
+                >
                   Stok Rusak (Opsional)
                 </label>
                 <input
+                  id="damagedStock"
                   type="number"
                   value={damagedStock}
                   onChange={(e) => setDamagedStock(e.target.value)}
                   className="w-full p-2 border rounded-md focus:ring-2 focus:ring-blue-500"
                   min="0"
                 />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700">
+
+                <label
+                  htmlFor="notes"
+                  className="block text-sm font-medium text-gray-700"
+                >
                   Catatan (Opsional)
                 </label>
                 <textarea
+                  id="notes"
                   value={notes}
                   onChange={(e) => setNotes(e.target.value)}
                   className="w-full p-2 border rounded-md focus:ring-2 focus:ring-blue-500"

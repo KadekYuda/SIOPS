@@ -17,6 +17,7 @@ import api from "../../../../service/api";
 import Pagination from "../../Product/Pagination";
 import AlertModal from "../../../modal/AlertModal";
 import SuccessModal from "../../../modal/SuccessModal";
+import BatchStatus from "../../BatchStatus";
 
 const Tab = ({ label, icon: Icon, isActive, onClick }) => (
   <button
@@ -63,7 +64,7 @@ const OpnameAdmin = () => {
       const batchData = batchesRes.data?.result || [];
       setBatches(batchData);
 
-      const opnamesRes = await api.get("/opname");
+      const opnamesRes = await api.get("/opname/opnames");
       console.log("Raw Opname Response:", opnamesRes.data);
 
       // Transform opname data to include user and batch details
@@ -201,6 +202,7 @@ const OpnameAdmin = () => {
           <AllOpname
             opnames={opnames}
             users={users}
+            batches={batches}
             fetchData={fetchData}
             setError={setError}
             setSuccess={setSuccess}
@@ -217,22 +219,28 @@ const OpnameAdmin = () => {
   );
 };
 
-const AllOpname = ({ opnames, users, fetchData, setError, setSuccess }) => {
+const AllOpname = ({
+  opnames,
+  users,
+  batches,
+  fetchData,
+  setError,
+  setSuccess,
+}) => {
   const [search, setSearch] = useState("");
   const [filterDate, setFilterDate] = useState("");
   const [filterStatus, setFilterStatus] = useState("");
   const [filterUser, setFilterUser] = useState("");
+  const [currentPage, setCurrentPage] = useState(0);
+  const itemsPerPage = 10;
 
   const userOptions = users.map((user) => ({
     value: user.user_id,
     label: user.username,
   }));
   const [selectedOpname, setSelectedOpname] = useState(null);
-  const [currentPage, setCurrentPage] = useState(0);
-  const itemsPerPage = 10;
-
-  // Group opnames by scheduled_date and user_id
   const groupedOpnames = opnames.reduce((acc, opname) => {
+    const batch = batches.find((b) => b.batch_id === opname.batch_id);
     const key = `${opname.scheduled_date}-${opname.user_id}`;
     if (!acc[key]) {
       acc[key] = {
@@ -244,18 +252,15 @@ const AllOpname = ({ opnames, users, fetchData, setError, setSuccess }) => {
       };
     }
     acc[key].items.push(opname);
-    // Update group status based on items
-    if (opname.status === "adjusted") {
-      acc[key].status = "adjusted";
-    } else if (opname.status === "reviewed" && acc[key].status !== "adjusted") {
+    if (opname.status === "adjusted") acc[key].status = "adjusted";
+    else if (opname.status === "reviewed" && acc[key].status !== "adjusted")
       acc[key].status = "reviewed";
-    } else if (
+    else if (
       opname.status === "submitted" &&
       acc[key].status !== "adjusted" &&
       acc[key].status !== "reviewed"
-    ) {
+    )
       acc[key].status = "submitted";
-    }
     return acc;
   }, {});
 
@@ -282,7 +287,6 @@ const AllOpname = ({ opnames, users, fetchData, setError, setSuccess }) => {
       if (!items?.length) throw new Error("No items to review");
       const status = action === "adjust" ? "adjusted" : "reviewed";
 
-      // Review all items in the group
       await Promise.all(
         items.map((item) =>
           api.post("/opname/review", {
@@ -296,7 +300,6 @@ const AllOpname = ({ opnames, users, fetchData, setError, setSuccess }) => {
       setSuccess(
         action === "adjust" ? "Opnames adjusted!" : "Opnames reviewed!"
       );
-      setSelectedOpname(null);
       fetchData();
     } catch (err) {
       setError(err.response?.data?.error || "Failed to review opname");
@@ -621,15 +624,10 @@ const ScheduleOpname = ({
     label: user.username,
   }));
 
-  const categoryOptions = [
-    ...(Array.isArray(categories) && categories.length > 0
-      ? categories.map((category) => ({
-          value: category.code_categories,
-          label:
-            category.name_categories || `Category ${category.code_categories}`,
-        }))
-      : []),
-  ];
+  const categoryOptions = categories.map((category) => ({
+    value: category.code_categories,
+    label: category.name_categories || `Category ${category.code_categories}`,
+  }));
 
   useEffect(() => {
     if (!Array.isArray(batches) || batches.length === 0) {
@@ -638,77 +636,49 @@ const ScheduleOpname = ({
       return;
     }
 
-    try {
-      const productsFromBatches = batches
-        .filter((batch) => {
-          const isValid =
-            batch?.product &&
-            batch.product.code_product &&
-            batch.product.code_categories;
-          const matchesSearch =
-            !searchProduct ||
-            (batch.product.name_product &&
-              batch.product.name_product
-                .toLowerCase()
-                .includes(searchProduct.toLowerCase())) ||
-            (batch.product.code_product &&
-              batch.product.code_product
-                .toLowerCase()
-                .includes(searchProduct.toLowerCase()));
-          return (
-            isValid &&
-            (selectedCategories.length === 0 ||
-              selectedCategories.includes(batch.product.code_categories)) &&
-            matchesSearch
-          );
-        })
-        .map((batch) => ({
-          ...batch.product,
-          batchCount: 1,
-          totalStock: batch.stock_quantity || 0,
-          batch_id: batch.batch_id,
-        }));
-
-      const productMap = productsFromBatches.reduce((map, product) => {
-        if (!map.has(product.code_product)) {
-          map.set(product.code_product, {
-            ...product,
-            batchCount: 1,
-            totalStock: product.totalStock || 0,
-          });
-        } else {
-          const existing = map.get(product.code_product);
-          existing.batchCount += 1;
-          existing.totalStock += product.totalStock || 0;
+    const productsFromBatches = batches
+      .filter(
+        (batch) =>
+          (selectedCategories.length === 0 ||
+            selectedCategories.includes(batch.product.code_categories)) &&
+          (!searchProduct ||
+            batch.product.name_product
+              ?.toLowerCase()
+              .includes(searchProduct.toLowerCase()) ||
+            batch.product.code_product
+              ?.toLowerCase()
+              .includes(searchProduct.toLowerCase()))
+      )
+      .map((batch) => ({
+        ...batch.product,
+        batchCount: 1,
+        totalStock: batch.stock_quantity || 0,
+      }))
+      .reduce((unique, item) => {
+        if (!unique[item.code_product]) {
+          unique[item.code_product] = item;
         }
-        return map;
-      }, new Map());
-
-      const filteredProducts = Array.from(productMap.values());
-      setProductList(filteredProducts);
-
-      const categoryCounts = filteredProducts.reduce((acc, product) => {
-        const category = categories.find(
-          (cat) => cat.code_categories === product.code_categories
-        );
-        const categoryName = category?.name_categories || "Unknown Category";
-
-        if (!acc[categoryName]) {
-          acc[categoryName] = { name: categoryName, count: 0 };
-        }
-        acc[categoryName].count += product.batchCount;
-        return acc;
+        return unique;
       }, {});
 
-      setBatchSummary({
-        count: filteredProducts.reduce((sum, p) => sum + p.batchCount, 0),
-        categories: Object.values(categoryCounts),
-      });
-    } catch (error) {
-      console.error("Error filtering products:", error);
-      setProductList([]);
-      setBatchSummary({ count: 0, categories: [] });
-    }
+    const filteredProducts = Object.values(productsFromBatches);
+    setProductList(filteredProducts);
+
+    const categoryCounts = filteredProducts.reduce((acc, product) => {
+      const category = categories.find(
+        (cat) => cat.code_categories === product.code_categories
+      );
+      const categoryName = category?.name_categories || "Unknown Category";
+      if (!acc[categoryName])
+        acc[categoryName] = { name: categoryName, count: 0 };
+      acc[categoryName].count += 1;
+      return acc;
+    }, {});
+
+    setBatchSummary({
+      count: filteredProducts.length,
+      categories: Object.values(categoryCounts),
+    });
   }, [selectedCategories, batches, categories, searchProduct]);
 
   const handleCreateTask = async (e) => {
@@ -720,33 +690,25 @@ const ScheduleOpname = ({
       if (selectedCategories.length === 0)
         throw new Error("Please select at least one product category");
 
-      const batchIds = batches
-        .filter((batch) => {
-          if (!batch.product || !batch.product.code_categories) return false;
-          return selectedCategories.includes(batch.product.code_categories);
-        })
-        .map((batch) => String(batch.batch_id));
+      const products = batches
+        .filter((batch) =>
+          selectedCategories.includes(batch.product.code_categories)
+        )
+        .map((batch) => batch.product.code_product)
+        .filter((value, index, self) => self.indexOf(value) === index);
 
-      if (!selectedUserId) {
-        throw new Error("Pilih staff untuk penugasan");
+      if (!selectedUserId) throw new Error("Pilih staff untuk penugasan");
+
+      for (const code_product of products) {
+        await api.post("/opname/opnames/create", {
+          code_product,
+          scheduled_date: scheduledDate,
+          assigned_user_id: selectedUserId,
+        });
       }
 
-      if (batchIds.length === 0) {
-        throw new Error(
-          "Tidak ada batch yang tersedia untuk kategori yang dipilih"
-        );
-      }
-
-      const requestData = {
-        batch_ids: batchIds,
-        assigned_user_id: String(selectedUserId),
-        scheduled_date: scheduledDate,
-        status: "scheduled",
-      };
-
-      await api.post("/opname/create", requestData);
       setSuccess(
-        `Penugasan opname untuk ${batchIds.length} batch berhasil dibuat!`
+        `Penugasan opname untuk ${products.length} produk berhasil dibuat!`
       );
       setSelectedCategories([]);
       setSelectedUserId("");
@@ -864,7 +826,7 @@ const ScheduleOpname = ({
           </h4>
           <div className="space-y-2 text-sm text-indigo-800">
             <div>
-              <strong>Total Batches:</strong> {batchSummary.count}
+              <strong>Total Products:</strong> {batchSummary.count}
             </div>
             {batchSummary.categories.length > 0 && (
               <button
@@ -980,7 +942,7 @@ const ScheduleOpname = ({
                     </th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-100">
+                <tbody className="divide-y divide-gray-200">
                   {filteredCategories.map((cat, index) => (
                     <tr key={index} className="hover:bg-gray-50">
                       <td className="px-4 py-2 text-sm text-gray-600">
@@ -1054,90 +1016,87 @@ const DirectOpname = ({
   setError,
 }) => {
   const [selectedCategory, setSelectedCategory] = useState("");
-  const [selectedBatchId, setSelectedBatchId] = useState(null);
+  const [selectedProduct, setSelectedProduct] = useState(null);
   const [physicalStock, setPhysicalStock] = useState("");
   const [expiredQuantity, setExpiredQuantity] = useState("");
   const [damagedQuantity, setDamagedQuantity] = useState("");
   const [notes, setNotes] = useState("");
   const [showBatchModal, setShowBatchModal] = useState(false);
   const [batchSearch, setBatchSearch] = useState("");
-  const [currentPage, setCurrentPage] = useState(0);
-  const [itemsPerPage, setItemsPerPage] = useState(10);
-  const [filteredBatches, setFilteredBatches] = useState([]);
+  const [showUpdateExpModal, setShowUpdateExpModal] = useState(false);
+  const [selectedBatch, setSelectedBatch] = useState(null);
+  const [newExpDate, setNewExpDate] = useState("");
 
-  const itemsPerPageOptions = [
-    { value: 5, label: "5 items" },
-    { value: 10, label: "10 items" },
-    { value: 25, label: "25 items" },
-    { value: 50, label: "50 items" },
-  ];
+  const handleUpdateExpDate = (batch) => {
+    setSelectedBatch(batch);
+    setNewExpDate(batch.expired_date || "");
+    setShowUpdateExpModal(true);
+  };
+
+  const saveExpDate = async () => {
+    try {
+      await api.put(`/batch/stock/${selectedBatch.batch_id}`, {
+        expired_date: newExpDate,
+      });
+      setSuccess("Expiration date updated successfully");
+      fetchData();
+      setShowUpdateExpModal(false);
+    } catch (err) {
+      setError(err.response?.data?.error || "Failed to update expiration date");
+    }
+  };
 
   const categoryOptions = [
     { value: "", label: "All Categories" },
-    ...(Array.isArray(categories)
-      ? categories.map((category) => ({
-          value: category.code_categories,
-          label:
-            category.name_categories || `Category ${category.code_categories}`,
-        }))
-      : []),
+    ...categories.map((category) => ({
+      value: category.code_categories,
+      label: category.name_categories,
+    })),
   ];
 
-  useEffect(() => {
-    try {
-      const filtered = batches.filter((batch) => {
-        if (!batch?.product?.name_product) return false;
-
-        const matchesSearch =
-          !batchSearch ||
-          batch.product.name_product
-            .toLowerCase()
-            .includes(batchSearch.toLowerCase()) ||
-          batch.batch_code.toLowerCase().includes(batchSearch.toLowerCase());
-
-        if (!matchesSearch) return false;
-
-        if (
-          selectedCategory &&
-          batch.product.code_categories !== selectedCategory
-        ) {
-          return false;
-        }
-
-        return true;
-      });
-
-      setFilteredBatches(filtered);
-    } catch (error) {
-      console.error("Error filtering batches:", error);
-      setFilteredBatches([]);
-    }
+  const productOptions = useMemo(() => {
+    return batches
+      .filter(
+        (batch) =>
+          (!selectedCategory ||
+            batch.product.code_categories === selectedCategory) &&
+          (!batchSearch ||
+            batch.product.name_product
+              .toLowerCase()
+              .includes(batchSearch.toLowerCase()) ||
+            batch.product.code_product
+              .toLowerCase()
+              .includes(batchSearch.toLowerCase()))
+      )
+      .map((batch) => ({
+        value: batch.product.code_product,
+        label: batch.product.name_product,
+      }))
+      .filter(
+        (value, index, self) =>
+          self.findIndex((v) => v.value === value.value) === index
+      );
   }, [batches, selectedCategory, batchSearch]);
-
-  const getCurrentPageItems = () => {
-    const start = currentPage * itemsPerPage;
-    const end = start + itemsPerPage;
-    return filteredBatches.slice(start, end);
-  };
 
   const handleSubmitOpname = async (e) => {
     e.preventDefault();
     setError(null);
     setSuccess(null);
     try {
-      if (!selectedBatchId) throw new Error("Pilih batch terlebih dahulu");
+      if (!selectedProduct) throw new Error("Pilih produk terlebih dahulu");
       if (!physicalStock) throw new Error("Masukkan jumlah stok fisik");
-      await api.post("/opname/create", {
-        batch_ids: [selectedBatchId],
+
+      await api.post("/opnames/direct-opname", {
+        code_product: selectedProduct,
         physical_stock: parseInt(physicalStock),
-        expired_quantity: parseInt(expiredQuantity) || 0,
-        damaged_quantity: parseInt(damagedQuantity) || 0,
+        expired_stock: parseInt(expiredQuantity) || 0,
+        damaged_stock: parseInt(damagedQuantity) || 0,
         notes,
-        status: "completed",
       });
+
       setSuccess("Data opname berhasil disimpan!");
       setShowBatchModal(false);
-      setSelectedBatchId(null);
+      setSelectedProduct(null);
       setPhysicalStock("");
       setExpiredQuantity("");
       setDamagedQuantity("");
@@ -1147,14 +1106,6 @@ const DirectOpname = ({
       setError(err.response?.data?.error || "Gagal menyimpan data opname");
     }
   };
-
-  const selectedBatch = batches.find(
-    (batch) => batch.batch_id === selectedBatchId
-  );
-
-  useEffect(() => {
-    setCurrentPage(0);
-  }, [selectedCategory, batchSearch, itemsPerPage]);
 
   return (
     <div className="bg-white rounded-none shadow-md p-6 border border-gray-100">
@@ -1167,7 +1118,7 @@ const DirectOpname = ({
           <p className="text-sm text-gray-500">Input opname data directly</p>
         </div>
       </div>
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">
             Product Category
@@ -1176,7 +1127,11 @@ const DirectOpname = ({
             value={categoryOptions.find(
               (option) => option.value === selectedCategory
             )}
-            onChange={(option) => setSelectedCategory(option?.value || "")}
+            onChange={(option) => {
+              setSelectedCategory(option?.value || "");
+              setSelectedProduct(null);
+              setBatchSearch("");
+            }}
             options={categoryOptions}
             placeholder="Select Category..."
             className="text-sm"
@@ -1195,37 +1150,65 @@ const DirectOpname = ({
             }}
           />
         </div>
-        <div>
+
+        <div className="relative">
           <label className="block text-sm font-medium text-gray-700 mb-1">
-            Search Batch
+            Search Products
           </label>
           <div className="relative">
-            <Search
-              className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-500"
-              size={16}
-            />
             <input
               type="text"
-              placeholder="Search product or batch..."
               value={batchSearch}
               onChange={(e) => setBatchSearch(e.target.value)}
+              placeholder="Search by name or code..."
               className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm"
             />
+            <Search
+              className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400"
+              size={16}
+            />
           </div>
+          {batchSearch && (
+            <div className="absolute z-10 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-60 overflow-auto">
+              {productOptions.length > 0 ? (
+                productOptions.map((product) => (
+                  <button
+                    key={product.value}
+                    onClick={() => {
+                      setSelectedProduct(product.value);
+                      setBatchSearch("");
+                    }}
+                    className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center justify-between"
+                  >
+                    <span>{product.label}</span>
+                    <span className="text-xs text-gray-500">
+                      {product.value}
+                    </span>
+                  </button>
+                ))
+              ) : (
+                <div className="px-4 py-2 text-sm text-gray-500">
+                  No products found
+                </div>
+              )}
+            </div>
+          )}
         </div>
+
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">
-            Items per page
+            Selected Product
           </label>
           <Select
-            value={itemsPerPageOptions.find(
-              (option) => option.value === itemsPerPage
+            value={productOptions.find(
+              (option) => option.value === selectedProduct
             )}
-            onChange={(option) => {
-              setItemsPerPage(option?.value || 10);
-            }}
-            options={itemsPerPageOptions}
+            onChange={(option) => setSelectedProduct(option?.value || null)}
+            options={productOptions}
+            placeholder="Select Product..."
             className="text-sm"
+            isClearable
+            isDisabled={batchSearch !== ""}
             styles={{
               control: (base) => ({
                 ...base,
@@ -1241,111 +1224,90 @@ const DirectOpname = ({
           />
         </div>
       </div>
-      <div className="bg-white border border-gray-200 rounded-lg shadow-sm overflow-hidden">
-        {filteredBatches.length === 0 ? (
-          <div className="text-center py-8 bg-gray-50 rounded-lg">
-            <p className="text-gray-500">No batches available</p>
-          </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-100">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th
-                    scope="col"
-                    className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase"
-                  >
-                    Product
-                  </th>
-                  <th
-                    scope="col"
-                    className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase"
-                  >
-                    Category
-                  </th>
-                  <th
-                    scope="col"
-                    className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase"
-                  >
-                    Batch
-                  </th>
-                  <th
-                    scope="col"
-                    className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase"
-                  >
-                    System Stock
-                  </th>
-                  <th
-                    scope="col"
-                    className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase"
-                  >
-                    Action
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100">
-                {getCurrentPageItems().map((batch) => (
-                  <tr
-                    key={batch.batch_id}
-                    className={`hover:bg-gray-50 ${
-                      selectedBatchId === batch.batch_id ? "bg-indigo-50" : ""
-                    }`}
-                  >
-                    <td className="px-4 py-3 text-sm text-gray-600">
-                      {batch.product.name_product}
-                    </td>
-                    <td className="px-4 py-3 text-sm text-gray-600">
-                      {categories.find(
-                        (cat) =>
-                          cat.code_categories === batch.product.code_categories
-                      )?.name_categories || "Uncategorized"}
-                    </td>
-                    <td className="px-4 py-3 text-sm text-gray-600">
-                      {batch.batch_code}
-                    </td>
-                    <td className="px-4 py-3 text-sm text-gray-600">
-                      {batch.stock_quantity}
-                    </td>
-                    <td className="px-4 py-3 text-sm text-right">
-                      <button
-                        onClick={() => {
-                          setSelectedBatchId(batch.batch_id);
-                          setPhysicalStock("");
-                          setExpiredQuantity("");
-                          setDamagedQuantity("");
-                          setNotes("");
-                          setShowBatchModal(true);
-                        }}
-                        className="text-xs bg-indigo-50 text-indigo-600 px-2 py-1 rounded hover:bg-indigo-100"
-                      >
-                        <ClipboardEdit size={12} className="inline mr-1" />
-                        Input Opname
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
 
-      <div className="mt-6">
-        <Pagination
-          currentPage={currentPage}
-          totalPages={Math.ceil(filteredBatches.length / itemsPerPage)}
-          onPageChange={setCurrentPage}
-          itemsPerPage={itemsPerPage}
-          totalItems={filteredBatches.length}
-        />
-      </div>
+      {selectedProduct && (
+        <div className="mt-4 border rounded-lg overflow-hidden">
+          <div className="bg-white px-4 py-3 border-b">
+            <h3 className="font-medium text-gray-800">Product Details</h3>
+          </div>
+          <div className="divide-y">
+            {batches
+              .filter((batch) => batch.product.code_product === selectedProduct)
+              .map((batch) => (
+                <div key={batch.batch_id} className="bg-white p-4">
+                  <div className="flex justify-between items-start">
+                    <div className="space-y-1">
+                      <p className="text-sm font-medium">
+                        Batch: {batch.batch_code}
+                      </p>
+                      <div className="flex space-x-3">
+                        <BatchStatus
+                          stockQuantity={batch.stock_quantity}
+                          expDate={batch.expired_date}
+                          batchId={batch.batch_id}
+                        />
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => handleUpdateExpDate(batch)}
+                      className="text-xs bg-blue-50 text-blue-600 px-2 py-1 rounded hover:bg-blue-100"
+                    >
+                      Update Exp. Date
+                    </button>
+                  </div>
+                </div>
+              ))}
+          </div>
+          <div className="bg-indigo-50 p-4">
+            <div className="grid grid-cols-2 gap-4 text-sm">
+              <div>
+                <span className="text-indigo-600 font-medium">
+                  Total Batches:
+                </span>
+                <span className="ml-2 text-indigo-900">
+                  {
+                    batches.filter(
+                      (b) => b.product.code_product === selectedProduct
+                    ).length
+                  }
+                </span>
+              </div>
+              <div>
+                <span className="text-indigo-600 font-medium">
+                  Total Stock:
+                </span>
+                <span className="ml-2 text-indigo-900">
+                  {batches
+                    .filter((b) => b.product.code_product === selectedProduct)
+                    .reduce((sum, b) => sum + b.stock_quantity, 0)}
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
-      {showBatchModal && selectedBatch && (
+      <button
+        onClick={() => {
+          if (selectedProduct) setShowBatchModal(true);
+          else setError("Pilih produk terlebih dahulu");
+        }}
+        className="mt-4 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 font-medium text-sm"
+      >
+        Input Opname
+      </button>
+
+      {showBatchModal && selectedProduct && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-xl max-w-lg w-full">
             <div className="flex items-center justify-between p-6 border-b border-gray-200">
               <h3 className="text-lg font-semibold text-gray-900">
-                Input Opname: {selectedBatch.product?.name_product}
+                Input Opname:{" "}
+                {
+                  batches.find(
+                    (b) => b.product.code_product === selectedProduct
+                  )?.product.name_product
+                }
               </h3>
               <button
                 onClick={() => setShowBatchModal(false)}
@@ -1354,66 +1316,118 @@ const DirectOpname = ({
                 <X size={20} />
               </button>
             </div>
-            <form onSubmit={handleSubmitOpname} className="p-6 space-y-4">
-              <div className="bg-indigo-50 p-3 rounded-lg border border-indigo-100">
-                <h5 className="text-sm font-medium text-indigo-900 mb-2 flex items-center gap-1">
-                  <Package className="text-indigo-500" size={16} />
-                  Batch Information
-                </h5>
-                <p className="text-sm text-indigo-800">
-                  Batch: {selectedBatch.batch_code}
-                </p>
-                <p className="text-sm text-indigo-800">
-                  System Stock: {selectedBatch.stock_quantity}
-                </p>
+            <form onSubmit={handleSubmitOpname} className="p-6">
+              <div className="mb-6 bg-indigo-50 rounded-lg p-4">
+                <h4 className="font-medium text-indigo-900 mb-3">
+                  Current Stock Information
+                </h4>
+                <div className="space-y-3">
+                  {batches
+                    .filter(
+                      (batch) => batch.product.code_product === selectedProduct
+                    )
+                    .map((batch) => (
+                      <div
+                        key={batch.batch_id}
+                        className="bg-white rounded-lg p-3 shadow-sm"
+                      >
+                        <div className="flex justify-between items-start">
+                          <div>
+                            <p className="text-sm font-medium">
+                              Batch {batch.batch_code}
+                            </p>
+                            <div className="mt-1">
+                              <BatchStatus
+                                stockQuantity={batch.stock_quantity}
+                                expDate={batch.expired_date}
+                                batchId={batch.batch_id}
+                              />
+                            </div>
+                          </div>
+                          <div className="text-right text-sm">
+                            <p className="text-gray-500">System Stock</p>
+                            <p className="font-medium">
+                              {batch.stock_quantity} units
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  <div className="bg-indigo-100 rounded-lg p-3 mt-2">
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm font-medium text-indigo-900">
+                        Total System Stock:
+                      </span>
+                      <span className="text-sm font-bold text-indigo-900">
+                        {batches
+                          .filter(
+                            (b) => b.product.code_product === selectedProduct
+                          )
+                          .reduce((sum, b) => sum + b.stock_quantity, 0)}{" "}
+                        units
+                      </span>
+                    </div>
+                  </div>
+                </div>
               </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Physical Stock
-                </label>
-                <input
-                  type="number"
-                  value={physicalStock}
-                  onChange={(e) => setPhysicalStock(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm"
-                  required
-                />
+
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Physical Stock Count*
+                  </label>
+                  <input
+                    type="number"
+                    value={physicalStock}
+                    onChange={(e) => setPhysicalStock(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm"
+                    required
+                    min="0"
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Expired Stock
+                    </label>
+                    <input
+                      type="number"
+                      value={expiredQuantity}
+                      onChange={(e) => setExpiredQuantity(e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm"
+                      min="0"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Damaged Stock
+                    </label>
+                    <input
+                      type="number"
+                      value={damagedQuantity}
+                      onChange={(e) => setDamagedQuantity(e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm"
+                      min="0"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Notes
+                  </label>
+                  <textarea
+                    value={notes}
+                    onChange={(e) => setNotes(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm"
+                    rows="3"
+                    placeholder="Add any additional notes about the stock count..."
+                  />
+                </div>
               </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Expired Quantity
-                </label>
-                <input
-                  type="number"
-                  value={expiredQuantity}
-                  onChange={(e) => setExpiredQuantity(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Damaged Quantity
-                </label>
-                <input
-                  type="number"
-                  value={damagedQuantity}
-                  onChange={(e) => setDamagedQuantity(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Notes (Optional)
-                </label>
-                <textarea
-                  value={notes}
-                  onChange={(e) => setNotes(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm"
-                  rows="3"
-                  placeholder="Enter notes if needed..."
-                />
-              </div>
-              <div className="flex justify-end space-x-3">
+
+              <div className="flex justify-end space-x-3 mt-6">
                 <button
                   type="button"
                   onClick={() => setShowBatchModal(false)}
@@ -1432,10 +1446,49 @@ const DirectOpname = ({
           </div>
         </div>
       )}
+
+      {/* Update Expiration Date Modal */}
+      {showUpdateExpModal && selectedBatch && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-xl max-w-md w-full p-6">
+            <h3 className="text-lg font-semibold mb-4">
+              Update Expiration Date
+            </h3>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Batch {selectedBatch.batch_code}
+                </label>
+                <input
+                  type="date"
+                  value={newExpDate}
+                  onChange={(e) => setNewExpDate(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                />
+              </div>
+              <div className="flex justify-end space-x-3">
+                <button
+                  type="button"
+                  onClick={() => setShowUpdateExpModal(false)}
+                  className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={saveExpDate}
+                  className="px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700"
+                >
+                  Save Changes
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
-
 DirectOpname.propTypes = {
   batches: PropTypes.arrayOf(
     PropTypes.shape({

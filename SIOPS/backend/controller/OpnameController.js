@@ -12,13 +12,13 @@ Opname.belongsTo(User, { foreignKey: 'user_id' });
 User.hasMany(Opname, { foreignKey: 'user_id' });
 
 export const createOpnameTasks = async (req, res) => {
-  const { batch_ids, scheduled_date, assigned_user_id, category } = req.body;
+  const { code_product, scheduled_date, assigned_user_id } = req.body;
   const transaction = await db.transaction();
 
   try {
-    if (!batch_ids && !category) {
+    if (!code_product) {
       await transaction.rollback();
-      return res.status(400).json({ error: 'batch_ids or category is required' });
+      return res.status(400).json({ error: 'code_product is required' });
     }
     if (!scheduled_date) {
       await transaction.rollback();
@@ -29,16 +29,14 @@ export const createOpnameTasks = async (req, res) => {
       return res.status(400).json({ error: 'assigned_user_id is required' });
     }
 
-    const where = batch_ids ? { batch_id: { [Op.in]: batch_ids } } : { '$product.category$': category };
     const batchStocks = await BatchStock.findAll({
-      where,
-      include: [{ model: Product }],
+      where: { code_product },
       transaction,
     });
 
     if (!batchStocks.length) {
       await transaction.rollback();
-      return res.status(404).json({ error: 'No batches found' });
+      return res.status(404).json({ error: 'No batches found for this product' });
     }
 
     const opnames = batchStocks.map(batch => ({
@@ -94,7 +92,7 @@ export const getTasksForUser = async (req, res) => {
 };
 
 export const submitOpnameResult = async (req, res) => {
-  const { physical_stock, expired_stock, damaged_stock, notes } = req.body;
+  const { code_product, physical_stock, expired_stock, damaged_stock, notes } = req.body;
   const transaction = await db.transaction();
 
   try {
@@ -103,19 +101,57 @@ export const submitOpnameResult = async (req, res) => {
       return res.status(400).json({ error: 'physical_stock is required and must be non-negative' });
     }
 
-    const opname = await Opname.findByPk(req.params.id, { transaction });
-    if (!opname || opname.status !== 'scheduled' || opname.user_id !== req.user.id) {
+    const batches = await BatchStock.findAll({
+      where: { code_product },
+      order: [['createdAt', 'ASC']], // FIFO
+      transaction,
+    });
+
+    const opnames = await Opname.findAll({
+      where: { batch_id: { [Op.in]: batches.map(b => b.batch_id) }, user_id: req.user.id, status: 'scheduled' },
+      transaction,
+    });
+
+    if (!opnames.length) {
       await transaction.rollback();
-      return res.status(403).json({ error: 'Opname not found, not scheduled, or not assigned to you' });
+      return res.status(403).json({ error: 'No opname found or not assigned to you' });
     }
 
-    await opname.update({
-      physical_stock,
-      expired_stock: expired_stock || 0,
-      damaged_stock: damaged_stock || 0,
-      notes,
-      status: 'submitted',
-    }, { transaction });
+    let remainingStock = physical_stock;
+    let remainingExpired = expired_stock || 0;
+    let remainingDamaged = damaged_stock || 0;
+    let totalSystemStock = batches.reduce((sum, b) => sum + b.stock_quantity, 0);
+
+    for (const batch of batches) {
+      const opname = opnames.find(o => o.batch_id === batch.batch_id);
+      if (opname) {
+        const batchPhysicalStock = Math.min(batch.stock_quantity, remainingStock);
+        const ratio = batchPhysicalStock / physical_stock;
+        await opname.update({
+          physical_stock: batchPhysicalStock,
+          expired_stock: Math.round(remainingExpired * ratio) || 0,
+          damaged_stock: Math.round(remainingDamaged * ratio) || 0,
+          notes,
+          status: 'submitted',
+        }, { transaction });
+        remainingStock -= batchPhysicalStock;
+        remainingExpired -= Math.round(remainingExpired * ratio);
+        remainingDamaged -= Math.round(remainingDamaged * ratio);
+        if (remainingStock <= 0) break;
+      }
+    }
+
+    if (remainingStock > 0 || remainingStock < 0) {
+      await Opname.create({
+        user_id: req.user.id,
+        system_stock: 0,
+        physical_stock: 0,
+        expired_stock: 0,
+        damaged_stock: 0,
+        notes: `Selisih stok: ${remainingStock > 0 ? `+${remainingStock}` : remainingStock} (Sistem: ${totalSystemStock})`,
+        status: 'pending',
+      }, { transaction });
+    }
 
     await transaction.commit();
     res.json({ message: 'Opname submitted' });
@@ -137,12 +173,9 @@ export const reviewAndAdjustOpname = async (req, res) => {
       return res.status(403).json({ error: 'Opname not found or not submitted' });
     }
 
-    // Logika penyesuaian stok (misalnya, update BatchStock)
-    const batchStock = await BatchStock.findByPk(opname.batch_id, { transaction });
-    if (batchStock) {
-      await batchStock.update({
-        stock_quantity: opname.physical_stock, // Atau logika penyesuaian lain
-      }, { transaction });
+    const batch = await BatchStock.findByPk(opname.batch_id, { transaction });
+    if (batch) {
+      await batch.update({ stock_quantity: opname.physical_stock }, { transaction });
     }
 
     await opname.update({
@@ -156,6 +189,67 @@ export const reviewAndAdjustOpname = async (req, res) => {
     await transaction.rollback();
     console.error(err);
     res.status(500).json({ error: 'Failed to review and adjust opname' });
+  }
+};
+
+export const directOpnameByAdmin = async (req, res) => {
+  const { code_product, physical_stock, expired_stock, damaged_stock, notes } = req.body;
+  const transaction = await db.transaction();
+
+  try {
+    const batches = await BatchStock.findAll({
+      where: { code_product },
+      order: [['createdAt', 'ASC']], // FIFO
+      transaction,
+    });
+
+    if (!batches.length) {
+      await transaction.rollback();
+      return res.status(404).json({ error: 'No batches found for this product' });
+    }
+
+    let remainingStock = physical_stock;
+    let remainingExpired = expired_stock || 0;
+    let remainingDamaged = damaged_stock || 0;
+
+    for (const batch of batches) {
+      const batchPhysicalStock = Math.min(batch.stock_quantity, remainingStock);
+      const ratio = batchPhysicalStock / physical_stock;
+      await batch.update({ stock_quantity: batchPhysicalStock }, { transaction });
+      await Opname.create({
+        batch_id: batch.batch_id,
+        user_id: req.user.id,
+        system_stock: batch.stock_quantity, // Stok sebelum perubahan
+        physical_stock: batchPhysicalStock,
+        expired_stock: Math.round(remainingExpired * ratio),
+        damaged_stock: Math.round(remainingDamaged * ratio),
+        notes: notes || 'Direct opname by admin',
+        status: 'adjusted',
+      }, { transaction });
+      remainingStock -= batchPhysicalStock;
+      remainingExpired -= Math.round(remainingExpired * ratio);
+      remainingDamaged -= Math.round(remainingDamaged * ratio);
+      if (remainingStock <= 0) break;
+    }
+
+    if (remainingStock > 0 || remainingStock < 0) {
+      await Opname.create({
+        user_id: req.user.id,
+        system_stock: 0,
+        physical_stock: 0,
+        expired_stock: 0,
+        damaged_stock: 0,
+        notes: `Selisih stok: ${remainingStock > 0 ? `+${remainingStock}` : remainingStock}`,
+        status: 'pending',
+      }, { transaction });
+    }
+
+    await transaction.commit();
+    res.json({ message: 'Direct opname completed' });
+  } catch (err) {
+    await transaction.rollback();
+    console.error(err);
+    res.status(500).json({ error: 'Failed to perform direct opname' });
   }
 };
 
