@@ -27,7 +27,12 @@ const Opname = db.define('opnames', {
             key: 'batch_id'
         }
     },
-  scheduled_date: DataTypes.DATEONLY,
+  scheduled_date: {type: DataTypes.DATEONLY,
+    allowNull: true,
+  },
+  opname_date: {type: DataTypes.DATEONLY,
+    allowNull: true,
+  },  
   system_stock: {
     type: DataTypes.INTEGER,
     allowNull: false
@@ -45,7 +50,7 @@ const Opname = db.define('opnames', {
     },
   },
   status: {
-    type: DataTypes.ENUM('scheduled', 'submitted', 'reviewed', 'adjusted'),
+    type: DataTypes.ENUM('scheduled', 'in_progress', 'submitted', 'reviewed', 'adjusted'),
     defaultValue: 'scheduled'
   },
   notes: DataTypes.TEXT

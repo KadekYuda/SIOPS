@@ -42,8 +42,6 @@ const UserAvatarWithStatus = ({ name = "User", status = "online" }) => {
 };
 
 const Headers = ({
-  darkMode,
-  toggleDarkMode,
   toggleSidebar,
   toggleDesktopSidebar,
 }) => {
@@ -188,14 +186,7 @@ const [menuActive, setMenuActive] = useState(false);
 
           {/* Right Section */}
           <div className="flex items-center space-x-2">
-            {/* Language Selector */}
-            <div className="relative hidden sm:block">
-              <button className="flex items-center space-x-1 px-3 py-2 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-xl transition-all duration-200">
-                <Globe className="w-4 h-4" />
-                <span className="text-sm font-medium">EN</span>
-                <ChevronDown className="w-3 h-3" />
-              </button>
-            </div>
+           
 
             {/* Notifications */}
             <div className="relative" ref={notificationRef}>
@@ -260,24 +251,7 @@ const [menuActive, setMenuActive] = useState(false);
               )}
             </div>
 
-            {/* Theme Toggle */}
-            <button
-              onClick={toggleDarkMode}
-              className="p-2 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-xl transition-all duration-300"
-            >
-              <div className="relative w-5 h-5">
-                <Sun
-                  className={`absolute inset-0 w-5 h-5 transition-all duration-300 ${
-                    darkMode ? "opacity-0 rotate-90" : "opacity-100 rotate-0"
-                  }`}
-                />
-                <Moon
-                  className={`absolute inset-0 w-5 h-5 transition-all duration-300 ${
-                    darkMode ? "opacity-100 rotate-0" : "opacity-0 -rotate-90"
-                  }`}
-                />
-              </div>
-            </button>
+          
 
             {/* User Profile */}
             <div className="relative" ref={dropdownRef}>
@@ -359,18 +333,7 @@ const [menuActive, setMenuActive] = useState(false);
                       </div>
                       <span>View Profile</span>
                     </button>
-                    <button
-                      onClick={() => {
-                        navigate("/settings");
-                        setUserDropdown(false);
-                      }}
-                      className="w-full text-left px-4 py-3 text-sm hover:bg-gray-100/80 dark:hover:bg-gray-800/80 rounded-xl flex items-center text-gray-700 dark:text-gray-300 transition-all duration-200 group"
-                    >
-                      <div className="w-8 h-8 bg-purple-100 dark:bg-purple-900/30 rounded-lg flex items-center justify-center mr-3 group-hover:bg-purple-200 dark:group-hover:bg-purple-900/50 transition-colors duration-200">
-                        <Settings className="w-4 h-4 text-purple-600 dark:text-purple-400" />
-                      </div>
-                      <span>Account Settings</span>
-                    </button>
+                    
                     <hr className="my-3 border-gray-200/50 dark:border-gray-700/50" />
                     <button
                       onClick={() => {

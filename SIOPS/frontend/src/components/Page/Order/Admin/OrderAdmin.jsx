@@ -727,6 +727,7 @@ const OrderAdmin = () => {
             stock_quantity: "",
             ordered_price: product.sell_price,
             subtotal: "",
+            available_batches: product.available_batches || [],
           },
         ],
       }));

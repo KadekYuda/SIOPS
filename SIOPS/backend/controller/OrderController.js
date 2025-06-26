@@ -4,6 +4,7 @@ import OrderDetail from "../models/OrderDetailsModel.js";
 import BatchStock from "../models/BatchstockModel.js";
 import Product from "../models/ProductModel.js";
 import db from "../config/Database.js";
+// import {Order, User, OrderDetail, BatchStock, Product} from '../models/index.js';
 
 // Create a new order with order details
 export const createOrder = async (req, res) => {

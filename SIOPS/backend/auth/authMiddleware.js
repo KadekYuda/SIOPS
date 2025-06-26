@@ -58,20 +58,29 @@ export const invalidateToken = (token) => {
   }
 };
 
-export const authorizeRole = (...roles) => {
-  return (req, res, next) => {
-    if (!req.user) {
-      return res.status(401).json({ msg: "Authentication required" });
-    }
+export const authorizeRole = (allowedRoles) => {
+    return async (req, res, next) => {
+        try {
+            
+            if (!req.user) {
+                return res.status(401).json({ msg: "Authentication required" });
+            }
 
-    if (!roles.includes(req.user.role)) {
-      return res.status(403).json({ msg: "Access denied" });
-    }
+            if (!allowedRoles.includes(req.user.role)) {
+                return res.status(403).json({ 
+                    msg: "Access forbidden - insufficient role privileges",
+                    required: allowedRoles,
+                    current: req.user.role
+                });
+            }
 
-    next();
-  };
+            next();
+        } catch (error) {
+            console.error('Role authorization error:', error);
+            res.status(500).json({ msg: "Role authorization error" });
+        }
+    };
 };
-
 export const logout = async (req, res) => {
   try {
     const token = req.token;

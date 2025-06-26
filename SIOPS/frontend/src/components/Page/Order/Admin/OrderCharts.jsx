@@ -25,6 +25,8 @@ import {
   Tooltip,
   Legend,
   Filler,
+  BarElement,
+  BarController,
 } from "chart.js";
 
 // Register ChartJS components
@@ -34,6 +36,8 @@ ChartJS.register(
   PointElement,
   LineElement,
   ArcElement,
+  BarElement,
+  BarController,
   Title,
   Tooltip,
   Legend,
@@ -46,6 +50,24 @@ const OrderCharts = ({ orderStats }) => {
   const [activeStatus, setActiveStatus] = useState(null);
   const [animate, setAnimate] = useState(false);
   const [activeTab, setActiveTab] = useState("count"); // "count" or "value"
+  const chartRef = React.useRef(null);
+
+  // Cleanup chart on unmount
+  useEffect(() => {
+    return () => {
+      const chart = chartRef.current?.chartInstance;
+      if (chart) {
+        chart.destroy();
+      }
+    };
+  }, []);
+
+  // Function to update chart ref
+  const updateChartRef = (ref) => {
+    if (ref) {
+      chartRef.current = ref;
+    }
+  };
 
   // Trigger animation on mount
   useEffect(() => {
@@ -750,11 +772,13 @@ const OrderCharts = ({ orderStats }) => {
               <Line
                 data={timeSeriesData[activeTab]}
                 options={timeSeriesOptions}
+                ref={updateChartRef}
               />
             ) : (
               <Bar
                 data={timeSeriesData[activeTab]}
                 options={timeSeriesOptions}
+                ref={updateChartRef}
               />
             )}
           </div>

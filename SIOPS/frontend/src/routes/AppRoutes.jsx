@@ -9,7 +9,6 @@ import UserProfile from "../components/Page/Profile/UserProfile";
 import Product from "../components/Page/Product/Product";
 import BatchStok from "../components/Page/Product/BatchStok";
 import Sales from "../components/Page/Sales/Sales";
-import CSVImportTool from "../components/Page/ImportCsv";
 import Order from "../components/Page/Order/Staff/Order";
 import OrderAdmin from "../components/Page/Order/Admin/OrderAdmin";
 import OpnameAdmin from "../components/Page/Opname/Admin/OpnameAdmin";
@@ -164,15 +163,6 @@ function AppRoutes() {
           element={
             <ProtectedRoute allowedRoles={["staff", "admin"]}>
               <BatchStok />
-            </ProtectedRoute>
-          }
-        />
-
-        <Route
-          path="/import"
-          element={
-            <ProtectedRoute allowedRoles={["staff", "admin"]}>
-              <CSVImportTool />
             </ProtectedRoute>
           }
         />

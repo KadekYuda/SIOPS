@@ -9,7 +9,7 @@ import MinStockAlert from "../../modal/MinStockAlert";
 import LoadingComponent from "../../LoadingComponent";
 
 const DashboardLayout = () => {
-  const [darkMode, setDarkMode] = useState(false);
+ 
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isDesktopSidebarOpen, setIsDesktopSidebarOpen] = useState(true);
   const [role, setRole] = useState("");
@@ -57,10 +57,7 @@ const DashboardLayout = () => {
     setIsDesktopSidebarOpen((prev) => !prev);
   };
 
-  // Toggle Dark Mode
-  const toggleDarkMode = () => {
-    setDarkMode((prev) => !prev);
-  };
+  
 
   useEffect(() => {
     const handleResize = () => {
@@ -81,8 +78,7 @@ const DashboardLayout = () => {
   return (
     <div
       className={clsx(
-        "flex min-h-screen relative ",
-        darkMode ? "dark bg-gray-900" : "bg-gray-100"
+        "flex min-h-screen relative bg-gray-100"
       )}
     >
       {/* Overlay untuk mobile */}
@@ -108,18 +104,14 @@ const DashboardLayout = () => {
         <SidebarComponent
           isSidebarOpen={isSidebarOpen}
           isDesktopSidebarOpen={isDesktopSidebarOpen}
-          darkMode={darkMode}
-          toggleDarkMode={toggleDarkMode}
         />
       </div>
 
       {/* Main Content */}
       <div className="flex-1 flex flex-col min-w-0">
         {/* Header */}
-        <div className={clsx("sticky top-0 z-40", darkMode && "dark")}>
+        <div className="sticky top-0 z-40">
           <Headers
-            toggleDarkMode={toggleDarkMode}
-            darkMode={darkMode}
             toggleSidebar={toggleSidebar}
             toggleDesktopSidebar={toggleDesktopSidebar}
           />

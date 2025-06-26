@@ -32,6 +32,16 @@ const MinStockAlert = () => {
     }
   }, []);
 
+  const fetchAvailableBatches = useCallback(async (code_product) => {
+  try {
+    const response = await api.get(`/orders/${code_product}/batches`);
+    return response.data || [];
+  } catch (error) {
+    console.error("Error fetching available batches:", error);
+    return [];
+  }
+}, []);
+
   // Fetch minimum stock alerts with category information
   const fetchMinimumStockAlerts = useCallback(async () => {
     try {
@@ -111,19 +121,24 @@ const MinStockAlert = () => {
   }, [fetchMinimumStockAlerts]);
 
   // Handle restock button click
-  const handleRestock = useCallback((product) => {
+ const handleRestock = useCallback(async (product) => {
+  try {
+    const batches = await fetchAvailableBatches(product.code_product);
     const orderData = {
       code_product: product.code_product,
       name_product: product.name_product,
       category_name: product.category_name,
       sell_price: product.sell_price,
-      code_categories: product.code_categories,
+      available_batches: batches, // Tambahkan batch di sini
     };
     sessionStorage.setItem("restockProduct", JSON.stringify(orderData));
     setIsOpen(false);
     sessionStorage.setItem("openCreateOrder", "true");
     window.location.href = isAdmin ? "/orderAdmin" : "/order";
-  }, [isAdmin]);
+  } catch (error) {
+    console.error("Error preparing restock data:", error);
+  }
+}, [isAdmin, fetchAvailableBatches]);
 
   // Handle navigation to products
   const handleProducts = useCallback(() => {

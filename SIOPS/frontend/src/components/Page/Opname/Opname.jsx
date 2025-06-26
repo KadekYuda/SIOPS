@@ -20,25 +20,35 @@ import {
   Archive,
   Settings,
   ChevronDown,
-  ChevronRight
+  ChevronRight,
 } from "lucide-react";
 
 // Mock API service
 const api = {
   get: async (url) => {
     // Mock data for demonstration
-    await new Promise(resolve => setTimeout(resolve, 500));
-    
+    await new Promise((resolve) => setTimeout(resolve, 500));
+
     if (url === "/users") {
       return {
         data: [
           { user_id: 1, username: "john_doe", name: "John Doe", role: "staff" },
-          { user_id: 2, username: "jane_smith", name: "Jane Smith", role: "staff" },
-          { user_id: 3, username: "mike_wilson", name: "Mike Wilson", role: "staff" }
-        ]
+          {
+            user_id: 2,
+            username: "jane_smith",
+            name: "Jane Smith",
+            role: "staff",
+          },
+          {
+            user_id: 3,
+            username: "mike_wilson",
+            name: "Mike Wilson",
+            role: "staff",
+          },
+        ],
       };
     }
-    
+
     if (url === "/batch/stock") {
       return {
         data: {
@@ -50,8 +60,8 @@ const api = {
               product: {
                 code_product: "P001",
                 name_product: "Paracetamol 500mg",
-                code_categories: "cat1"
-              }
+                code_categories: "cat1",
+              },
             },
             {
               batch_id: 2,
@@ -60,8 +70,8 @@ const api = {
               product: {
                 code_product: "P002",
                 name_product: "Vitamin C 1000mg",
-                code_categories: "cat2"
-              }
+                code_categories: "cat2",
+              },
             },
             {
               batch_id: 3,
@@ -70,24 +80,24 @@ const api = {
               product: {
                 code_product: "P003",
                 name_product: "Fish Oil Supplement",
-                code_categories: "cat3"
-              }
-            }
-          ]
-        }
+                code_categories: "cat3",
+              },
+            },
+          ],
+        },
       };
     }
-    
+
     if (url === "/categories") {
       return {
         data: [
           { code_categories: "cat1", name_categories: "Obat" },
           { code_categories: "cat2", name_categories: "Vitamin" },
-          { code_categories: "cat3", name_categories: "Suplemen" }
-        ]
+          { code_categories: "cat3", name_categories: "Suplemen" },
+        ],
       };
     }
-    
+
     if (url === "/opname") {
       return {
         data: [
@@ -101,8 +111,8 @@ const api = {
             difference: -2,
             User: { username: "john_doe" },
             batchStock: {
-              product: { name_product: "Paracetamol 500mg" }
-            }
+              product: { name_product: "Paracetamol 500mg" },
+            },
           },
           {
             opname_id: 2,
@@ -114,27 +124,33 @@ const api = {
             difference: 0,
             User: { username: "jane_smith" },
             batchStock: {
-              product: { name_product: "Vitamin C 1000mg" }
-            }
-          }
-        ]
+              product: { name_product: "Vitamin C 1000mg" },
+            },
+          },
+        ],
       };
     }
-    
+
     return { data: [] };
   },
-  
+
   post: async (url, data) => {
-    await new Promise(resolve => setTimeout(resolve, 500));
+    await new Promise((resolve) => setTimeout(resolve, 500));
     return { data: { success: true } };
-  }
+  },
 };
 
 // Mock Pagination Component
-const Pagination = ({ currentPage, totalPages, onPageChange, itemsPerPage, totalItems }) => {
+const Pagination = ({
+  currentPage,
+  totalPages,
+  onPageChange,
+  itemsPerPage,
+  totalItems,
+}) => {
   const startItem = currentPage * itemsPerPage + 1;
   const endItem = Math.min((currentPage + 1) * itemsPerPage, totalItems);
-  
+
   return (
     <div className="flex flex-col sm:flex-row justify-between items-center gap-4 pt-4 border-t border-gray-100">
       <div className="text-sm text-gray-600">
@@ -152,7 +168,9 @@ const Pagination = ({ currentPage, totalPages, onPageChange, itemsPerPage, total
           {currentPage + 1}
         </span>
         <button
-          onClick={() => onPageChange(Math.min(totalPages - 1, currentPage + 1))}
+          onClick={() =>
+            onPageChange(Math.min(totalPages - 1, currentPage + 1))
+          }
           disabled={currentPage >= totalPages - 1}
           className="px-3 py-1 text-sm border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
         >
@@ -166,7 +184,7 @@ const Pagination = ({ currentPage, totalPages, onPageChange, itemsPerPage, total
 // Mock Modal Components
 const AlertModal = ({ isOpen, message, onClose }) => {
   if (!isOpen) return null;
-  
+
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
       <div className="bg-white rounded-xl max-w-md w-full p-6">
@@ -190,7 +208,7 @@ const AlertModal = ({ isOpen, message, onClose }) => {
 
 const SuccessModal = ({ isOpen, message, onClose }) => {
   if (!isOpen) return null;
-  
+
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
       <div className="bg-white rounded-xl max-w-md w-full p-6">
@@ -213,30 +231,30 @@ const SuccessModal = ({ isOpen, message, onClose }) => {
 };
 
 // Mock Select Component
-const Select = ({ 
-  value, 
-  onChange, 
-  options, 
-  placeholder, 
-  isMulti, 
-  isClearable, 
-  isSearchable, 
-  className 
+const Select = ({
+  value,
+  onChange,
+  options,
+  placeholder,
+  isMulti,
+  isClearable,
+  isSearchable,
+  className,
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
-  
-  const filteredOptions = options.filter(option =>
+
+  const filteredOptions = options.filter((option) =>
     option.label.toLowerCase().includes(searchTerm.toLowerCase())
   );
-  
+
   const handleSelect = (option) => {
     if (isMulti) {
       const currentValues = Array.isArray(value) ? value : [];
-      const isSelected = currentValues.some(v => v.value === option.value);
-      
+      const isSelected = currentValues.some((v) => v.value === option.value);
+
       if (isSelected) {
-        onChange(currentValues.filter(v => v.value !== option.value));
+        onChange(currentValues.filter((v) => v.value !== option.value));
       } else {
         onChange([...currentValues, option]);
       }
@@ -245,14 +263,14 @@ const Select = ({
       setIsOpen(false);
     }
   };
-  
+
   const displayValue = () => {
     if (isMulti && Array.isArray(value)) {
       return value.length > 0 ? `${value.length} selected` : placeholder;
     }
     return value ? value.label : placeholder;
   };
-  
+
   return (
     <div className={`relative ${className}`}>
       <button
@@ -263,7 +281,7 @@ const Select = ({
         <span className="truncate">{displayValue()}</span>
         <ChevronDown size={16} className="text-gray-400" />
       </button>
-      
+
       {isOpen && (
         <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-auto">
           {isSearchable && (
@@ -277,7 +295,7 @@ const Select = ({
               />
             </div>
           )}
-          
+
           {filteredOptions.map((option) => (
             <button
               key={option.value}
@@ -285,12 +303,14 @@ const Select = ({
               className="w-full px-3 py-2 text-left hover:bg-gray-50 flex items-center justify-between"
             >
               <span>{option.label}</span>
-              {isMulti && Array.isArray(value) && value.some(v => v.value === option.value) && (
-                <Check size={16} className="text-indigo-600" />
-              )}
+              {isMulti &&
+                Array.isArray(value) &&
+                value.some((v) => v.value === option.value) && (
+                  <Check size={16} className="text-indigo-600" />
+                )}
             </button>
           ))}
-          
+
           {isClearable && value && (
             <button
               onClick={() => onChange(isMulti ? [] : null)}
@@ -305,7 +325,13 @@ const Select = ({
   );
 };
 
-const StatsCard = ({ icon: Icon, title, value, subtitle, color = "indigo" }) => (
+const StatsCard = ({
+  icon: Icon,
+  title,
+  value,
+  subtitle,
+  color = "indigo",
+}) => (
   <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 hover:shadow-md transition-shadow">
     <div className="flex items-center justify-between">
       <div>
@@ -332,9 +358,13 @@ const Tab = ({ label, icon: Icon, isActive, onClick, count }) => (
     {Icon && <Icon size={18} />}
     <span className="truncate">{label}</span>
     {count !== undefined && (
-      <span className={`px-2 py-0.5 text-xs rounded-full ${
-        isActive ? "bg-indigo-100 text-indigo-700" : "bg-indigo-200 text-indigo-700"
-      }`}>
+      <span
+        className={`px-2 py-0.5 text-xs rounded-full ${
+          isActive
+            ? "bg-indigo-100 text-indigo-700"
+            : "bg-indigo-200 text-indigo-700"
+        }`}
+      >
         {count}
       </span>
     )}
@@ -410,9 +440,11 @@ const OpnameAdmin = () => {
   // Calculate stats
   const stats = {
     totalOpnames: opnames.length,
-    scheduledOpnames: opnames.filter(op => op.status === 'scheduled').length,
-    submittedOpnames: opnames.filter(op => op.status === 'submitted').length,
-    completedOpnames: opnames.filter(op => op.status === 'reviewed' || op.status === 'adjusted').length,
+    scheduledOpnames: opnames.filter((op) => op.status === "scheduled").length,
+    submittedOpnames: opnames.filter((op) => op.status === "submitted").length,
+    completedOpnames: opnames.filter(
+      (op) => op.status === "reviewed" || op.status === "adjusted"
+    ).length,
   };
 
   if (loading) {
@@ -420,7 +452,9 @@ const OpnameAdmin = () => {
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-indigo-50 via-white to-cyan-50">
         <div className="text-center">
           <div className="animate-spin rounded-full h-16 w-16 border-4 border-indigo-200 border-t-indigo-600 mx-auto"></div>
-          <p className="mt-4 text-gray-600 font-medium">Loading opname data...</p>
+          <p className="mt-4 text-gray-600 font-medium">
+            Loading opname data...
+          </p>
         </div>
       </div>
     );
@@ -437,7 +471,7 @@ const OpnameAdmin = () => {
               <div className="absolute top-0 right-0 w-40 h-40 bg-white rounded-full transform translate-x-16 -translate-y-16"></div>
               <div className="absolute bottom-0 left-0 w-32 h-32 bg-white rounded-full transform -translate-x-8 translate-y-8"></div>
             </div>
-            
+
             <div className="relative z-10">
               <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6">
                 <div className="flex items-center gap-4">
@@ -445,13 +479,15 @@ const OpnameAdmin = () => {
                     <Package className="text-white" size={32} />
                   </div>
                   <div>
-                    <h1 className="text-3xl font-bold mb-2">Opname Management</h1>
+                    <h1 className="text-3xl font-bold mb-2">
+                      Opname Management
+                    </h1>
                     <p className="text-indigo-100 text-lg">
                       Comprehensive inventory tracking and management system
                     </p>
                   </div>
                 </div>
-                
+
                 <div className="flex flex-wrap gap-3">
                   <Tab
                     label="Schedule Opname"
@@ -475,6 +511,7 @@ const OpnameAdmin = () => {
         {/* Stats Dashboard */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
           <StatsCard
+            key="total-opnames"
             icon={BarChart3}
             title="Total Opnames"
             value={stats.totalOpnames}
@@ -482,6 +519,7 @@ const OpnameAdmin = () => {
             color="indigo"
           />
           <StatsCard
+            key="scheduled-opnames"
             icon={Clock}
             title="Scheduled"
             value={stats.scheduledOpnames}
@@ -489,6 +527,7 @@ const OpnameAdmin = () => {
             color="amber"
           />
           <StatsCard
+            key="submitted-opnames"
             icon={AlertCircle}
             title="Submitted"
             value={stats.submittedOpnames}
@@ -496,6 +535,7 @@ const OpnameAdmin = () => {
             color="orange"
           />
           <StatsCard
+            key="completed-opnames"
             icon={CheckCircle}
             title="Completed"
             value={stats.completedOpnames}
@@ -536,7 +576,9 @@ const OpnameAdmin = () => {
                   <FileText className="text-white" size={24} />
                 </div>
                 <div>
-                  <h2 className="text-2xl font-bold text-white">Opname Records</h2>
+                  <h2 className="text-2xl font-bold text-white">
+                    Opname Records
+                  </h2>
                   <p className="text-indigo-100">
                     Monitor and manage all opname transactions
                   </p>
@@ -544,13 +586,15 @@ const OpnameAdmin = () => {
               </div>
               <div className="hidden lg:flex items-center gap-4 text-white/80">
                 <div className="text-center">
-                  <div className="text-2xl font-bold text-white">{opnames.length}</div>
+                  <div className="text-2xl font-bold text-white">
+                    {opnames.length}
+                  </div>
                   <div className="text-sm">Total Records</div>
                 </div>
               </div>
             </div>
           </div>
-          
+
           <AllOpname
             opnames={opnames}
             users={users}
@@ -660,17 +704,31 @@ const AllOpname = ({ opnames, users, fetchData, setError, setSuccess }) => {
 
   const getStatusBadge = (status) => {
     const statusConfig = {
-      scheduled: { color: "bg-gray-100 text-gray-700 border-gray-200", icon: Clock },
-      submitted: { color: "bg-amber-100 text-amber-700 border-amber-200", icon: AlertCircle },
-      reviewed: { color: "bg-blue-100 text-blue-700 border-blue-200", icon: Eye },
-      adjusted: { color: "bg-green-100 text-green-700 border-green-200", icon: CheckCircle }
+      scheduled: {
+        color: "bg-gray-100 text-gray-700 border-gray-200",
+        icon: Clock,
+      },
+      submitted: {
+        color: "bg-amber-100 text-amber-700 border-amber-200",
+        icon: AlertCircle,
+      },
+      reviewed: {
+        color: "bg-blue-100 text-blue-700 border-blue-200",
+        icon: Eye,
+      },
+      adjusted: {
+        color: "bg-green-100 text-green-700 border-green-200",
+        icon: CheckCircle,
+      },
     };
-    
+
     const config = statusConfig[status] || statusConfig.scheduled;
     const Icon = config.icon;
-    
+
     return (
-      <span className={`inline-flex items-center gap-1 px-3 py-1 text-xs font-medium rounded-full border ${config.color}`}>
+      <span
+        className={`inline-flex items-center gap-1 px-3 py-1 text-xs font-medium rounded-full border ${config.color}`}
+      >
         <Icon size={12} />
         {status.charAt(0).toUpperCase() + status.slice(1)}
       </span>
@@ -683,9 +741,11 @@ const AllOpname = ({ opnames, users, fetchData, setError, setSuccess }) => {
       <div className="bg-gray-50 rounded-xl p-6 mb-6 border border-gray-200">
         <div className="flex items-center gap-2 mb-4">
           <Filter className="text-gray-600" size={20} />
-          <h3 className="text-lg font-semibold text-gray-800">Filter & Search</h3>
+          <h3 className="text-lg font-semibold text-gray-800">
+            Filter & Search
+          </h3>
         </div>
-        
+
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           <div className="relative">
             <Search
@@ -700,7 +760,7 @@ const AllOpname = ({ opnames, users, fetchData, setError, setSuccess }) => {
               className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm bg-white shadow-sm"
             />
           </div>
-          
+
           <div>
             <input
               type="date"
@@ -709,10 +769,12 @@ const AllOpname = ({ opnames, users, fetchData, setError, setSuccess }) => {
               className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm bg-white shadow-sm"
             />
           </div>
-          
+
           <div>
             <Select
-              value={statusOptions.find(option => option.value === filterStatus)}
+              value={statusOptions.find(
+                (option) => option.value === filterStatus
+              )}
               onChange={(option) => setFilterStatus(option?.value || "")}
               options={statusOptions}
               placeholder="Filter Status..."
@@ -720,10 +782,10 @@ const AllOpname = ({ opnames, users, fetchData, setError, setSuccess }) => {
               isClearable
             />
           </div>
-          
+
           <div>
             <Select
-              value={userOptions.find(option => option.value === filterUser)}
+              value={userOptions.find((option) => option.value === filterUser)}
               onChange={(option) => setFilterUser(option?.value || "")}
               options={userOptions}
               placeholder="Filter User..."
@@ -739,8 +801,12 @@ const AllOpname = ({ opnames, users, fetchData, setError, setSuccess }) => {
           <div className="w-24 h-24 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-6">
             <FileText size={32} className="text-gray-400" />
           </div>
-          <h3 className="text-xl font-semibold text-gray-700 mb-2">No opname records found</h3>
-          <p className="text-gray-500">Try adjusting your filters or create a new opname record</p>
+          <h3 className="text-xl font-semibold text-gray-700 mb-2">
+            No opname records found
+          </h3>
+          <p className="text-gray-500">
+            Try adjusting your filters or create a new opname record
+          </p>
         </div>
       ) : (
         <>
@@ -767,7 +833,7 @@ const AllOpname = ({ opnames, users, fetchData, setError, setSuccess }) => {
                   <th className="text-left px-6 py-4 text-xs font-semibold text-gray-600 uppercase tracking-wider">
                     System Stock
                   </th>
-                 <th className="text-left px-6 py-4 text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                  <th className="text-left px-6 py-4 text-xs font-semibold text-gray-600 uppercase tracking-wider">
                     Physical Stock
                   </th>
                   <th className="text-left px-6 py-4 text-xs font-semibold text-gray-600 uppercase tracking-wider">
@@ -780,7 +846,10 @@ const AllOpname = ({ opnames, users, fetchData, setError, setSuccess }) => {
               </thead>
               <tbody className="divide-y divide-gray-200">
                 {getCurrentPageItems().map((opname) => (
-                  <tr key={opname.opname_id} className="hover:bg-gray-50 transition-colors">
+                  <tr
+                    key={`opname-${opname.opname_id}-${opname.scheduled_date}`}
+                    className="hover:bg-gray-50 transition-colors"
+                  >
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
                       {opname.running_number}
                     </td>
@@ -796,7 +865,8 @@ const AllOpname = ({ opnames, users, fetchData, setError, setSuccess }) => {
                     </td>
                     <td className="px-6 py-4">
                       <div className="text-sm font-medium text-gray-900">
-                        {opname.batchStock?.product?.name_product || "Unknown Product"}
+                        {opname.batchStock?.product?.name_product ||
+                          "Unknown Product"}
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
@@ -812,21 +882,26 @@ const AllOpname = ({ opnames, users, fetchData, setError, setSuccess }) => {
                       {opname.physical_stock || 0}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <span className={`text-sm font-semibold ${
-                        (opname.difference || 0) > 0 
-                          ? "text-green-600" 
-                          : (opname.difference || 0) < 0 
-                            ? "text-red-600" 
+                      <span
+                        className={`text-sm font-semibold ${
+                          (opname.difference || 0) > 0
+                            ? "text-green-600"
+                            : (opname.difference || 0) < 0
+                            ? "text-red-600"
                             : "text-gray-600"
-                      }`}>
-                        {opname.difference > 0 ? "+" : ""}{opname.difference || 0}
+                        }`}
+                      >
+                        {opname.difference > 0 ? "+" : ""}
+                        {opname.difference || 0}
                       </span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="flex items-center gap-2">
                         {opname.status === "submitted" && (
                           <button
-                            onClick={() => setReviewModal({ open: true, opname })}
+                            onClick={() =>
+                              setReviewModal({ open: true, opname })
+                            }
                             className="px-3 py-1 bg-indigo-600 text-white text-xs rounded-lg hover:bg-indigo-700 transition-colors flex items-center gap-1"
                           >
                             <Eye size={12} />
@@ -847,22 +922,28 @@ const AllOpname = ({ opnames, users, fetchData, setError, setSuccess }) => {
           {/* Enhanced Mobile Cards */}
           <div className="lg:hidden space-y-4">
             {getCurrentPageItems().map((opname) => (
-              <div key={opname.opname_id} className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm">
-                <div className="flex justify-between items-start mb-3">
+              <div
+                key={`mobile-opname-${opname.opname_id}-${opname.scheduled_date}`}
+                className="bg-white rounded-xl shadow-sm p-4"
+              >
+                <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
-                    <span className="text-sm font-bold text-gray-500">#{opname.running_number}</span>
+                    <span className="text-sm font-bold text-gray-500">
+                      #{opname.running_number}
+                    </span>
                     <span className="text-sm font-medium text-gray-900">
                       {opname.User?.username || "Unknown"}
                     </span>
                   </div>
                   {getStatusBadge(opname.status)}
                 </div>
-                
+
                 <div className="space-y-2 mb-4">
                   <div className="text-sm">
                     <span className="font-medium text-gray-700">Product: </span>
                     <span className="text-gray-900">
-                      {opname.batchStock?.product?.name_product || "Unknown Product"}
+                      {opname.batchStock?.product?.name_product ||
+                        "Unknown Product"}
                     </span>
                   </div>
                   <div className="text-sm">
@@ -872,7 +953,7 @@ const AllOpname = ({ opnames, users, fetchData, setError, setSuccess }) => {
                     </span>
                   </div>
                 </div>
-                
+
                 <div className="grid grid-cols-3 gap-4 mb-4">
                   <div className="text-center p-2 bg-gray-50 rounded-lg">
                     <div className="text-xs text-gray-500 mb-1">System</div>
@@ -888,21 +969,26 @@ const AllOpname = ({ opnames, users, fetchData, setError, setSuccess }) => {
                   </div>
                   <div className="text-center p-2 bg-gray-50 rounded-lg">
                     <div className="text-xs text-gray-500 mb-1">Difference</div>
-                    <div className={`text-sm font-semibold ${
-                      (opname.difference || 0) > 0 
-                        ? "text-green-600" 
-                        : (opname.difference || 0) < 0 
-                          ? "text-red-600" 
+                    <div
+                      className={`text-sm font-semibold ${
+                        (opname.difference || 0) > 0
+                          ? "text-green-600"
+                          : (opname.difference || 0) < 0
+                          ? "text-red-600"
                           : "text-gray-600"
-                    }`}>
-                      {opname.difference > 0 ? "+" : ""}{opname.difference || 0}
+                      }`}
+                    >
+                      {opname.difference > 0 ? "+" : ""}
+                      {opname.difference || 0}
                     </div>
                   </div>
                 </div>
-                
+
                 {opname.status === "submitted" && (
                   <div className="flex justify-between items-center pt-3 border-t border-gray-100">
-                    <span className="text-xs text-gray-500">ID: {opname.opname_id}</span>
+                    <span className="text-xs text-gray-500">
+                      ID: {opname.opname_id}
+                    </span>
                     <button
                       onClick={() => setReviewModal({ open: true, opname })}
                       className="px-3 py-1 bg-indigo-600 text-white text-xs rounded-lg hover:bg-indigo-700 transition-colors flex items-center gap-1"
@@ -943,26 +1029,40 @@ const AllOpname = ({ opnames, users, fetchData, setError, setSuccess }) => {
             {reviewModal.opname && (
               <div className="space-y-6">
                 <div className="bg-gray-50 rounded-xl p-4">
-                  <h4 className="font-semibold text-gray-900 mb-3">Opname Details</h4>
+                  <h4 className="font-semibold text-gray-900 mb-3">
+                    Opname Details
+                  </h4>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
-                      <label className="text-sm font-medium text-gray-700">Staff</label>
-                      <p className="text-gray-900">{reviewModal.opname.User?.username}</p>
+                      <label className="text-sm font-medium text-gray-700">
+                        Staff
+                      </label>
+                      <p className="text-gray-900">
+                        {reviewModal.opname.User?.username}
+                      </p>
                     </div>
                     <div>
-                      <label className="text-sm font-medium text-gray-700">Product</label>
+                      <label className="text-sm font-medium text-gray-700">
+                        Product
+                      </label>
                       <p className="text-gray-900">
                         {reviewModal.opname.batchStock?.product?.name_product}
                       </p>
                     </div>
                     <div>
-                      <label className="text-sm font-medium text-gray-700">Date</label>
+                      <label className="text-sm font-medium text-gray-700">
+                        Date
+                      </label>
                       <p className="text-gray-900">
-                        {new Date(reviewModal.opname.scheduled_date).toLocaleDateString()}
+                        {new Date(
+                          reviewModal.opname.scheduled_date
+                        ).toLocaleDateString()}
                       </p>
                     </div>
                     <div>
-                      <label className="text-sm font-medium text-gray-700">Status</label>
+                      <label className="text-sm font-medium text-gray-700">
+                        Status
+                      </label>
                       <p>{getStatusBadge(reviewModal.opname.status)}</p>
                     </div>
                   </div>
@@ -973,28 +1073,48 @@ const AllOpname = ({ opnames, users, fetchData, setError, setSuccess }) => {
                     <div className="text-blue-600 font-semibold text-lg">
                       {reviewModal.opname.system_stock}
                     </div>
-                    <div className="text-sm text-blue-700 font-medium">System Stock</div>
+                    <div className="text-sm text-blue-700 font-medium">
+                      System Stock
+                    </div>
                   </div>
                   <div className="bg-green-50 rounded-xl p-4 text-center">
                     <div className="text-green-600 font-semibold text-lg">
                       {reviewModal.opname.physical_stock}
                     </div>
-                    <div className="text-sm text-green-700 font-medium">Physical Count</div>
-                  </div>
-                  <div className={`rounded-xl p-4 text-center ${
-                    reviewModal.opname.difference > 0 ? "bg-green-50" :
-                    reviewModal.opname.difference < 0 ? "bg-red-50" : "bg-gray-50"
-                  }`}>
-                    <div className={`font-semibold text-lg ${
-                      reviewModal.opname.difference > 0 ? "text-green-600" :
-                      reviewModal.opname.difference < 0 ? "text-red-600" : "text-gray-600"
-                    }`}>
-                      {reviewModal.opname.difference > 0 ? "+" : ""}{reviewModal.opname.difference}
+                    <div className="text-sm text-green-700 font-medium">
+                      Physical Count
                     </div>
-                    <div className={`text-sm font-medium ${
-                      reviewModal.opname.difference > 0 ? "text-green-700" :
-                      reviewModal.opname.difference < 0 ? "text-red-700" : "text-gray-700"
-                    }`}>
+                  </div>
+                  <div
+                    className={`rounded-xl p-4 text-center ${
+                      reviewModal.opname.difference > 0
+                        ? "bg-green-50"
+                        : reviewModal.opname.difference < 0
+                        ? "bg-red-50"
+                        : "bg-gray-50"
+                    }`}
+                  >
+                    <div
+                      className={`font-semibold text-lg ${
+                        reviewModal.opname.difference > 0
+                          ? "text-green-600"
+                          : reviewModal.opname.difference < 0
+                          ? "text-red-600"
+                          : "text-gray-600"
+                      }`}
+                    >
+                      {reviewModal.opname.difference > 0 ? "+" : ""}
+                      {reviewModal.opname.difference}
+                    </div>
+                    <div
+                      className={`text-sm font-medium ${
+                        reviewModal.opname.difference > 0
+                          ? "text-green-700"
+                          : reviewModal.opname.difference < 0
+                          ? "text-red-700"
+                          : "text-gray-700"
+                      }`}
+                    >
                       Difference
                     </div>
                   </div>
@@ -1039,7 +1159,14 @@ const AllOpname = ({ opnames, users, fetchData, setError, setSuccess }) => {
 };
 
 // Schedule Opname Component
-const ScheduleOpname = ({ users, batches, categories, fetchData, setSuccess, setError }) => {
+const ScheduleOpname = ({
+  users,
+  batches,
+  categories,
+  fetchData,
+  setSuccess,
+  setError,
+}) => {
   const [selectedUsers, setSelectedUsers] = useState([]);
   const [selectedBatches, setSelectedBatches] = useState([]);
   const [selectedCategories, setSelectedCategories] = useState([]);
@@ -1079,12 +1206,12 @@ const ScheduleOpname = ({ users, batches, categories, fetchData, setSuccess, set
     setLoading(true);
     try {
       await api.post("/opname/schedule", {
-        user_ids: selectedUsers.map(user => user.value),
-        batch_ids: selectedBatches.map(batch => batch.value),
-        category_codes: selectedCategories.map(cat => cat.value),
+        user_ids: selectedUsers.map((user) => user.value),
+        batch_ids: selectedBatches.map((batch) => batch.value),
+        category_codes: selectedCategories.map((cat) => cat.value),
         scheduled_date: scheduledDate,
       });
-      
+
       setSuccess("Opname scheduled successfully!");
       setSelectedUsers([]);
       setSelectedBatches([]);
@@ -1139,7 +1266,7 @@ const ScheduleOpname = ({ users, batches, categories, fetchData, setSuccess, set
               type="date"
               value={scheduledDate}
               onChange={(e) => setScheduledDate(e.target.value)}
-              min={new Date().toISOString().split('T')[0]}
+              min={new Date().toISOString().split("T")[0]}
               className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm"
               required
             />
@@ -1207,7 +1334,13 @@ const ScheduleOpname = ({ users, batches, categories, fetchData, setSuccess, set
 };
 
 // Direct Opname Component
-const DirectOpname = ({ batches, categories, fetchData, setSuccess, setError }) => {
+const DirectOpname = ({
+  batches,
+  categories,
+  fetchData,
+  setSuccess,
+  setError,
+}) => {
   const [selectedBatch, setSelectedBatch] = useState(null);
   const [physicalStock, setPhysicalStock] = useState("");
   const [notes, setNotes] = useState("");
@@ -1237,7 +1370,7 @@ const DirectOpname = ({ batches, categories, fetchData, setSuccess, setError }) 
         physical_stock: parseInt(physicalStock),
         notes: notes.trim(),
       });
-      
+
       setSuccess("Direct opname recorded successfully!");
       setSelectedBatch(null);
       setPhysicalStock("");
@@ -1261,10 +1394,10 @@ const DirectOpname = ({ batches, categories, fetchData, setSuccess, setError }) 
             <ClipboardEdit className="text-white" size={24} />
           </div>
           <div>
-            <h2 className="text-2xl font-bold text-white">Direct Opname Input</h2>
-            <p className="text-green-100">
-              Record inventory count immediately
-            </p>
+            <h2 className="text-2xl font-bold text-white">
+              Direct Opname Input
+            </h2>
+            <p className="text-green-100">Record inventory count immediately</p>
           </div>
         </div>
       </div>
@@ -1286,10 +1419,14 @@ const DirectOpname = ({ batches, categories, fetchData, setSuccess, setError }) 
 
         {selectedBatch && (
           <div className="bg-gray-50 rounded-xl p-6">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">Product Information</h3>
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">
+              Product Information
+            </h3>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div className="text-center p-4 bg-white rounded-lg">
-                <div className="text-2xl font-bold text-blue-600">{systemStock}</div>
+                <div className="text-2xl font-bold text-blue-600">
+                  {systemStock}
+                </div>
                 <div className="text-sm text-gray-600">System Stock</div>
               </div>
               <div className="text-center p-4 bg-white rounded-lg">
@@ -1299,11 +1436,17 @@ const DirectOpname = ({ batches, categories, fetchData, setSuccess, setError }) 
                 <div className="text-sm text-gray-600">Physical Count</div>
               </div>
               <div className="text-center p-4 bg-white rounded-lg">
-                <div className={`text-2xl font-bold ${
-                  difference > 0 ? "text-green-600" :
-                  difference < 0 ? "text-red-600" : "text-gray-600"
-                }`}>
-                  {difference > 0 ? "+" : ""}{difference}
+                <div
+                  className={`text-2xl font-bold ${
+                    difference > 0
+                      ? "text-green-600"
+                      : difference < 0
+                      ? "text-red-600"
+                      : "text-gray-600"
+                  }`}
+                >
+                  {difference > 0 ? "+" : ""}
+                  {difference}
                 </div>
                 <div className="text-sm text-gray-600">Difference</div>
               </div>

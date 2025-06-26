@@ -47,28 +47,33 @@ const BatchStatus = ({ stockQuantity, expDate, batchId }) => {
     const today = new Date();
     const diffTime = exp - today;
     const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    const formattedDate = exp.toLocaleDateString();
 
     if (diffDays <= 0) {
-      expText = "Expired";
+      expText = `Expired (${formattedDate})`;
       expColor = "text-red-500 bg-red-50";
     } else if (diffDays <= 30) {
-      expText = `${diffDays} days left`;
+      expText = `${diffDays} days left (${formattedDate})`;
       expColor = "text-amber-500 bg-amber-50";
     } else if (diffDays <= 90) {
-      expText = `${diffDays} days left`;
+      expText = `${diffDays} days left (${formattedDate})`;
       expColor = "text-blue-500 bg-blue-50";
     } else {
-      expText = new Date(localExpDate).toLocaleDateString();
+      expText = formattedDate;
       expColor = "text-green-500 bg-green-50";
     }
   }
 
   return (
-    <div className="space-y-2">
-      <span className={`px-3 py-1 rounded-full text-xs font-medium ${stockColor}`}>
+    <div className="flex items-center gap-2">
+      <span
+        className={`px-3 py-1 rounded-full text-xs font-medium ${stockColor}`}
+      >
         {stockText}
       </span>
-      <span className={`px-3 py-1 rounded-full text-xs font-medium ${expColor}`}>
+      <span
+        className={`px-3 py-1 rounded-full text-xs font-medium ${expColor}`}
+      >
         {expText}
       </span>
     </div>

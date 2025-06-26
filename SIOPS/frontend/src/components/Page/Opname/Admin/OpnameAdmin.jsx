@@ -64,7 +64,7 @@ const OpnameAdmin = () => {
       const batchData = batchesRes.data?.result || [];
       setBatches(batchData);
 
-      const opnamesRes = await api.get("/opname/opnames");
+      const opnamesRes = await api.get("/opname/all");
       console.log("Raw Opname Response:", opnamesRes.data);
 
       // Transform opname data to include user and batch details
@@ -239,28 +239,32 @@ const AllOpname = ({
     label: user.username,
   }));
   const [selectedOpname, setSelectedOpname] = useState(null);
+
   const groupedOpnames = opnames.reduce((acc, opname) => {
     const batch = batches.find((b) => b.batch_id === opname.batch_id);
-    const key = `${opname.scheduled_date}-${opname.user_id}`;
+    const date = opname.scheduled_date || opname.opname_date; // Gunakan opname_date untuk direct opname
+    const key = `${date}-${opname.user_id || "admin"}`; // Gunakan "admin" untuk direct opname
     if (!acc[key]) {
       acc[key] = {
-        date: opname.scheduled_date,
+        date: date,
         user_id: opname.user_id,
         items: [],
         status: opname.status,
-        user: users.find((u) => u.user_id === opname.user_id),
+        user: users.find((u) => u.user_id === opname.user_id) || {
+          username: "Admin",
+        },
       };
     }
     acc[key].items.push(opname);
     if (opname.status === "adjusted") acc[key].status = "adjusted";
-    else if (opname.status === "reviewed" && acc[key].status !== "adjusted")
-      acc[key].status = "reviewed";
-    else if (
-      opname.status === "submitted" &&
-      acc[key].status !== "adjusted" &&
-      acc[key].status !== "reviewed"
-    )
+    else if (opname.status === "submitted" && acc[key].status !== "adjusted")
       acc[key].status = "submitted";
+    else if (
+      opname.status === "in_progress" &&
+      acc[key].status !== "adjusted" &&
+      acc[key].status !== "submitted"
+    )
+      acc[key].status = "in_progress";
     return acc;
   }, {});
 
@@ -335,15 +339,15 @@ const AllOpname = ({
           <Select
             value={[
               { value: "scheduled", label: "Scheduled" },
+              { value: "in_progress", label: "In Progress" },
               { value: "submitted", label: "Submitted" },
-              { value: "reviewed", label: "Reviewed" },
               { value: "adjusted", label: "Adjusted" },
             ].find((option) => option.value === filterStatus)}
             onChange={(option) => setFilterStatus(option?.value || "")}
             options={[
               { value: "scheduled", label: "Scheduled" },
+              { value: "in_progress", label: "In Progress" },
               { value: "submitted", label: "Submitted" },
-              { value: "reviewed", label: "Reviewed" },
               { value: "adjusted", label: "Adjusted" },
             ]}
             placeholder="Filter Status..."
@@ -443,9 +447,9 @@ const AllOpname = ({
                         className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
                           opnameGroup.status === "scheduled"
                             ? "bg-gray-100 text-gray-800"
-                            : opnameGroup.status === "submitted"
+                            : opnameGroup.status === "in_progress"
                             ? "bg-yellow-100 text-yellow-800"
-                            : opnameGroup.status === "reviewed"
+                            : opnameGroup.status === "submitted"
                             ? "bg-blue-100 text-blue-800"
                             : "bg-green-100 text-green-800"
                         }`}
@@ -501,9 +505,9 @@ const AllOpname = ({
                   className={`inline-flex px-2.5 py-1 text-xs font-semibold rounded-full ${
                     selectedOpname.status === "scheduled"
                       ? "bg-gray-100 text-gray-800"
-                      : selectedOpname.status === "submitted"
+                      : selectedOpname.status === "in_progress"
                       ? "bg-yellow-100 text-yellow-800"
-                      : selectedOpname.status === "reviewed"
+                      : selectedOpname.status === "submitted"
                       ? "bg-blue-100 text-blue-800"
                       : "bg-green-100 text-green-800"
                   }`}
@@ -534,37 +538,41 @@ const AllOpname = ({
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-200">
-                  {selectedOpname.items.map((item) => (
-                    <tr key={item.opname_id} className="hover:bg-gray-50">
-                      <td className="px-4 py-2 text-sm text-gray-600">
-                        {item.batchStock?.product?.name_product}
-                      </td>
-                      <td className="px-4 py-2 text-sm text-gray-600">
-                        {item.system_stock}
-                      </td>
-                      <td className="px-4 py-2 text-sm text-gray-600">
-                        {item.physical_stock || "-"}
-                      </td>
-                      <td className="px-4 py-2 text-sm text-gray-600">
-                        {item.difference || "-"}
-                      </td>
-                      <td className="px-4 py-2 text-sm">
-                        <span
-                          className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                            item.status === "scheduled"
-                              ? "bg-gray-100 text-gray-800"
-                              : item.status === "submitted"
-                              ? "bg-yellow-100 text-yellow-800"
-                              : item.status === "reviewed"
-                              ? "bg-blue-100 text-blue-800"
-                              : "bg-green-100 text-green-800"
-                          }`}
-                        >
-                          {item.status}
-                        </span>
-                      </td>
-                    </tr>
-                  ))}
+                  {selectedOpname.items.map((item) => {
+                    const difference =
+                      (item.physical_stock || 0) - (item.system_stock || 0);
+                    return (
+                      <tr key={item.opname_id} className="hover:bg-gray-50">
+                        <td className="px-4 py-2 text-sm text-gray-600">
+                          {item.batchStock?.product?.name_product}
+                        </td>
+                        <td className="px-4 py-2 text-sm text-gray-600">
+                          {item.system_stock}
+                        </td>
+                        <td className="px-4 py-2 text-sm text-gray-600">
+                          {item.physical_stock || "-"}
+                        </td>
+                        <td className="px-4 py-2 text-sm text-gray-600">
+                          {difference !== 0 ? difference : "-"}
+                        </td>
+                        <td className="px-4 py-2 text-sm">
+                          <span
+                            className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                              item.status === "scheduled"
+                                ? "bg-gray-100 text-gray-800"
+                                : item.status === "in_progress"
+                                ? "bg-yellow-100 text-yellow-800"
+                                : item.status === "submitted"
+                                ? "bg-blue-100 text-blue-800"
+                                : "bg-green-100 text-green-800"
+                            }`}
+                          >
+                            {item.status}
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
@@ -700,7 +708,7 @@ const ScheduleOpname = ({
       if (!selectedUserId) throw new Error("Pilih staff untuk penugasan");
 
       for (const code_product of products) {
-        await api.post("/opname/opnames/create", {
+        await api.post("/opname/create", {
           code_product,
           scheduled_date: scheduledDate,
           assigned_user_id: selectedUserId,
@@ -719,7 +727,6 @@ const ScheduleOpname = ({
     }
   };
 
-  // Filter kategori berdasarkan pencarian
   const filteredCategories = batchSummary.categories.filter((cat) =>
     cat.name.toLowerCase().includes(searchCategory.toLowerCase())
   );
@@ -1008,6 +1015,38 @@ ScheduleOpname.propTypes = {
   setError: PropTypes.func.isRequired,
 };
 
+ScheduleOpname.propTypes = {
+  users: PropTypes.arrayOf(
+    PropTypes.shape({
+      user_id: PropTypes.oneOfType([PropTypes.string, PropTypes.number])
+        .isRequired,
+      username: PropTypes.string.isRequired,
+      name: PropTypes.string,
+    })
+  ).isRequired,
+  batches: PropTypes.arrayOf(
+    PropTypes.shape({
+      batch_id: PropTypes.oneOfType([PropTypes.string, PropTypes.number])
+        .isRequired,
+      stock_quantity: PropTypes.number,
+      product: PropTypes.shape({
+        code_product: PropTypes.string.isRequired,
+        name_product: PropTypes.string.isRequired,
+        code_categories: PropTypes.string,
+      }),
+    })
+  ).isRequired,
+  categories: PropTypes.arrayOf(
+    PropTypes.shape({
+      code_categories: PropTypes.string.isRequired,
+      name_categories: PropTypes.string.isRequired,
+    })
+  ).isRequired,
+  fetchData: PropTypes.func.isRequired,
+  setSuccess: PropTypes.func.isRequired,
+  setError: PropTypes.func.isRequired,
+};
+
 const DirectOpname = ({
   batches,
   categories,
@@ -1026,6 +1065,7 @@ const DirectOpname = ({
   const [showUpdateExpModal, setShowUpdateExpModal] = useState(false);
   const [selectedBatch, setSelectedBatch] = useState(null);
   const [newExpDate, setNewExpDate] = useState("");
+  const [pendingInputs, setPendingInputs] = useState([]); // State untuk tabel sementara
 
   const handleUpdateExpDate = (batch) => {
     setSelectedBatch(batch);
@@ -1078,32 +1118,53 @@ const DirectOpname = ({
       );
   }, [batches, selectedCategory, batchSearch]);
 
-  const handleSubmitOpname = async (e) => {
+  const handleSaveInput = async (e) => {
     e.preventDefault();
     setError(null);
     setSuccess(null);
     try {
       if (!selectedProduct) throw new Error("Pilih produk terlebih dahulu");
-      if (!physicalStock) throw new Error("Masukkan jumlah stok fisik");
+      if (!physicalStock || parseInt(physicalStock) < 0)
+        throw new Error("Masukkan stok fisik yang valid");
 
-      await api.post("/opnames/direct-opname", {
+      const currentDate = new Date().toISOString().split("T")[0];
+      const newInput = {
         code_product: selectedProduct,
         physical_stock: parseInt(physicalStock),
         expired_stock: parseInt(expiredQuantity) || 0,
         damaged_stock: parseInt(damagedQuantity) || 0,
         notes,
-      });
+        date: currentDate,
+      };
 
-      setSuccess("Data opname berhasil disimpan!");
+      setPendingInputs([...pendingInputs, newInput]);
+      setSuccess("Opname input saved pending!");
       setShowBatchModal(false);
       setSelectedProduct(null);
       setPhysicalStock("");
       setExpiredQuantity("");
       setDamagedQuantity("");
       setNotes("");
+    } catch (err) {
+      setError(err.response?.data?.error || "Gagal menyimpan input opname");
+    }
+  };
+
+  const handleConfirmOpname = async () => {
+    setError(null);
+    setSuccess(null);
+    try {
+      if (pendingInputs.length === 0)
+        throw new Error("No pending inputs to confirm");
+
+      const currentDate = pendingInputs[0].date;
+      await api.post("/opname/confirm", { opname_date: currentDate });
+
+      setPendingInputs([]);
+      setSuccess("Direct opname confirmed!");
       fetchData();
     } catch (err) {
-      setError(err.response?.data?.error || "Gagal menyimpan data opname");
+      setError(err.response?.data?.error || "Gagal mengkonfirmasi opname");
     }
   };
 
@@ -1297,6 +1358,60 @@ const DirectOpname = ({
         Input Opname
       </button>
 
+      {pendingInputs.length > 0 && (
+        <div className="mt-4">
+          <h3 className="text-lg font-semibold mb-2">Pending Inputs</h3>
+          <table className="w-full text-sm text-left text-gray-700">
+            <thead className="bg-gray-50">
+              <tr>
+                <th className="px-4 py-2">Product</th>
+                <th className="px-4 py-2">Physical Stock</th>
+                <th className="px-4 py-2">Expired Stock</th>
+                <th className="px-4 py-2">Damaged Stock</th>
+                <th className="px-4 py-2">Date</th>
+                <th className="px-4 py-2">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {pendingInputs.map((input, index) => {
+                const productName = batches.find(
+                  (b) => b.product.code_product === input.code_product
+                )?.product.name_product;
+                return (
+                  <tr key={index} className="hover:bg-gray-50">
+                    <td className="px-4 py-2">
+                      {productName || input.code_product}
+                    </td>
+                    <td className="px-4 py-2">{input.physical_stock}</td>
+                    <td className="px-4 py-2">{input.expired_stock}</td>
+                    <td className="px-4 py-2">{input.damaged_stock}</td>
+                    <td className="px-4 py-2">{input.date}</td>
+                    <td className="px-4 py-2">
+                      <button
+                        onClick={() =>
+                          setPendingInputs(
+                            pendingInputs.filter((_, i) => i !== index)
+                          )
+                        }
+                        className="text-red-500 hover:text-red-700"
+                      >
+                        <X size={16} />
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+          <button
+            onClick={handleConfirmOpname}
+            className="mt-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 font-medium text-sm"
+          >
+            Confirm Direct Opname
+          </button>
+        </div>
+      )}
+
       {showBatchModal && selectedProduct && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-xl max-w-lg w-full">
@@ -1316,7 +1431,7 @@ const DirectOpname = ({
                 <X size={20} />
               </button>
             </div>
-            <form onSubmit={handleSubmitOpname} className="p-6">
+            <form onSubmit={handleSaveInput} className="p-6">
               <div className="mb-6 bg-indigo-50 rounded-lg p-4">
                 <h4 className="font-medium text-indigo-900 mb-3">
                   Current Stock Information
@@ -1439,7 +1554,7 @@ const DirectOpname = ({
                   type="submit"
                   className="px-4 py-2 bg-indigo-600 text-white hover:bg-indigo-700 rounded-lg text-sm font-medium"
                 >
-                  Save Opname
+                  Save Input
                 </button>
               </div>
             </form>
@@ -1489,6 +1604,7 @@ const DirectOpname = ({
     </div>
   );
 };
+
 DirectOpname.propTypes = {
   batches: PropTypes.arrayOf(
     PropTypes.shape({
@@ -1512,13 +1628,6 @@ DirectOpname.propTypes = {
   fetchData: PropTypes.func.isRequired,
   setSuccess: PropTypes.func.isRequired,
   setError: PropTypes.func.isRequired,
-};
-
-Tab.propTypes = {
-  label: PropTypes.string.isRequired,
-  icon: PropTypes.elementType,
-  isActive: PropTypes.bool.isRequired,
-  onClick: PropTypes.func.isRequired,
 };
 
 export default OpnameAdmin;

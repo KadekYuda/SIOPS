@@ -1,15 +1,53 @@
-// backend/routes/opnameRoutes.js
-import express from 'express';
-import { authenticateToken, authorizeRole, authorizeAssignedStaff } from '../auth/authMiddleware.js';
-import * as opnameController from '../controller/OpnameController.js';
+import express from "express";
+import {
+  createOpnameTasks,
+  getTasksForUser,
+  submitOpnameResult,
+  reviewAndAdjustOpname,
+  directOpnameByAdmin,
+  getAllOpnames,
+  confirmDirectOpname,
+} from "../controller/OpnameController.js";
+import { authenticateToken, authorizeRole } from "../auth/authMiddleware.js";
 
 const router = express.Router();
 
-router.post('/opnames/create', authenticateToken, authorizeRole('admin'), opnameController.createOpnameTasks);
-router.get('/opnames/tasks', authenticateToken, opnameController.getTasksForUser);
-router.post('/opnames/submit', authenticateToken, opnameController.submitOpnameResult);
-router.post('/opnames/review', authenticateToken, authorizeRole('admin'), opnameController.reviewAndAdjustOpname);
-router.post('/opnames/direct-opname', authenticateToken, authorizeRole('admin'), opnameController.directOpnameByAdmin);
-router.get('/opnames', authenticateToken, authorizeRole('admin'), opnameController.getAllOpnames);
+router.post(
+  "/create",
+  authenticateToken,
+  authorizeRole(["admin"]),
+  createOpnameTasks
+);
+router.get(
+  "/tasks",
+  authenticateToken,
+  authorizeRole(["staff"]),
+  getTasksForUser
+);
+router.post(
+  "/submit",
+  authenticateToken,
+  authorizeRole(["staff"]),
+  submitOpnameResult
+);
+router.post(
+  "/review",
+  authenticateToken,
+  authorizeRole(["admin"]),
+  reviewAndAdjustOpname
+);
+router.post(
+  "/direct-opname",
+  authenticateToken,
+  authorizeRole(["admin"]),
+  directOpnameByAdmin
+);
+router.get("/all", authenticateToken, getAllOpnames);
+router.post(
+  "/confirm",
+  authenticateToken,
+  authorizeRole(["admin"]),
+  confirmDirectOpname
+);
 
 export default router;

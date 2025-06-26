@@ -162,7 +162,7 @@ const DashboardAdmin = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 p-6 pt-20">
+    <div className="min-h-screen  px-4 pt-20">
       <div className="container mx-auto">
         {/* Page Header */}
         <div className="bg-white shadow-md rounded-xl p-6 mb-8">
