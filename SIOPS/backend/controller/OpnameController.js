@@ -68,8 +68,23 @@ export const getTasksForUser = async (req, res) => {
 
     console.log("Fetching tasks for user:", req.user.user_id);
 
+    // Allow filtering by status via query parameter, default to all statuses
+    const { status, include_all_status } = req.query;
+    const whereClause = { user_id: req.user.user_id };
+    
+    // If include_all_status is true, don't filter by status
+    // If status is specified, filter by that status
+    // Otherwise, default to scheduled only (backward compatibility)
+    if (include_all_status === 'true') {
+      // Include all statuses
+    } else if (status) {
+      whereClause.status = status;
+    } else {
+      whereClause.status = "scheduled";
+    }
+
     const tasks = await Opname.findAll({
-      where: { user_id: req.user.user_id, status: ["scheduled", "in_progress"] },
+      where: whereClause,
       include: [
         {
           model: BatchStock,
@@ -81,6 +96,7 @@ export const getTasksForUser = async (req, res) => {
     });
 
     console.log("Found tasks:", tasks.length);
+    console.log("Tasks with statuses:", tasks.map(t => ({ id: t.opname_id, status: t.status })));
     res.json(tasks);
   } catch (err) {
     console.error(err);
@@ -110,8 +126,8 @@ export const submitOpnameResult = async (req, res) => {
     const opnames = await Opname.findAll({
       where: {
         batch_id: { [Op.in]: batches.map((b) => b.batch_id) },
-        user_id: req.user.id,
-        status: ["scheduled", "in_progress"],
+        user_id: req.user.user_id,
+        status: "scheduled",
       },
       transaction,
     });
@@ -134,18 +150,16 @@ export const submitOpnameResult = async (req, res) => {
       if (opname && remainingStock > 0) {
         const batchPhysicalStock = Math.min(batch.stock_quantity, remainingStock);
         const ratio = physical_stock > 0 ? batchPhysicalStock / physical_stock : 0;
-        const status =
-          currentDate >= opname.scheduled_date ? "submitted" : "in_progress";
+        const currentDate = new Date().toISOString().split("T")[0];
+        
         await opname.update(
           {
             physical_stock: batchPhysicalStock,
             expired_stock: Math.round(remainingExpired * ratio) || 0,
             damaged_stock: Math.round(remainingDamaged * ratio) || 0,
-            notes: `${notes || ""} ${
-              status === "in_progress" ? `(Saved on ${currentDate})` : ""
-            }`,
-            status: status,
-            opname_date: status === "submitted" ? currentDate : null, // Set opname_date saat submitted
+            notes: notes || "",
+            status: "submitted",
+            opname_date: currentDate,
           },
           { transaction }
         );
@@ -156,9 +170,10 @@ export const submitOpnameResult = async (req, res) => {
     }
 
     if (remainingStock > 0 || remainingStock < 0) {
+      const currentDate = new Date().toISOString().split("T")[0];
       await Opname.create(
         {
-          user_id: req.user.id,
+          user_id: req.user.user_id,
           system_stock: 0,
           physical_stock: 0,
           expired_stock: 0,
@@ -166,10 +181,9 @@ export const submitOpnameResult = async (req, res) => {
           notes: `Selisih stok: ${
             remainingStock > 0 ? `+${remainingStock}` : remainingStock
           } (Sistem: ${totalSystemStock})`,
-          status: currentDate >= opname.scheduled_date ? "submitted" : "in_progress",
+          status: "submitted",
           scheduled_date: opnames[0].scheduled_date,
-          opname_date:
-            currentDate >= opname.scheduled_date ? currentDate : null,
+          opname_date: currentDate,
         },
         { transaction }
       );
@@ -177,10 +191,8 @@ export const submitOpnameResult = async (req, res) => {
 
     await transaction.commit();
     res.json({
-      message: `Opname ${
-        currentDate >= opname.scheduled_date ? "submitted" : "saved in progress"
-      }`,
-      status: currentDate >= opname.scheduled_date ? "submitted" : "in_progress",
+      message: "Opname submitted successfully",
+      status: "submitted",
     });
   } catch (err) {
     await transaction.rollback();
@@ -265,7 +277,7 @@ export const directOpnameByAdmin = async (req, res) => {
       await Opname.create(
         {
           batch_id: batch.batch_id,
-          user_id: req.user.id,
+          user_id: req.user.user_id,
           scheduled_date: null, // Tidak ada jadwal untuk direct opname
           opname_date: currentDate,
           system_stock: batch.stock_quantity, // Stok sebelum perubahan
@@ -285,7 +297,7 @@ export const directOpnameByAdmin = async (req, res) => {
     if (remainingStock > 0 || remainingStock < 0) {
       await Opname.create(
         {
-          user_id: req.user.id,
+          user_id: req.user.user_id,
           scheduled_date: null,
           opname_date: currentDate,
           system_stock: 0,
@@ -392,7 +404,7 @@ export const getAllOpnames = async (req, res) => {
 // Fungsi untuk memperbarui status otomatis (bisa dijalankan via cron)
 export const autoSubmitOpnames = async () => {
   const currentDate = new Date().toISOString().split("T")[0];
-  const opnames = await Opname.findAll({ where: { status: "in_progress" } });
+  const opnames = await Opname.findAll({ where: { status: "scheduled" } });
   for (const opname of opnames) {
     if (currentDate >= opname.scheduled_date) {
       await opname.update({
@@ -400,5 +412,200 @@ export const autoSubmitOpnames = async () => {
         opname_date: currentDate,
       });
     }
+  }
+};
+
+// Individual opname submission by ID (for staff)
+export const submitOpnameByID = async (req, res) => {
+  const { id } = req.params;
+  const { physical_stock, expired_stock, damaged_stock, notes } = req.body;
+  const transaction = await db.transaction();
+
+  try {
+    // Find the specific opname
+    const opname = await Opname.findByPk(id, { 
+      include: [{ model: BatchStock }],
+      transaction 
+    });
+
+    if (!opname) {
+      await transaction.rollback();
+      return res.status(404).json({ error: "Opname not found" });
+    }
+
+    // Check if user is authorized to submit this opname
+    if (opname.user_id !== req.user.user_id) {
+      await transaction.rollback();
+      return res.status(403).json({ error: "Not authorized to submit this opname" });
+    }
+
+    // Check if opname can be edited (only scheduled can be edited)
+    if (opname.status !== 'scheduled') {
+      await transaction.rollback();
+      return res.status(400).json({ error: "Opname cannot be modified" });
+    }
+
+    const currentDate = new Date().toISOString().split("T")[0];
+    
+    // Update the opname
+    await opname.update({
+      physical_stock: physical_stock || 0,
+      expired_stock: expired_stock || 0,
+      damaged_stock: damaged_stock || 0,
+      notes: notes || "",
+      status: "submitted", // Simplified: direct to submitted
+      opname_date: currentDate
+    }, { transaction });
+
+    await transaction.commit();
+    res.json({
+      message: "Opname submitted successfully",
+      status: "submitted"
+    });
+
+  } catch (err) {
+    await transaction.rollback();
+    console.error(err);
+    res.status(500).json({ error: "Failed to submit opname" });
+  }
+};
+
+// Get staff opname history
+export const getStaffOpnameHistory = async (req, res) => {
+  try {
+    const opnames = await Opname.findAll({
+      where: { 
+        user_id: req.user.user_id,
+        status: ['submitted', 'adjusted']
+      },
+      include: [
+        {
+          model: BatchStock,
+          include: [{ model: Product }]
+        }
+      ],
+      order: [['opname_date', 'DESC'], ['createdAt', 'DESC']]
+    });
+
+    res.json(opnames);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Failed to fetch opname history" });
+  }
+};
+
+// Request edit for submitted opname
+export const requestEdit = async (req, res) => {
+  const { opname_id, reason } = req.body;
+
+  try {
+    const opname = await Opname.findOne({
+      where: { 
+        opname_id,
+        user_id: req.user.user_id,
+        status: 'submitted'
+      }
+    });
+
+    if (!opname) {
+      return res.status(404).json({ 
+        error: "Opname tidak ditemukan atau tidak dalam status submitted" 
+      });
+    }
+
+    // Set edit_requested flag instead of changing status
+    await opname.update({
+      edit_requested: true,
+      edit_request_reason: reason || 'Staff requested permission to edit'
+    });
+
+    console.log(`Staff ${req.user.user_id} requests edit for opname ${opname_id}: ${reason}`);
+
+    res.json({ 
+      message: "Permintaan edit berhasil dikirim ke admin",
+      opname_id,
+      requested_by: req.user.user_id,
+      request_reason: reason
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Failed to request edit" });
+  }
+};
+
+export const approveEdit = async (req, res) => {
+  const { opname_id } = req.body;
+  
+  try {
+    if (!opname_id) {
+      return res.status(400).json({ error: "opname_id is required" });
+    }
+
+    const opname = await Opname.findOne({
+      where: { 
+        opname_id,
+        edit_requested: true
+      }
+    });
+
+    if (!opname) {
+      return res.status(404).json({ 
+        error: "Opname tidak ditemukan atau tidak ada edit request" 
+      });
+    }
+
+    // Reset edit_requested flag and change status back to scheduled
+    await opname.update({
+      edit_requested: false,
+      edit_request_reason: null,
+      status: 'scheduled',
+      notes: (opname.notes || '') + '\n[ADMIN APPROVED EDIT REQUEST]'
+    });
+
+    res.json({ 
+      message: "Edit request approved. Staff can now edit the opname.",
+      opname_id: opname.opname_id
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Failed to approve edit request" });
+  }
+};
+
+export const rejectEdit = async (req, res) => {
+  const { opname_id } = req.body;
+  
+  try {
+    if (!opname_id) {
+      return res.status(400).json({ error: "opname_id is required" });
+    }
+
+    const opname = await Opname.findOne({
+      where: { 
+        opname_id,
+        edit_requested: true
+      }
+    });
+
+    if (!opname) {
+      return res.status(404).json({ 
+        error: "Opname tidak ditemukan atau tidak ada edit request" 
+      });
+    }
+
+    // Reset edit_requested flag
+    await opname.update({
+      edit_requested: false,
+      edit_request_reason: null,
+      notes: (opname.notes || '') + '\n[ADMIN REJECTED EDIT REQUEST]'
+    });
+
+    res.json({ 
+      message: "Edit request rejected.",
+      opname_id: opname.opname_id
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Failed to reject edit request" });
   }
 };

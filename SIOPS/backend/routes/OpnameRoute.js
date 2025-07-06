@@ -3,10 +3,13 @@ import {
   createOpnameTasks,
   getTasksForUser,
   submitOpnameResult,
+  submitOpnameByID,
+  getStaffOpnameHistory,
   reviewAndAdjustOpname,
   directOpnameByAdmin,
   getAllOpnames,
   confirmDirectOpname,
+  requestEdit,
 } from "../controller/OpnameController.js";
 import { authenticateToken, authorizeRole } from "../auth/authMiddleware.js";
 
@@ -31,6 +34,12 @@ router.post(
   submitOpnameResult
 );
 router.post(
+  "/submit/:id",
+  authenticateToken,
+  authorizeRole(["staff"]),
+  submitOpnameByID
+);
+router.post(
   "/review",
   authenticateToken,
   authorizeRole(["admin"]),
@@ -48,6 +57,18 @@ router.post(
   authenticateToken,
   authorizeRole(["admin"]),
   confirmDirectOpname
+);
+router.get(
+  "/staff/history",
+  authenticateToken,
+  authorizeRole(["staff"]),
+  getStaffOpnameHistory
+);
+router.post(
+  "/request-edit",
+  authenticateToken,
+  authorizeRole(["staff"]),
+  requestEdit
 );
 
 export default router;

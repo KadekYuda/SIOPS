@@ -14,7 +14,7 @@ import OrderAdmin from "../components/Page/Order/Admin/OrderAdmin";
 import OpnameAdmin from "../components/Page/Opname/Admin/OpnameAdmin";
 import api from "../service/api";
 import LoadingComponent from "../components/LoadingComponent";
-import OpnameStaff from "../components/Page/Opname/Staff/OpnameStaff";
+import OpnameStaff from "../components/Page/Opname/Staff/OpnameStaff"
 
 function AppRoutes() {
   const [user, setUser] = useState(null);

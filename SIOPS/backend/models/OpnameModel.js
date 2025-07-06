@@ -50,7 +50,7 @@ const Opname = db.define('opnames', {
     },
   },
   status: {
-    type: DataTypes.ENUM('scheduled', 'in_progress', 'submitted', 'reviewed', 'adjusted'),
+    type: DataTypes.ENUM('scheduled', 'submitted', 'adjusted'),
     defaultValue: 'scheduled'
   },
   notes: DataTypes.TEXT

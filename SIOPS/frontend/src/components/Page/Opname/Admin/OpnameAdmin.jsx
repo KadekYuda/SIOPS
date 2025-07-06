@@ -606,7 +606,7 @@ const AllOpname = ({
     </div>
   );
 };
-
+  
 const ScheduleOpname = ({
   users,
   batches,
@@ -735,7 +735,7 @@ const ScheduleOpname = ({
     <div className="bg-white rounded-none shadow-md p-6 border border-gray-100">
       <div className="flex items-center gap-2 mb-6">
         <div className="h-10 w-10 rounded-full bg-indigo-100 flex items-center justify-center">
-          <Calendar className="text-indigo-600" />
+          <Calendar clyassName="text-indigo-600" />
         </div>
         <div>
           <h2 className="text-xl font-semibold text-gray-800">
