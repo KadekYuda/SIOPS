@@ -787,7 +787,6 @@ const BatchStok = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200">
-                {" "}
                 {loading ? (
                   <tr>
                     <td colSpan="9" className="p-4">

@@ -24,6 +24,8 @@ import CrudButton from "../../../Button/CrudButton.jsx";
 import OrderDetails from "../OrderDetails";
 import LoadingComponent from "../../../../components/LoadingComponent";
 import Pagination from "../../Product/Pagination";
+import SuccessModal from "../../../modal/SuccessModal";
+import AlertModal from "../../../modal/AlertModal";
 
 import {
   Chart as ChartJS,
@@ -71,7 +73,6 @@ const OrderAdmin = () => {
 
   const [orders, setOrders] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [alert, setAlert] = useState(null);
   const [deleteOrderId, setDeleteOrderId] = useState(null);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [selectedOrder, setSelectedOrder] = useState(null);
@@ -86,12 +87,14 @@ const OrderAdmin = () => {
     start_date: "",
     end_date: "",
   });
+  const [sortOption, setSortOption] = useState("id"); // 'id' or 'date'
   const [isAdmin, setIsAdmin] = useState(null);
   const [showCreateOrderModal, setShowCreateOrderModal] = useState(false);
   const [products, setProducts] = useState([]);
   const [orderForm, setOrderForm] = useState({
     user_id: "",
     order_status: "pending",
+    // Remove order_date - let backend use current timestamp
     order_details: [
       {
         code_product: "",
@@ -108,6 +111,11 @@ const OrderAdmin = () => {
   const [currentPage, setCurrentPage] = useState(0);
   const [itemsPerPage] = useState(10);
   const [expandedBatchDetails, setExpandedBatchDetails] = useState({});
+
+  // New state for status change modals
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [showErrorModal, setShowErrorModal] = useState(false);
+  const [statusModalMessage, setStatusModalMessage] = useState("");
 
   const fetchUserProfile = useCallback(async () => {
     try {
@@ -167,7 +175,9 @@ const OrderAdmin = () => {
         queryParams.append("start_date", filters.start_date);
       if (filters.end_date) queryParams.append("end_date", filters.end_date);
 
+      console.log("Fetching orders with filters:", filters);
       const response = await api.get(`/orders?${queryParams.toString()}`);
+      console.log("Received orders:", response.data.length);
       setOrders(response.data);
     } catch (error) {
       showAlert(
@@ -212,8 +222,12 @@ const OrderAdmin = () => {
   };
 
   const showAlert = (type, title, message) => {
-    setAlert({ type, title, message });
-    setTimeout(() => setAlert(null), 5000);
+    setStatusModalMessage(message);
+    if (type === "success") {
+      setShowSuccessModal(true);
+    } else {
+      setShowErrorModal(true);
+    }
   };
 
   const handleStatusChange = async (orderId, newStatus) => {
@@ -351,6 +365,10 @@ const OrderAdmin = () => {
         initialExpDateInputs[detail.order_detail_id] = {
           hasExpDate: false,
           expDate: "",
+          adjustQuantity: false,
+          actualQuantity: detail.quantity,
+          adjustPrice: false,
+          actualPrice: detail.ordered_price,
         };
       });
 
@@ -372,7 +390,46 @@ const OrderAdmin = () => {
   const handleExpDateSubmit = async () => {
     try {
       if (!processingOrderId) {
-        showAlert("error", "Error", "No order is being processed");
+        setStatusModalMessage("No order is being processed");
+        setShowErrorModal(true);
+        return;
+      }
+
+      // Validate inputs
+      const hasInvalidInputs = Object.entries(expDateInputs).some(
+        ([detailId, input]) => {
+          if (input.hasExpDate && !input.expDate) {
+            setStatusModalMessage(
+              "Please set expiration date for all checked products"
+            );
+            setShowErrorModal(true);
+            return true;
+          }
+          if (
+            input.adjustQuantity &&
+            (!input.actualQuantity || input.actualQuantity <= 0)
+          ) {
+            setStatusModalMessage(
+              "Please enter valid actual quantity for all checked products"
+            );
+            setShowErrorModal(true);
+            return true;
+          }
+          if (
+            input.adjustPrice &&
+            (!input.actualPrice || input.actualPrice <= 0)
+          ) {
+            setStatusModalMessage(
+              "Please enter valid actual price for all checked products"
+            );
+            setShowErrorModal(true);
+            return true;
+          }
+          return false;
+        }
+      );
+
+      if (hasInvalidInputs) {
         return;
       }
 
@@ -381,11 +438,10 @@ const OrderAdmin = () => {
       const currentOrder = orderResponse.data;
 
       if (!currentOrder || currentOrder.order_status !== "approved") {
-        showAlert(
-          "error",
-          "Status update failed",
+        setStatusModalMessage(
           "Order must be in approved status to be received"
         );
+        setShowErrorModal(true);
         setShowExpDateModal(false);
         setProcessingOrderId(null);
         setExpDateInputs({});
@@ -393,34 +449,51 @@ const OrderAdmin = () => {
         return;
       }
 
-      // Create batches with expiration dates
+      // Create batches with expiration dates and adjustments
       // This will also update the order status to received
       const expiration_dates = {};
+      const quantity_adjustments = {};
+      const price_adjustments = {};
+
       Object.entries(expDateInputs).forEach(([detailId, input]) => {
         if (input.hasExpDate && input.expDate) {
           expiration_dates[detailId] = input.expDate;
+        }
+        if (input.adjustQuantity) {
+          quantity_adjustments[detailId] = input.actualQuantity;
+        }
+        if (input.adjustPrice) {
+          price_adjustments[detailId] = input.actualPrice;
         }
       });
 
       await api.post(`/orders/${processingOrderId}/create-batches`, {
         expiration_dates,
+        quantity_adjustments,
+        price_adjustments,
       });
 
-      showAlert(
-        "success",
-        "Order Processed",
-        "Order has been received and batches created successfully"
+      // Show success modal instead of toast
+      const hasAdjustments = Object.values(expDateInputs).some(
+        (input) => input.adjustQuantity || input.adjustPrice
       );
+
+      setStatusModalMessage(
+        hasAdjustments
+          ? "Order received successfully with quantity/price adjustments and batches created"
+          : "Order has been received and batches created successfully"
+      );
+      setShowSuccessModal(true);
+
+      // Close all related modals
       setShowExpDateModal(false);
       setProcessingOrderId(null);
       setExpDateInputs({});
+      setShowOrderDetail(false); // Close the order details modal too
       await fetchOrders();
     } catch (error) {
-      showAlert(
-        "error",
-        "Failed to process order",
-        error.response?.data?.msg || "Network error"
-      );
+      setStatusModalMessage(error.response?.data?.msg || "Network error");
+      setShowErrorModal(true);
       await fetchOrders();
     }
   };
@@ -458,10 +531,14 @@ const OrderAdmin = () => {
   };
 
   const handleFilterChange = (field, option) => {
+    const value = option && typeof option === "object" ? option.value : option;
     setFilters((prev) => ({
       ...prev,
-      [field]: option ? option.value : "",
+      [field]: value || "",
     }));
+
+    // We don't need to call fetchOrders here since it will be triggered by the useEffect
+    // that has filters in its dependency array
   };
 
   const viewOrderDetails = async (order) => {
@@ -606,6 +683,13 @@ const OrderAdmin = () => {
     });
   };
 
+  const handleOrderDateChange = (e) => {
+    setOrderForm((prev) => ({
+      ...prev,
+      order_date: e.target.value,
+    }));
+  };
+
   const toggleBatchDetails = (index) => {
     setExpandedBatchDetails((prev) => ({
       ...prev,
@@ -669,6 +753,7 @@ const OrderAdmin = () => {
         ...orderForm,
         user_id: response.data.user?.user_id,
         order_status: "pending",
+        // Remove order_date to let backend use current timestamp like staff does
         order_details: orderForm.order_details.map((detail) => ({
           code_product: detail.code_product,
           stock_quantity: detail.stock_quantity,
@@ -681,6 +766,7 @@ const OrderAdmin = () => {
       setShowCreateOrderModal(false);
       setOrderForm({
         order_status: "pending",
+        // Remove order_date - let backend use current timestamp
         order_details: [
           {
             code_product: "",
@@ -796,9 +882,18 @@ const OrderAdmin = () => {
   }, [fetchOrderStats]);
 
   const getCurrentPageItems = () => {
+    // Sort orders based on the selected sort option
+    const sortedOrders = [...orders].sort((a, b) => {
+      if (sortOption === "id") {
+        return b.order_id - a.order_id; // Sort by ID (newest first)
+      } else {
+        // Sort by date (newest first)
+        return new Date(b.order_date) - new Date(a.order_date);
+      }
+    });
     const startIndex = currentPage * itemsPerPage;
     const endIndex = startIndex + itemsPerPage;
-    return orders.slice(startIndex, endIndex);
+    return sortedOrders.slice(startIndex, endIndex);
   };
 
   const totalPages = Math.ceil(orders.length / itemsPerPage);
@@ -857,21 +952,24 @@ const OrderAdmin = () => {
               </div>
               <div className="flex flex-col lg:flex-row gap-6">
                 <div className="w-full">
-                  <div className="bg-white rounded-b-xl shadow-md border border-gray-100 border-t-0">
-                    <div className="bg-white px-4 sm:px-6 py-3 sm:py-4 border-b">
+                  <div className="bg-white rounded-xl shadow-md border border-gray-100">
+                    <div className="bg-white px-5 py-4 border-b">
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-3">
-                          <div className="h-10 w-10 rounded-full bg-blue-100 flex items-center justify-center">
-                            <ClipboardList className="text-blue-600" />
+                          <div className="h-12 w-12 rounded-full bg-indigo-100 flex items-center justify-center">
+                            <ClipboardList
+                              className="text-indigo-600"
+                              size={22}
+                            />
                           </div>
-                          <h2 className="text-lg font-semibold text-gray-900">
+                          <h2 className="text-xl font-bold text-gray-800">
                             Orders List
                           </h2>
                         </div>
                         <div className="relative">
                           <button
                             onClick={() => setFilterMenuOpen(!filterMenuOpen)}
-                            className="flex items-center text-xs font-medium bg-indigo-600 text-white px-2 sm:px-3 py-1 sm:py-1.5 rounded-lg hover:bg-indigo-700 transition-colors"
+                            className="flex items-center text-xs font-medium bg-blue-600 text-white px-2 sm:px-3 py-1 sm:py-1.5 rounded-lg hover:bg-blue-800 transition-colors"
                           >
                             <Filter size={12} className="mr-1 sm:mr-1.5" />{" "}
                             Filter
@@ -881,10 +979,10 @@ const OrderAdmin = () => {
                               initial={{ opacity: 0, y: -10 }}
                               animate={{ opacity: 1, y: 0 }}
                               exit={{ opacity: 0, y: -10 }}
-                              className="absolute top-full right-0 mt-2 w-72 bg-white rounded-lg shadow-xl p-4 z-10 border border-gray-200"
+                              className="absolute top-full right-0 mt-2 w-64 sm:w-72 bg-white rounded-lg shadow-xl p-3 sm:p-4 z-10 border border-gray-200"
                             >
-                              <h4 className="font-medium text-gray-700 mb-2 flex items-center">
-                                <Tag size={14} className="mr-2" /> Filter by
+                              <h4 className="text-sm font-medium text-gray-700 mb-2 flex items-center">
+                                <Tag size={12} className="mr-1.5" /> Filter by
                                 Status
                               </h4>
                               <Select
@@ -900,7 +998,7 @@ const OrderAdmin = () => {
                                   handleFilterChange("order_status", option)
                                 }
                                 options={statusOptions}
-                                className="mb-4"
+                                className="mb-3"
                                 placeholder="Select status"
                                 isClearable
                                 styles={{
@@ -909,29 +1007,55 @@ const OrderAdmin = () => {
                                     borderRadius: "0.5rem",
                                     borderColor: "#e5e7eb",
                                     boxShadow: "none",
-                                    "&:hover": { borderColor: "#4f46e5" },
-                                    padding: "1px",
+                                    "&:hover": {
+                                      borderColor: "#3b82f6",
+                                    },
+                                    minHeight: "32px",
+                                    padding: "0px",
+                                  }),
+                                  valueContainer: (base) => ({
+                                    ...base,
+                                    padding: "0 8px",
+                                  }),
+                                  input: (base) => ({
+                                    ...base,
+                                    margin: "0",
+                                    padding: "0",
+                                  }),
+                                  dropdownIndicator: (base) => ({
+                                    ...base,
+                                    padding: "4px",
+                                  }),
+                                  clearIndicator: (base) => ({
+                                    ...base,
+                                    padding: "4px",
+                                  }),
+                                  menu: (base) => ({
+                                    ...base,
+                                    fontSize: "0.75rem",
                                   }),
                                 }}
                               />
-                              <h4 className="font-medium text-gray-700 mb-2 flex items-center">
-                                <Calendar size={14} className="mr-2" /> Filter
+
+                              <h4 className="text-sm font-medium text-gray-700 mb-2 flex items-center">
+                                <Calendar size={12} className="mr-1.5" /> Filter
                                 by Date Range
                               </h4>
-                              <div className="grid grid-cols-2 gap-4 mb-4">
+                              <div className="grid grid-cols-2 gap-2 sm:gap-4 mb-3">
                                 <div>
                                   <label className="block text-xs text-gray-600 mb-1">
                                     Start Date
                                   </label>
                                   <input
                                     type="date"
-                                    value={filters.start_date}
+                                    value={filters.start_date || ""}
                                     onChange={(e) =>
-                                      handleFilterChange("start_date", {
-                                        value: e.target.value,
-                                      })
+                                      handleFilterChange(
+                                        "start_date",
+                                        e.target.value
+                                      )
                                     }
-                                    className="p-2 w-full border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm"
+                                    className="p-1 sm:p-2 w-full border border-gray-300 rounded-lg focus:ring-1 focus:ring-blue-500 focus:border-blue-500 text-xs"
                                   />
                                 </div>
                                 <div>
@@ -940,33 +1064,86 @@ const OrderAdmin = () => {
                                   </label>
                                   <input
                                     type="date"
-                                    value={filters.end_date}
+                                    value={filters.end_date || ""}
                                     onChange={(e) =>
-                                      handleFilterChange("end_date", {
-                                        value: e.target.value,
-                                      })
+                                      handleFilterChange(
+                                        "end_date",
+                                        e.target.value
+                                      )
                                     }
-                                    className="p-2 w-full border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm"
+                                    className="p-1 sm:p-2 w-full border border-gray-300 rounded-lg focus:ring-1 focus:ring-blue-500 focus:border-blue-500 text-xs"
                                   />
                                 </div>
                               </div>
-                              <div className="flex justify-end space-x-2 mt-4">
+
+                              <h4 className="text-sm font-medium text-gray-700 mb-2 flex items-center">
+                                <svg
+                                  xmlns="http://www.w3.org/2000/svg"
+                                  className="h-3 w-3 mr-1.5"
+                                  fill="none"
+                                  viewBox="0 0 24 24"
+                                  stroke="currentColor"
+                                >
+                                  <path
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    strokeWidth={2}
+                                    d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4"
+                                  />
+                                </svg>{" "}
+                                Sort By
+                              </h4>
+                              <div className="flex space-x-2 mb-3">
                                 <button
-                                  className="px-3 py-1.5 text-xs bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-md"
+                                  className={`flex-1 px-2 py-1.5 text-xs font-medium rounded-md transition-colors ${
+                                    sortOption === "id"
+                                      ? "bg-indigo-100 text-indigo-700 border border-indigo-300"
+                                      : "bg-gray-100 text-gray-700 border border-gray-200 hover:bg-gray-200"
+                                  }`}
+                                  onClick={() => {
+                                    setSortOption("id");
+                                    setCurrentPage(0); // Reset to first page when changing sort
+                                  }}
+                                >
+                                  ID
+                                </button>
+                                <button
+                                  className={`flex-1 px-2 py-1.5 text-xs font-medium rounded-md transition-colors ${
+                                    sortOption === "date"
+                                      ? "bg-indigo-100 text-indigo-700 border border-indigo-300"
+                                      : "bg-gray-100 text-gray-700 border border-gray-200 hover:bg-gray-200"
+                                  }`}
+                                  onClick={() => {
+                                    setSortOption("date");
+                                    setCurrentPage(0); // Reset to first page when changing sort
+                                  }}
+                                >
+                                  Date
+                                </button>
+                              </div>
+
+                              <div className="flex justify-end space-x-2">
+                                <button
+                                  className="px-2 sm:px-3 py-1 sm:py-1.5 text-xs bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-md"
                                   onClick={() => {
                                     setFilters({
+                                      code_product: "",
                                       order_status: "",
                                       start_date: "",
                                       end_date: "",
                                     });
+                                    setTimeout(() => fetchOrders(), 0); // Fetch orders after reset
                                     setFilterMenuOpen(false);
                                   }}
                                 >
                                   Reset
                                 </button>
                                 <button
-                                  className="px-3 py-1.5 text-xs bg-indigo-600 hover:bg-indigo-700 text-white rounded-md"
-                                  onClick={() => setFilterMenuOpen(false)}
+                                  className="px-2 sm:px-3 py-1 sm:py-1.5 text-xs bg-indigo-600 hover:bg-indigo-700 text-white rounded-md"
+                                  onClick={() => {
+                                    setTimeout(() => fetchOrders(), 0); // Fetch orders with the current filters
+                                    setFilterMenuOpen(false);
+                                  }}
                                 >
                                   Apply
                                 </button>
@@ -975,9 +1152,14 @@ const OrderAdmin = () => {
                           )}
                         </div>
                       </div>
-                    </div>{" "}
+                    </div>
                     <div className="p-3 sm:p-4 max-h-[calc(100vh-200px)] overflow-y-auto">
-                      {orders.length > 0 ? (
+                      {isLoading ? (
+                        <div className="flex justify-center items-center py-20">
+                          <div className="animate-spin rounded-full h-8 w-8 border-4 border-indigo-500 border-t-transparent"></div>
+                          <span className="ml-3 text-gray-600">Loading...</span>
+                        </div>
+                      ) : orders.length > 0 ? (
                         <>
                           {/* Desktop View */}
                           <div className="hidden md:block">
@@ -1018,7 +1200,7 @@ const OrderAdmin = () => {
                                     </td>
                                     <td className="px-4 py-3 text-sm text-gray-600">
                                       {new Date(
-                                        order.created_at
+                                        order.order_date
                                       ).toLocaleString()}
                                     </td>
                                     <td className="px-4 py-3">
@@ -1231,38 +1413,44 @@ const OrderAdmin = () => {
                           </div>
                         </>
                       ) : (
-                        <div className="text-center py-8">
-                          <ShoppingCart
-                            size={48}
-                            className="mx-auto text-gray-300 mb-4"
-                          />
-                          <h3 className="text-lg font-medium text-gray-500 mb-1">
-                            No orders found
-                          </h3>
-                          <p className="text-gray-400 text-sm">
-                            {Object.values(filters).some((filter) => filter)
-                              ? "Try changing your filters"
-                              : "Create a new order to get started"}
-                          </p>
-                          {Object.values(filters).some((filter) => filter) && (
-                            <button
-                              onClick={() => {
-                                setFilters({
-                                  order_status: "",
-                                  start_date: "",
-                                  end_date: "",
-                                });
-                              }}
-                              className="mt-4 text-sm text-indigo-600 hover:text-indigo-800 font-medium flex items-center justify-center mx-auto"
-                            >
-                              <RefreshCw size={14} className="mr-1" /> Reset
-                              Filters
-                            </button>
-                          )}
+                        <div className="text-center py-20">
+                          <div className="bg-gray-50 rounded-lg p-6 max-w-md mx-auto">
+                            <ShoppingCart
+                              size={60}
+                              className="mx-auto text-gray-300 mb-4"
+                            />
+                            <h3 className="text-xl font-medium text-gray-700 mb-2">
+                              No orders found
+                            </h3>
+                            <p className="text-gray-500 mb-4">
+                              {Object.values(filters).some((filter) => filter)
+                                ? "No orders match your current filter criteria. Try adjusting your filters or clear them to see all orders."
+                                : "You haven't created any orders yet. Create your first order to get started."}
+                            </p>
+                            {Object.values(filters).some(
+                              (filter) => filter
+                            ) && (
+                              <button
+                                onClick={() => {
+                                  setFilters({
+                                    code_product: "",
+                                    order_status: "",
+                                    start_date: "",
+                                    end_date: "",
+                                  });
+                                }}
+                                className="mt-3 sm:mt-4 text-xs sm:text-sm text-indigo-600 hover:text-indigo-800 font-medium flex items-center justify-center mx-auto"
+                              >
+                                <RefreshCw size={12} className="mr-1" /> Reset
+                                Filters
+                              </button>
+                            )}
+                          </div>
                         </div>
                       )}
                     </div>
-                    {/* Pagination */}
+
+                    {/* Pagination Section */}
                     <div className="mt-4">
                       <Pagination
                         currentPage={currentPage}
@@ -1278,73 +1466,7 @@ const OrderAdmin = () => {
               </div>
             </div>
 
-            {/* Alert Toast */}
-            <AnimatePresence>
-              {alert && (
-                <motion.div
-                  initial={{ opacity: 0, y: -50 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -50 }}
-                  className={`fixed top-4 right-4 z-50 w-96 max-w-full bg-white rounded-lg shadow-lg border ${
-                    alert.type === "success"
-                      ? "border-green-500"
-                      : alert.type === "error"
-                      ? "border-red-500"
-                      : "border-yellow-500"
-                  }`}
-                >
-                  <div className="p-4">
-                    <div className="flex items-start">
-                      <div
-                        className={`flex-shrink-0 w-8 h-8 flex items-center justify-center rounded-full ${
-                          alert.type === "success"
-                            ? "bg-green-100 text-green-600"
-                            : alert.type === "error"
-                            ? "bg-red-100 text-red-600"
-                            : "bg-yellow-100 text-yellow-600"
-                        }`}
-                      >
-                        {alert.type === "success" ? (
-                          <Check size={16} />
-                        ) : (
-                          <AlertTriangle size={16} />
-                        )}
-                      </div>
-                      <div className="ml-3 w-0 flex-1">
-                        <p className="font-medium text-gray-900 text-sm">
-                          {alert.title}
-                        </p>
-                        <p className="mt-1 text-sm text-gray-500">
-                          {alert.message}
-                        </p>
-                      </div>
-                      <div className="ml-auto flex-shrink-0">
-                        <button
-                          onClick={() => setAlert(null)}
-                          className="inline-flex bg-white rounded-md p-1 text-gray-400 hover:text-gray-500 focus:outline-none"
-                        >
-                          <span className="sr-only">Close</span>
-                          <svg
-                            className="h-5 w-5"
-                            xmlns="http://www.w3.org/2000/svg"
-                            fill="none"
-                            viewBox="0 0 24 24"
-                            stroke="currentColor"
-                          >
-                            <path
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              strokeWidth="2"
-                              d="M6 18L18 6M6 6l12 12"
-                            />
-                          </svg>
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                </motion.div>
-              )}
-            </AnimatePresence>
+            {/* Alert and Success modals are now rendered at the bottom of the component */}
 
             {/* Delete Confirmation Modal */}
             <AnimatePresence>
@@ -1847,6 +1969,51 @@ const OrderAdmin = () => {
                       >
                         <Plus size={18} className="mr-2" /> Add Another Product
                       </button>
+
+                      {/* Order Date Selection */}
+                      <div className="bg-blue-50 p-5 rounded-xl border border-blue-100 mb-4">
+                        <h3 className="text-lg font-semibold text-blue-800 mb-4 flex items-center">
+                          <Calendar size={20} className="mr-2" /> Order Date &
+                          Time
+                        </h3>
+                        <div className="flex flex-col space-y-3">
+                          <label
+                            htmlFor="order_date"
+                            className="text-sm text-gray-600"
+                          >
+                            Select Order Date:
+                          </label>
+                          <input
+                            type="date"
+                            id="order_date"
+                            name="order_date"
+                            value={orderForm.order_date}
+                            onChange={handleOrderDateChange}
+                            className="border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                          />
+                          <div className="flex items-center space-x-2 mt-2">
+                            <input
+                              type="checkbox"
+                              id="use_current_time"
+                              checked={true}
+                              readOnly
+                              className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500 focus:ring-2"
+                            />
+                            <label
+                              htmlFor="use_current_time"
+                              className="text-sm text-gray-700"
+                            >
+                              Use current time when creating order
+                            </label>
+                          </div>
+                          <p className="text-xs text-gray-500">
+                            Order date can be modified if needed. Time will be
+                            automatically set to current time when the order is
+                            created.
+                          </p>
+                        </div>
+                      </div>
+
                       <div className="bg-indigo-50 p-5 rounded-xl border border-indigo-100">
                         <h3 className="text-lg font-semibold text-indigo-800 mb-4 flex items-center">
                           <DollarSign size={20} className="mr-2" /> Order
@@ -1899,11 +2066,11 @@ const OrderAdmin = () => {
                     initial={{ scale: 0.9 }}
                     animate={{ scale: 1 }}
                     exit={{ scale: 0.9 }}
-                    className="bg-white rounded-lg p-6 max-w-2xl w-full"
+                    className="bg-white rounded-lg p-6 max-w-4xl w-full max-h-[90vh] overflow-hidden flex flex-col"
                   >
                     <div className="flex justify-between items-center mb-6">
                       <h3 className="text-xl font-bold">
-                        Set Product Expiration Dates
+                        Receive Order & Set Product Details
                       </h3>
                       <button
                         onClick={() => setShowExpDateModal(false)}
@@ -1913,68 +2080,307 @@ const OrderAdmin = () => {
                       </button>
                     </div>
 
-                    <div className="space-y-4 max-h-[60vh] overflow-y-auto">
-                      {orderDetails.map((detail) => (
-                        <div
-                          key={detail.order_detail_id}
-                          className="p-4 border rounded-lg bg-gray-50"
-                        >
-                          <div className="flex items-center justify-between mb-3">
-                            <h4 className="font-medium">
-                              {detail.product_name}
-                            </h4>
-                            <span className="text-sm text-gray-500">
-                              Quantity: {detail.quantity}
-                            </span>
-                          </div>
+                    <div className="flex-1 overflow-y-auto">
+                      <div className="space-y-4 pr-2">
+                        {orderDetails.map((detail) => (
+                          <div
+                            key={detail.order_detail_id}
+                            className="p-4 border rounded-lg bg-gray-50 shadow-sm"
+                          >
+                            <div className="flex items-center justify-between mb-3">
+                              <h4 className="font-semibold text-lg text-gray-800">
+                                {detail.product_name}
+                              </h4>
+                              <div className="text-sm text-gray-600 bg-white px-3 py-2 rounded-lg">
+                                <div className="font-medium">
+                                  Ordered: {detail.quantity} pcs @{" "}
+                                  {formatPrice(detail.ordered_price)}
+                                </div>
+                                <div className="text-xs text-gray-500 mt-1">
+                                  Subtotal:{" "}
+                                  {formatPrice(
+                                    detail.quantity * detail.ordered_price
+                                  )}
+                                </div>
+                              </div>
+                            </div>
 
-                          <div className="flex items-center gap-4">
-                            <label className="flex items-center space-x-2">
-                              <input
-                                type="checkbox"
-                                checked={
-                                  expDateInputs[detail.order_detail_id]
-                                    ?.hasExpDate
-                                }
-                                onChange={(e) => {
-                                  setExpDateInputs((prev) => ({
-                                    ...prev,
-                                    [detail.order_detail_id]: {
-                                      ...prev[detail.order_detail_id],
-                                      hasExpDate: e.target.checked,
-                                    },
-                                  }));
-                                }}
-                                className="rounded border-gray-300 text-indigo-600 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50"
-                              />
-                              <span className="text-sm text-gray-700">
-                                Has expiration date
-                              </span>
-                            </label>
+                            {/* Grid layout for all options */}
+                            <div className="space-y-4">
+                              {/* Expiration Date Section */}
+                              <div className="bg-white p-4 rounded-lg border-2 shadow-sm">
+                                <div className="flex items-center space-x-3 mb-3">
+                                  <input
+                                    type="checkbox"
+                                    id={`exp-${detail.order_detail_id}`}
+                                    checked={
+                                      expDateInputs[detail.order_detail_id]
+                                        ?.hasExpDate
+                                    }
+                                    onChange={(e) => {
+                                      setExpDateInputs((prev) => ({
+                                        ...prev,
+                                        [detail.order_detail_id]: {
+                                          ...prev[detail.order_detail_id],
+                                          hasExpDate: e.target.checked,
+                                        },
+                                      }));
+                                    }}
+                                    className="w-4 h-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                                  />
+                                  <label
+                                    htmlFor={`exp-${detail.order_detail_id}`}
+                                    className="text-sm font-medium text-gray-700 cursor-pointer"
+                                  >
+                                    Has expiration date
+                                  </label>
+                                </div>
 
-                            {expDateInputs[detail.order_detail_id]
-                              ?.hasExpDate && (
-                              <input
-                                type="date"
-                                value={
-                                  expDateInputs[detail.order_detail_id]
-                                    ?.expDate || ""
-                                }
-                                onChange={(e) => {
-                                  setExpDateInputs((prev) => ({
-                                    ...prev,
-                                    [detail.order_detail_id]: {
-                                      ...prev[detail.order_detail_id],
-                                      expDate: e.target.value,
-                                    },
-                                  }));
-                                }}
-                                className="flex-1 rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
-                              />
+                                {expDateInputs[detail.order_detail_id]
+                                  ?.hasExpDate && (
+                                  <div className="ml-7">
+                                    <label
+                                      htmlFor={`exp-date-${detail.order_detail_id}`}
+                                      className="block text-xs font-medium text-gray-700 mb-1"
+                                    >
+                                      Expiration Date:
+                                    </label>
+                                    <input
+                                      id={`exp-date-${detail.order_detail_id}`}
+                                      type="date"
+                                      value={
+                                        expDateInputs[detail.order_detail_id]
+                                          ?.expDate || ""
+                                      }
+                                      onChange={(e) => {
+                                        setExpDateInputs((prev) => ({
+                                          ...prev,
+                                          [detail.order_detail_id]: {
+                                            ...prev[detail.order_detail_id],
+                                            expDate: e.target.value,
+                                          },
+                                        }));
+                                      }}
+                                      className="w-full max-w-xs p-2 rounded-lg border-2 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-sm"
+                                    />
+                                  </div>
+                                )}
+                              </div>
+
+                              {/* Quantity Adjustment Section */}
+                              <div className="bg-white p-4 rounded-lg border-2  shadow-sm">
+                                <div className="flex items-center space-x-3 mb-3">
+                                  <input
+                                    type="checkbox"
+                                    id={`qty-${detail.order_detail_id}`}
+                                    checked={
+                                      expDateInputs[detail.order_detail_id]
+                                        ?.adjustQuantity
+                                    }
+                                    onChange={(e) => {
+                                      setExpDateInputs((prev) => ({
+                                        ...prev,
+                                        [detail.order_detail_id]: {
+                                          ...prev[detail.order_detail_id],
+                                          adjustQuantity: e.target.checked,
+                                        },
+                                      }));
+                                    }}
+                                    className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                                  />
+                                  <label
+                                    htmlFor={`qty-${detail.order_detail_id}`}
+                                    className="text-sm font-medium text-gray-700 cursor-pointer"
+                                  >
+                                    Adjust quantity
+                                  </label>
+                                </div>
+
+                                {expDateInputs[detail.order_detail_id]
+                                  ?.adjustQuantity && (
+                                  <div className="ml-7">
+                                    <label
+                                      htmlFor={`qty-input-${detail.order_detail_id}`}
+                                      className="block text-xs font-medium text-gray-700 mb-1"
+                                    >
+                                      Actual received quantity:
+                                    </label>
+                                    <div className="relative max-w-xs">
+                                      <input
+                                        id={`qty-input-${detail.order_detail_id}`}
+                                        type="number"
+                                        min="0"
+                                        value={
+                                          expDateInputs[detail.order_detail_id]
+                                            ?.actualQuantity || ""
+                                        }
+                                        onChange={(e) => {
+                                          setExpDateInputs((prev) => ({
+                                            ...prev,
+                                            [detail.order_detail_id]: {
+                                              ...prev[detail.order_detail_id],
+                                              actualQuantity:
+                                                parseInt(e.target.value) || 0,
+                                            },
+                                          }));
+                                        }}
+                                        placeholder="Enter quantity"
+                                        className="w-full p-2 pr-10 rounded-lg border-2 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm"
+                                      />
+                                      <span className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-500 text-xs">
+                                        pcs
+                                      </span>
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+
+                              {/* Price Adjustment Section */}
+                              <div className="bg-white p-4 rounded-lg border-2 shadow-sm">
+                                <div className="flex items-center space-x-3 mb-3">
+                                  <input
+                                    type="checkbox"
+                                    id={`price-${detail.order_detail_id}`}
+                                    checked={
+                                      expDateInputs[detail.order_detail_id]
+                                        ?.adjustPrice
+                                    }
+                                    onChange={(e) => {
+                                      setExpDateInputs((prev) => ({
+                                        ...prev,
+                                        [detail.order_detail_id]: {
+                                          ...prev[detail.order_detail_id],
+                                          adjustPrice: e.target.checked,
+                                        },
+                                      }));
+                                    }}
+                                    className="w-4 h-4 rounded border-gray-300 text-green-600 focus:ring-green-500"
+                                  />
+                                  <label
+                                    htmlFor={`price-${detail.order_detail_id}`}
+                                    className="text-sm font-medium text-gray-700 cursor-pointer"
+                                  >
+                                    Adjust price
+                                  </label>
+                                </div>
+
+                                {expDateInputs[detail.order_detail_id]
+                                  ?.adjustPrice && (
+                                  <div className="ml-7">
+                                    <label
+                                      htmlFor={`price-input-${detail.order_detail_id}`}
+                                      className="block text-xs font-medium text-gray-700 mb-1"
+                                    >
+                                      Actual purchase price:
+                                    </label>
+                                    <div className="relative max-w-xs">
+                                      <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-500 font-medium text-xs">
+                                        Rp
+                                      </span>
+                                      <input
+                                        id={`price-input-${detail.order_detail_id}`}
+                                        type="text"
+                                        value={
+                                          expDateInputs[detail.order_detail_id]
+                                            ?.actualPrice
+                                            ? Number(
+                                                expDateInputs[
+                                                  detail.order_detail_id
+                                                ]?.actualPrice
+                                              ).toLocaleString("id-ID")
+                                            : ""
+                                        }
+                                        onChange={(e) => {
+                                          const value = e.target.value.replace(
+                                            /[^\d]/g,
+                                            ""
+                                          );
+                                          setExpDateInputs((prev) => ({
+                                            ...prev,
+                                            [detail.order_detail_id]: {
+                                              ...prev[detail.order_detail_id],
+                                              actualPrice: value
+                                                ? parseInt(value)
+                                                : 0,
+                                            },
+                                          }));
+                                        }}
+                                        placeholder="0"
+                                        className="w-full p-2 pl-8 rounded-lg border-2 r shadow-sm focus:border-green-500 focus:ring-green-500 text-sm"
+                                      />
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+
+                            {/* Show summary if adjustments are made */}
+                            {(expDateInputs[detail.order_detail_id]
+                              ?.adjustQuantity ||
+                              expDateInputs[detail.order_detail_id]
+                                ?.adjustPrice) && (
+                              <div className="mt-4 p-4 bg-blue-50 rounded-lg border border-blue-200">
+                                <h5 className="font-medium text-blue-900 mb-2">
+                                  Adjustment Summary:
+                                </h5>
+                                <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-sm">
+                                  <div>
+                                    <span className="text-gray-600">
+                                      Quantity:
+                                    </span>
+                                    <div className="font-medium">
+                                      {detail.quantity} →{" "}
+                                      {expDateInputs[detail.order_detail_id]
+                                        ?.adjustQuantity
+                                        ? expDateInputs[detail.order_detail_id]
+                                            ?.actualQuantity
+                                        : detail.quantity}{" "}
+                                      pcs
+                                    </div>
+                                  </div>
+                                  <div>
+                                    <span className="text-gray-600">
+                                      Unit Price:
+                                    </span>
+                                    <div className="font-medium">
+                                      {formatPrice(detail.ordered_price)} →{" "}
+                                      {expDateInputs[detail.order_detail_id]
+                                        ?.adjustPrice
+                                        ? formatPrice(
+                                            expDateInputs[
+                                              detail.order_detail_id
+                                            ]?.actualPrice
+                                          )
+                                        : formatPrice(detail.ordered_price)}
+                                    </div>
+                                  </div>
+                                  <div>
+                                    <span className="text-gray-600">
+                                      New Subtotal:
+                                    </span>
+                                    <div className="font-bold text-blue-700">
+                                      {formatPrice(
+                                        (expDateInputs[detail.order_detail_id]
+                                          ?.adjustQuantity
+                                          ? expDateInputs[
+                                              detail.order_detail_id
+                                            ]?.actualQuantity
+                                          : detail.quantity) *
+                                          (expDateInputs[detail.order_detail_id]
+                                            ?.adjustPrice
+                                            ? expDateInputs[
+                                                detail.order_detail_id
+                                              ]?.actualPrice
+                                            : detail.ordered_price)
+                                      )}
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
                             )}
                           </div>
-                        </div>
-                      ))}
+                        ))}
+                      </div>
                     </div>
 
                     <div className="mt-6 flex justify-end space-x-3">
@@ -1997,6 +2403,20 @@ const OrderAdmin = () => {
             </AnimatePresence>
           </div>
         )}
+
+        {/* Success Modal */}
+        <SuccessModal
+          isOpen={showSuccessModal}
+          onClose={() => setShowSuccessModal(false)}
+          message={statusModalMessage}
+        />
+
+        {/* Error Modal */}
+        <AlertModal
+          isOpen={showErrorModal}
+          onClose={() => setShowErrorModal(false)}
+          message={statusModalMessage}
+        />
 
         <OrderCharts
           orderStats={orderStats}

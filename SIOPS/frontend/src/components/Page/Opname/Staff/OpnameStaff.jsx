@@ -5,7 +5,9 @@ import {
   Calendar,
   ChevronDown,
   ChevronRight,
+  Eye,
 } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 import api from "../../../../service/api";
 import BatchStatus from "../../BatchStatus";
 import AlertModal from "../../../modal/AlertModal";
@@ -50,6 +52,7 @@ const StatusBadge = ({ status }) => {
 };
 
 const ProductOpname = ({ setError, setSuccess, fetchData }) => {
+  const navigate = useNavigate();
   const [tasks, setTasks] = useState({});
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
@@ -63,6 +66,9 @@ const ProductOpname = ({ setError, setSuccess, fetchData }) => {
   const [groupPagination, setGroupPagination] = useState({});
   const itemsPerPage = 10;
   const [currentPage, setCurrentPage] = useState(1);
+  // State for overdue confirmation modal
+  const [showOverdueModal, setShowOverdueModal] = useState(false);
+  const [pendingOpnameData, setPendingOpnameData] = useState(null);
 
   const fetchTasks = useCallback(async () => {
     setLoading(true);
@@ -85,28 +91,38 @@ const ProductOpname = ({ setError, setSuccess, fetchData }) => {
         const scheduleDate =
           task.scheduled_date || task.created_at.split("T")[0];
         const product = task.batch_stock.product;
-        const category = product.category || "Uncategorized";
-        const groupKey = `${scheduleDate}-${category}`;
+        // Get category name for individual product tracking
+        const categoryName =
+          product.category?.name_categories ||
+          product.code_categories ||
+          "Uncategorized";
 
         if (!dateGroups[scheduleDate]) {
           dateGroups[scheduleDate] = [];
         }
 
-        let categoryGroup = dateGroups[scheduleDate].find(
-          (group) => group.category === category
+        // Create single group per date (combine all categories)
+        let combinedGroup = dateGroups[scheduleDate].find(
+          (group) => group.category === "All Categories"
         );
-        if (!categoryGroup) {
-          categoryGroup = {
-            id: groupKey,
+        if (!combinedGroup) {
+          combinedGroup = {
+            id: `${scheduleDate}-all`,
             scheduleDate,
-            category,
+            category: "All Categories",
             products: [],
+            categoryBreakdown: {}, // Track products per category for display
           };
-          dateGroups[scheduleDate].push(categoryGroup);
-          pagination[groupKey] = { currentPage: 1 };
+          dateGroups[scheduleDate].push(combinedGroup);
+          pagination[`${scheduleDate}-all`] = { currentPage: 1 };
         }
 
-        categoryGroup.products.push({
+        // Add category to breakdown if not exists
+        if (!combinedGroup.categoryBreakdown[categoryName]) {
+          combinedGroup.categoryBreakdown[categoryName] = [];
+        }
+
+        const productData = {
           opname_id: task.opname_id,
           product_code: product.code_product,
           product_name: product.name_product,
@@ -114,16 +130,49 @@ const ProductOpname = ({ setError, setSuccess, fetchData }) => {
           stock_quantity: task.batch_stock.stock_quantity || 0,
           expired_date: task.batch_stock.exp_date,
           status: task.status || "scheduled",
-          edit_requested: task.edit_requested || false,
-          edit_request_reason: task.edit_request_reason,
           created_at: task.created_at,
-        });
+          notes: task.notes || "",
+          // Detect edit request status from both flag and notes content
+          edit_requested:
+            task.edit_requested ||
+            (task.notes && task.notes.includes("[REQUEST EDIT]")),
+          physical_stock: task.physical_stock,
+          expired_stock: task.expired_stock,
+          damaged_stock: task.damaged_stock,
+          categoryName: categoryName, // Store individual category
+        };
+
+        combinedGroup.products.push(productData);
+        combinedGroup.categoryBreakdown[categoryName].push(productData);
       });
 
       Object.keys(dateGroups).forEach((date) => {
         dateGroups[date].forEach((group) => {
           group.products.sort((a, b) => {
-            // Definisi urutan status: scheduled -> submitted -> adjusted
+            // Prioritas utama: urutan berdasarkan kategori (AIR dulu, lalu ALCOHOL)
+            const categoryA = a.categoryName;
+            const categoryB = b.categoryName;
+
+            if (categoryA !== categoryB) {
+              // Definisi urutan kategori
+              const categoryOrder = {
+                AIR: 1,
+                ALCOHOL: 2,
+                // Tambahkan kategori lain jika diperlukan, atau gunakan string comparison
+              };
+
+              const orderA = categoryOrder[categoryA] || 999;
+              const orderB = categoryOrder[categoryB] || 999;
+
+              if (orderA !== orderB) {
+                return orderA - orderB;
+              }
+
+              // Jika tidak ada di categoryOrder, urutkan secara alphabetical
+              return categoryA.localeCompare(categoryB);
+            }
+
+            // Prioritas kedua: urutan status dalam kategori yang sama
             const statusOrder = {
               scheduled: 1,
               submitted: 2,
@@ -134,12 +183,12 @@ const ProductOpname = ({ setError, setSuccess, fetchData }) => {
             const statusA = statusOrder[a.status] || 999;
             const statusB = statusOrder[b.status] || 999;
 
-            // Urutkan berdasarkan status terlebih dahulu
+            // Urutkan berdasarkan status
             if (statusA !== statusB) {
               return statusA - statusB;
             }
 
-            // Jika status sama, urutkan berdasarkan kode produk
+            // Prioritas ketiga: jika kategori dan status sama, urutkan berdasarkan kode produk
             const codeA = parseInt(a.product_code) || 0;
             const codeB = parseInt(b.product_code) || 0;
             return codeA - codeB;
@@ -182,6 +231,36 @@ const ProductOpname = ({ setError, setSuccess, fetchData }) => {
 
   const getGroupTotalPages = (group) => {
     return Math.ceil(group.products.length / itemsPerPage);
+  };
+
+  // Function to get current active category based on pagination
+  const getCurrentActiveCategory = (group) => {
+    const currentPage = getGroupCurrentPage(group.id);
+    const startIndex = (currentPage - 1) * itemsPerPage;
+    const currentProducts = group.products.slice(
+      startIndex,
+      startIndex + itemsPerPage
+    );
+
+    // Get the first product's category in the current page
+    if (currentProducts.length > 0) {
+      return currentProducts[0].categoryName;
+    }
+
+    return "All Categories";
+  };
+
+  // Function to get category summary for display
+  const getCategorySummary = (group) => {
+    const categories = Object.keys(group.categoryBreakdown || {});
+    const totalProducts = group.products.length;
+
+    return {
+      categories: categories,
+      totalCategories: categories.length,
+      totalProducts: totalProducts,
+      categoryBreakdown: group.categoryBreakdown,
+    };
   };
 
   // Filtered groups with search and pagination
@@ -246,8 +325,64 @@ const ProductOpname = ({ setError, setSuccess, fetchData }) => {
     });
   };
 
+  // Helper function to check if schedule date is overdue
+  const isScheduleOverdue = (scheduleDate) => {
+    if (!scheduleDate) return false;
+    const today = new Date();
+    const scheduled = new Date(scheduleDate);
+    today.setHours(0, 0, 0, 0);
+    scheduled.setHours(0, 0, 0, 0);
+    return scheduled < today;
+  };
+
+  // Helper function to get overdue days
+  const getOverdueDays = (scheduleDate) => {
+    if (!scheduleDate) return 0;
+    const today = new Date();
+    const scheduled = new Date(scheduleDate);
+    today.setHours(0, 0, 0, 0);
+    scheduled.setHours(0, 0, 0, 0);
+    const diffTime = today - scheduled;
+    return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+  };
+
   const getTotalProducts = (tasks) => {
     return tasks.reduce((total, task) => total + task.products.length, 0);
+  };
+
+  // Function to handle overdue confirmation
+  const handleOverdueConfirmation = (product, task) => {
+    const scheduleDate = task.scheduleDate;
+    const overdueDays = getOverdueDays(scheduleDate);
+
+    setPendingOpnameData({
+      product,
+      task,
+      scheduleDate,
+      overdueDays,
+      confirmMessage: `This opname schedule is ${overdueDays} day(s) overdue (scheduled for ${formatDate(
+        scheduleDate
+      )}). Are you sure you want to proceed?`,
+    });
+    setShowOverdueModal(true);
+  };
+
+  const confirmOverdueOpname = () => {
+    if (pendingOpnameData) {
+      setSelectedProduct({
+        ...pendingOpnameData.product,
+        batches: pendingOpnameData.task.products.filter(
+          (p) => p.product_code === pendingOpnameData.product.product_code
+        ),
+      });
+    }
+    setShowOverdueModal(false);
+    setPendingOpnameData(null);
+  };
+
+  const cancelOverdueOpname = () => {
+    setShowOverdueModal(false);
+    setPendingOpnameData(null);
   };
 
   const handleSubmit = async (e) => {
@@ -264,7 +399,9 @@ const ProductOpname = ({ setError, setSuccess, fetchData }) => {
         throw new Error("Stok fisik harus berupa angka positif");
       }
 
-      if (expired + damaged > physical) {
+      // Only validate that expired+damaged <= physical if physical is not zero
+      // This allows for all-expired cases where physical=0 but expired+damaged>0
+      if (expired + damaged > physical && physical > 0) {
         throw new Error(
           "Total stok kadaluarsa dan rusak tidak boleh melebihi stok fisik"
         );
@@ -303,10 +440,26 @@ const ProductOpname = ({ setError, setSuccess, fetchData }) => {
         }
 
         if (remainingPhysical > 0) {
-          const physicalForBatch = Math.min(
-            remainingPhysical,
-            batch.stock_quantity
+          // Don't limit physical stock to system stock (batch.stock_quantity)
+          // Instead, distribute proportionally based on the total system stock
+          let physicalForBatch;
+          const totalSystemStock = selectedProduct.batches.reduce(
+            (total, b) => total + b.stock_quantity,
+            0
           );
+
+          if (selectedProduct.batches.length === 1) {
+            // If there's only one batch, assign all remaining physical stock to it
+            physicalForBatch = remainingPhysical;
+          } else {
+            // For multiple batches, distribute proportionally
+            const systemRatio = batch.stock_quantity / totalSystemStock;
+            physicalForBatch = Math.min(
+              remainingPhysical,
+              Math.round(physical * systemRatio)
+            );
+          }
+
           batchUpdate.physical_stock = physicalForBatch;
           remainingPhysical -= physicalForBatch;
         }
@@ -354,34 +507,61 @@ const ProductOpname = ({ setError, setSuccess, fetchData }) => {
   // Function untuk request edit
   const requestEdit = async (product) => {
     try {
-      await api.post(`/opname/request-edit`, {
+      const response = await api.post(`/opname/request-edit`, {
         opname_id: product.opname_id,
         reason: "Staff requesting permission to edit submitted opname",
       });
+
+      // Update the product status in the UI immediately
+      if (response.data && response.data.status === "edit_requested") {
+        // Mark this product as having an edit request
+        product.edit_requested = true;
+
+        // Force a re-render of the component by updating the tasks state
+        setTasks((prevTasks) => {
+          return { ...prevTasks };
+        });
+      }
+
       setSuccess("Edit request sent to admin for approval");
+      // Fetch the latest data to reflect changes
       fetchTasks();
     } catch (err) {
       console.error("Error requesting edit:", err);
-      setError(err.response?.data?.error || "Failed to request edit");
+      if (err.response?.data?.status === "edit_requested") {
+        setError("This item already has a pending edit request");
+      } else {
+        setError(err.response?.data?.error || "Failed to request edit");
+      }
     }
   };
 
   // Function untuk render tombol aksi berdasarkan status
   const renderActionButton = (product, task) => {
-    const commonProps = {
-      onClick: () =>
+    // Get schedule date for this product
+    const scheduleDate = task.scheduleDate;
+    const isOverdue = isScheduleOverdue(scheduleDate);
+
+    const handleStartOpname = () => {
+      if (isOverdue) {
+        handleOverdueConfirmation(product, task);
+      } else {
         setSelectedProduct({
           ...product,
           batches: task.products.filter(
             (p) => p.product_code === product.product_code
           ),
-        }),
+        });
+      }
     };
 
     // Jika ada edit request yang pending, tampilkan status khusus
-    if (product.edit_requested) {
+    if (
+      product.edit_requested ||
+      (product.notes && product.notes.includes("[REQUEST EDIT]"))
+    ) {
       return (
-        <div className="w-full bg-purple-100 text-purple-700 px-3 py-2 rounded text-sm font-medium text-center">
+        <div className="w-full bg-white border border-gray-200 text-gray-500 px-3 py-2 rounded text-sm font-medium text-center cursor-not-allowed">
           Edit Request Pending
         </div>
       );
@@ -391,13 +571,17 @@ const ProductOpname = ({ setError, setSuccess, fetchData }) => {
       case "scheduled":
         return (
           <button
-            {...commonProps}
-            className="w-full bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-2 rounded text-sm font-medium transition-colors"
+            onClick={handleStartOpname}
+            className={`w-full px-3 py-2 rounded text-sm font-medium transition-colors ${
+              isOverdue
+                ? "bg-orange-600 hover:bg-orange-700 text-white border border-orange-700"
+                : "bg-indigo-600 hover:bg-indigo-700 text-white"
+            }`}
           >
-            Start Opname
+            {isOverdue ? "Start Overdue Opname" : "Start Opname"}
           </button>
         );
-      
+
       case "submitted":
         return (
           <button
@@ -407,18 +591,22 @@ const ProductOpname = ({ setError, setSuccess, fetchData }) => {
             Request Edit
           </button>
         );
-      
+
       case "adjusted":
         return (
-          <div className="w-full bg-gray-100 text-gray-500 px-3 py-2 rounded text-sm font-medium text-center">
-            Completed
-          </div>
+          <button
+            onClick={() => navigate(`/opname-detail/${product.opname_id}`)}
+            className="w-full bg-indigo-50 hover:bg-indigo-100 text-indigo-600 px-3 py-2 rounded text-sm font-medium flex items-center justify-center transition-colors"
+          >
+            <Eye size={14} className="mr-1.5" />
+            View Details
+          </button>
         );
-      
+
       default:
         return (
           <button
-            {...commonProps}
+            onClick={() => navigate(`/opname-detail/${product.opname_id}`)}
             className="w-full bg-gray-600 hover:bg-gray-700 text-white px-3 py-2 rounded text-sm font-medium transition-colors"
           >
             View Details
@@ -429,20 +617,30 @@ const ProductOpname = ({ setError, setSuccess, fetchData }) => {
 
   // Function untuk render tombol aksi desktop
   const renderActionButtonDesktop = (product, task) => {
-    const commonProps = {
-      onClick: () =>
+    // Get schedule date for this product
+    const scheduleDate = task.scheduleDate;
+    const isOverdue = isScheduleOverdue(scheduleDate);
+
+    const handleStartOpname = () => {
+      if (isOverdue) {
+        handleOverdueConfirmation(product, task);
+      } else {
         setSelectedProduct({
           ...product,
           batches: task.products.filter(
             (p) => p.product_code === product.product_code
           ),
-        }),
+        });
+      }
     };
 
     // Jika ada edit request yang pending, tampilkan status khusus
-    if (product.edit_requested) {
+    if (
+      product.edit_requested ||
+      (product.notes && product.notes.includes("[REQUEST EDIT]"))
+    ) {
       return (
-        <span className="bg-purple-100 text-purple-700 px-4 py-2 rounded-md text-sm font-medium">
+        <span className="bg-white border border-gray-200 text-gray-500 px-4 py-2 rounded-md text-sm font-medium cursor-not-allowed">
           Edit Request Pending
         </span>
       );
@@ -452,13 +650,17 @@ const ProductOpname = ({ setError, setSuccess, fetchData }) => {
       case "scheduled":
         return (
           <button
-            {...commonProps}
-            className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-md text-sm font-medium transition-colors"
+            onClick={handleStartOpname}
+            className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+              isOverdue
+                ? "bg-orange-600 hover:bg-orange-700 text-white border border-orange-700"
+                : "bg-indigo-600 hover:bg-indigo-700 text-white"
+            }`}
           >
-            Start Opname
+            {isOverdue ? "Start Overdue Opname" : "Start Opname"}
           </button>
         );
-      
+
       case "submitted":
         return (
           <button
@@ -468,18 +670,22 @@ const ProductOpname = ({ setError, setSuccess, fetchData }) => {
             Request Edit
           </button>
         );
-      
+
       case "adjusted":
         return (
-          <span className="bg-gray-100 text-gray-500 px-4 py-2 rounded-md text-sm font-medium">
-            Completed
-          </span>
+          <button
+            onClick={() => navigate(`/opname-detail/${product.opname_id}`)}
+            className="bg-indigo-50 hover:bg-indigo-100 text-indigo-600 px-4 py-2 rounded-md text-sm font-medium flex items-center justify-center transition-colors"
+          >
+            <Eye size={14} className="mr-1.5" />
+            View Details
+          </button>
         );
-      
+
       default:
         return (
           <button
-            {...commonProps}
+            onClick={() => navigate(`/opname-detail/${product.opname_id}`)}
             className="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded-md text-sm font-medium transition-colors"
           >
             View Details
@@ -551,12 +757,24 @@ const ProductOpname = ({ setError, setSuccess, fetchData }) => {
                       </div>
                     </div>
                     <div className="flex-1 min-w-0">
-                      <h3 className="font-semibold text-gray-900 text-sm">
-                        {formatDate(dateKey)}
-                      </h3>
+                      <div className="flex items-center space-x-2">
+                        <h3 className="font-semibold text-gray-900 text-sm">
+                          {formatDate(dateKey)}
+                        </h3>
+                        {isScheduleOverdue(dateKey) && (
+                          <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
+                            {getOverdueDays(dateKey)} days overdue
+                          </span>
+                        )}
+                      </div>
                       <p className="text-xs text-gray-500 mt-0.5">
                         {filteredTasks[dateKey].length} categories •{" "}
                         {getTotalProducts(filteredTasks[dateKey])} products
+                        {isScheduleOverdue(dateKey) && (
+                          <span className="text-red-500 ml-1">
+                            • Schedule Overdue
+                          </span>
+                        )}
                       </p>
                     </div>
                   </div>
@@ -596,11 +814,19 @@ const ProductOpname = ({ setError, setSuccess, fetchData }) => {
                             </div>
                             <div className="flex-1 min-w-0">
                               <h4 className="font-semibold text-gray-900 text-sm truncate">
-                                {task.category}
+                                {getCurrentActiveCategory(task)}
                               </h4>
                               <div className="flex items-center space-x-2 mt-1">
                                 <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                                  {task.products.length} items
+                                  {task.products.length} total items
+                                </span>
+                                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                                  {getCategorySummary(task).totalCategories}{" "}
+                                  categories
+                                </span>
+                                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-800">
+                                  Page {getGroupCurrentPage(task.id)}/
+                                  {getGroupTotalPages(task)}
                                 </span>
                                 {/* Status distribution indicators */}
                                 {(() => {
@@ -668,10 +894,15 @@ const ProductOpname = ({ setError, setSuccess, fetchData }) => {
                                       <StatusBadge status={product.status} />
                                     </div>
                                     <div className="space-y-1 text-xs text-gray-600">
-                                      <div className="flex space-x-2">
-                                        <span>Code:</span>
-                                        <span className="font-mono">
-                                          {product.product_code}
+                                      <div className="flex justify-between items-center">
+                                        <div className="flex space-x-2">
+                                          <span>Code:</span>
+                                          <span className="font-mono">
+                                            {product.product_code}
+                                          </span>
+                                        </div>
+                                        <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-700">
+                                          {product.categoryName}
                                         </span>
                                       </div>
                                       <div className="flex justify-between">
@@ -873,12 +1104,24 @@ const ProductOpname = ({ setError, setSuccess, fetchData }) => {
                       <div className="flex items-center space-x-3">
                         <Calendar className="w-5 h-5 text-indigo-600" />
                         <div>
-                          <h3 className="text-lg font-semibold text-gray-900">
-                            Schedule: {formatDate(dateKey)}
-                          </h3>
+                          <div className="flex items-center space-x-2">
+                            <h3 className="text-lg font-semibold text-gray-900">
+                              Schedule: {formatDate(dateKey)}
+                            </h3>
+                            {isScheduleOverdue(dateKey) && (
+                              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
+                                {getOverdueDays(dateKey)} days overdue
+                              </span>
+                            )}
+                          </div>
                           <p className="text-sm text-gray-600">
                             {filteredTasks[dateKey].length} categories,{" "}
                             {getTotalProducts(filteredTasks[dateKey])} products
+                            {isScheduleOverdue(dateKey) && (
+                              <span className="text-red-500 ml-1">
+                                • Schedule Overdue
+                              </span>
+                            )}
                           </p>
                         </div>
                       </div>
@@ -909,12 +1152,20 @@ const ProductOpname = ({ setError, setSuccess, fetchData }) => {
                               )}
                               <div>
                                 <h4 className="font-semibold text-gray-900">
-                                  {task.category}
+                                  {getCurrentActiveCategory(task)}
                                 </h4>
                                 <div className="flex items-center space-x-2">
                                   <p className="text-sm text-gray-500">
-                                    {task.products.length} products
+                                    {task.products.length} total products
                                   </p>
+                                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                                    {getCategorySummary(task).totalCategories}{" "}
+                                    categories
+                                  </span>
+                                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-800">
+                                    Page {getGroupCurrentPage(task.id)}/
+                                    {getGroupTotalPages(task)}
+                                  </span>
                                   {/* Status distribution indicators */}
                                   {(() => {
                                     const statusCounts = task.products.reduce(
@@ -991,10 +1242,15 @@ const ProductOpname = ({ setError, setSuccess, fetchData }) => {
                                             {product.product_name}
                                           </div>
                                           <div className="text-sm text-gray-500">
-                                            <p className="text-xs text-gray-500">
-                                              Created:{" "}
-                                              {formatDate(product.created_at)}
-                                            </p>
+                                            <div className="flex items-center justify-between">
+                                              <p className="text-xs text-gray-500">
+                                                Created:{" "}
+                                                {formatDate(product.created_at)}
+                                              </p>
+                                              <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-700">
+                                                {product.categoryName}
+                                              </span>
+                                            </div>
                                           </div>
                                         </td>
                                         <td className="px-4 py-4 whitespace-nowrap">
@@ -1231,6 +1487,78 @@ const ProductOpname = ({ setError, setSuccess, fetchData }) => {
                   </button>
                 </div>
               </form>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Overdue Confirmation Modal */}
+      {showOverdueModal && pendingOpnameData && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-xl max-w-md w-full">
+            <div className="p-6">
+              <div className="flex items-center mb-4">
+                <div className="flex-shrink-0">
+                  <div className="w-10 h-10 bg-orange-100 rounded-full flex items-center justify-center">
+                    <svg
+                      className="w-6 h-6 text-orange-600"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth="2"
+                        d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.732-.833-2.5 0L4.732 15.5c-.77.833.192 2.5 1.732 2.5z"
+                      />
+                    </svg>
+                  </div>
+                </div>
+                <div className="ml-4">
+                  <h3 className="text-lg font-medium text-gray-900">
+                    Schedule Overdue
+                  </h3>
+                  <p className="text-sm text-gray-500">
+                    This opname is past its scheduled date
+                  </p>
+                </div>
+              </div>
+
+              <div className="mb-6">
+                <p className="text-sm text-gray-700">
+                  {pendingOpnameData.confirmMessage}
+                </p>
+                <div className="mt-3 p-3 bg-gray-50 rounded-lg">
+                  <p className="text-xs text-gray-600">
+                    <strong>Product:</strong>{" "}
+                    {pendingOpnameData.product.product_name}
+                  </p>
+                  <p className="text-xs text-gray-600">
+                    <strong>Scheduled Date:</strong>{" "}
+                    {formatDate(pendingOpnameData.scheduleDate)}
+                  </p>
+                  <p className="text-xs text-gray-600">
+                    <strong>Days Overdue:</strong>{" "}
+                    {pendingOpnameData.overdueDays} day(s)
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex gap-3">
+                <button
+                  onClick={cancelOverdueOpname}
+                  className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={confirmOverdueOpname}
+                  className="flex-1 bg-orange-600 text-white px-4 py-2 rounded-lg hover:bg-orange-700 transition-colors font-medium"
+                >
+                  Proceed Anyway
+                </button>
+              </div>
             </div>
           </div>
         </div>

@@ -8,8 +8,10 @@ import {
   User,
   Tag,
   Clock,
+  AlertCircle,
 } from "lucide-react";
 import api from "../../../service/api";
+import { motion } from "framer-motion";
 
 const OrderDetails = ({
   selectedOrder,
@@ -24,6 +26,73 @@ const OrderDetails = ({
   console.log("OrderDetails - orderDetails:", orderDetails);
   const [enrichedDetails, setEnrichedDetails] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [currentOrderStatus, setCurrentOrderStatus] = useState(
+    selectedOrder?.order_status
+  );
+  const [statusError, setStatusError] = useState(null);
+  const [showStatusErrorModal, setShowStatusErrorModal] = useState(false);
+
+  // Function to fetch the current order status
+  const fetchCurrentOrderStatus = async () => {
+    try {
+      if (!selectedOrder?.order_id) return;
+
+      const response = await api.get(`/orders/${selectedOrder.order_id}`);
+      const fetchedOrder = response.data;
+
+      if (fetchedOrder) {
+        setCurrentOrderStatus(fetchedOrder.order_status);
+        console.log("Fetched current order status:", fetchedOrder.order_status);
+        return fetchedOrder.order_status;
+      }
+      return selectedOrder.order_status;
+    } catch (error) {
+      console.error("Error fetching order status:", error);
+      return selectedOrder.order_status;
+    }
+  };
+
+  // Fetch the current order status when the modal is opened and every 2 seconds
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    const checkOrderStatus = async () => {
+      await fetchCurrentOrderStatus();
+    };
+
+    checkOrderStatus();
+
+    // Set up an interval to check the status periodically
+    const intervalId = setInterval(checkOrderStatus, 2000);
+
+    // Clean up the interval when the component unmounts
+    return () => clearInterval(intervalId);
+    // We only want to run this effect when the order ID changes,
+    // not when fetchCurrentOrderStatus changes
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedOrder?.order_id]);
+
+  // Handle receive click with validation
+  const handleReceiveClick = async () => {
+    try {
+      // Fetch latest order status before proceeding
+      const latestStatus = await fetchCurrentOrderStatus();
+
+      if (latestStatus !== "approved") {
+        setStatusError(
+          "This order can no longer be marked as received. It may have been processed already or its status has changed."
+        );
+        setShowStatusErrorModal(true);
+        return;
+      }
+
+      // If status is still approved, proceed with the receive operation
+      onReceive();
+    } catch (error) {
+      console.error("Error handling receive:", error);
+      setStatusError("An error occurred while processing this order.");
+      setShowStatusErrorModal(true);
+    }
+  };
 
   // Fetch batch details for each order item
   useEffect(() => {
@@ -177,9 +246,11 @@ const OrderDetails = ({
         {/* Header */}
         <div className="sticky top-0 bg-white z-10 px-6 py-4 border-b flex justify-between items-center">
           <h4 className="text-xl font-bold text-gray-900 flex items-center">
-            Order Details 
+            Order Details
             <div className="ml-3">
-              <span className="text-base font-normal text-black bg-gray-100 px-2.5 py-1 rounded-full">#{mockSelectedOrder.order_id}</span>
+              <span className="text-base font-normal text-black bg-gray-100 px-2.5 py-1 rounded-full">
+                #{mockSelectedOrder.order_id}
+              </span>
             </div>
           </h4>
           <button
@@ -221,14 +292,13 @@ const OrderDetails = ({
                     Date
                   </h6>
                   <p className="mt-1 text-sm font-semibold text-gray-900">
-                    {new Date(mockSelectedOrder.created_at).toLocaleDateString(
-                      "en-US",
-                      {
-                        day: "numeric",
-                        month: "long",
-                        year: "numeric",
-                      }
-                    )}
+                    {new Date(
+                      selectedOrder?.order_date || mockSelectedOrder.created_at
+                    ).toLocaleDateString("en-US", {
+                      day: "numeric",
+                      month: "long",
+                      year: "numeric",
+                    })}
                   </p>
                 </div>
               </div>
@@ -458,9 +528,9 @@ const OrderDetails = ({
             >
               Close
             </button>
-            {isAdmin && mockSelectedOrder.order_status === "approved" && (
+            {isAdmin && currentOrderStatus === "approved" && (
               <button
-                onClick={onReceive}
+                onClick={handleReceiveClick}
                 className="w-full sm:w-auto px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-semibold transition-colors"
               >
                 <div className="flex items-center justify-center">
@@ -472,6 +542,30 @@ const OrderDetails = ({
           </div>
         </div>
       </div>
+
+      {/* Status Error Modal */}
+      {showStatusErrorModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-60">
+          <div className="bg-white rounded-lg p-6 max-w-sm w-full">
+            <div className="flex items-center mb-4 text-red-500">
+              <AlertCircle className="h-6 w-6 mr-2" />
+              <h3 className="text-lg font-medium">Status Error</h3>
+            </div>
+            <p className="text-gray-600 mb-6">{statusError}</p>
+            <div className="flex justify-end">
+              <button
+                onClick={() => {
+                  setShowStatusErrorModal(false);
+                  fetchCurrentOrderStatus(); // Refresh the status
+                }}
+                className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+              >
+                OK
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

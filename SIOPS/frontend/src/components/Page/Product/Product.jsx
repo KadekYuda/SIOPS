@@ -230,7 +230,7 @@ const Product = () => {
         const errorCount = response.data.error_count || 0;
         const processTime = response.data.elapsed_time || "N/A";
 
-        let message = `📊 Import Summary (${processTime}):\n`;
+        let message = ` Import Summary (${processTime}):\n`;
         message += `✅ ${successCount} products imported successfully\n`;
 
         if (errorCount > 0) {
@@ -805,11 +805,11 @@ const Product = () => {
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-900 uppercase tracking-wider w-32 ">
                     Stock
                   </th>
-                  {isAdmin && (
+  
                     <th className="px-4 py-3 text-right text-xs font-medium text-gray-900 uppercase tracking-wider w-1">
                       Actions
                     </th>
-                  )}
+                  
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
@@ -914,7 +914,7 @@ const Product = () => {
                           )}
                         </div>
                       </td>
-                      {isAdmin && (
+
                         <td className="px-4 py-4 text-sm ">
                           <div className="flex justify-end gap-3">
                             <CrudButton
@@ -928,7 +928,7 @@ const Product = () => {
                               buttonType="product"
                               actionType="edit"
                             />
-                            <CrudButton
+                                                  {isAdmin && (<CrudButton
                               icon={Trash2}
                               onConfirm={() =>
                                 handleDelete(product.code_product)
@@ -939,10 +939,10 @@ const Product = () => {
                               confirmMessage="Are you sure you want to delete this product?"
                               dataMessage="This action will permanently delete this product and cannot be undone."
                               title="Delete Product"
-                            />
+                            />  )}
                           </div>
                         </td>
-                      )}
+                    
                     </tr>
                   ));
                 })()}

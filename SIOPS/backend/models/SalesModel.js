@@ -25,7 +25,9 @@ const Sales = db.define('sales', {
     },
     created_at: DataTypes.DATE,
     updated_at: DataTypes.DATE,
-}, { freezeTableName: true });  
+}, { freezeTableName: true,
+    paranoid: false,
+ });  
 
 // Add User association
 Sales.belongsTo(Users, {

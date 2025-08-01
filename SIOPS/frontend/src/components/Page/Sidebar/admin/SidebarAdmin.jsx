@@ -8,17 +8,13 @@ import {
   ShoppingBag,
   ChevronRight,
   Bell,
-  Globe,
-  Moon,
-  Sun,
-  ChevronDown,
 } from "lucide-react";
 import { useLocation } from "react-router-dom";
 import { useState, useEffect, useRef } from "react";
 
 const SidebarAdmin = ({ isSidebarOpen, isDesktopSidebarOpen }) => {
   const location = useLocation();
- 
+
   const [showNotifications, setShowNotifications] = useState(false);
   const [notifications, setNotifications] = useState([
     {
@@ -48,6 +44,7 @@ const SidebarAdmin = ({ isSidebarOpen, isDesktopSidebarOpen }) => {
       text: "Dashboard",
       color: "text-blue-600",
       bgColor: "bg-blue-50",
+      paths: ["/", "/dashboardadmin", "/DashboardAdmin"], // Match any of these paths
     },
     {
       href: "/product",
@@ -55,6 +52,7 @@ const SidebarAdmin = ({ isSidebarOpen, isDesktopSidebarOpen }) => {
       text: "Product",
       color: "text-green-600",
       bgColor: "bg-green-50",
+      paths: ["/product", "/batchstock"],
     },
     {
       href: "/orderAdmin",
@@ -62,6 +60,7 @@ const SidebarAdmin = ({ isSidebarOpen, isDesktopSidebarOpen }) => {
       text: "Order",
       color: "text-purple-600",
       bgColor: "bg-purple-50",
+      paths: ["/orderAdmin", "/order-admin"],
     },
     {
       href: "/sales",
@@ -69,6 +68,7 @@ const SidebarAdmin = ({ isSidebarOpen, isDesktopSidebarOpen }) => {
       text: "Sales",
       color: "text-orange-600",
       bgColor: "bg-orange-50",
+      paths: ["/sales"],
     },
     {
       href: "/opname",
@@ -76,13 +76,15 @@ const SidebarAdmin = ({ isSidebarOpen, isDesktopSidebarOpen }) => {
       text: "Opname",
       color: "text-teal-600",
       bgColor: "bg-teal-50",
+      paths: ["/opname", "/opname-detail"],
     },
     {
-      href: "/import",
+      href: "/reports",
       icon: ClipboardList,
       text: "Report",
       color: "text-red-600",
       bgColor: "bg-red-50",
+      paths: ["/reports", "/report"],
     },
   ];
 
@@ -140,7 +142,13 @@ const SidebarAdmin = ({ isSidebarOpen, isDesktopSidebarOpen }) => {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-
+  // Handle dashboard selection on first load
+  useEffect(() => {
+    // If we're at the root path, programmatically navigate to dashboard
+    if (location.pathname === "/") {
+      window.history.replaceState(null, "", "/DashboardAdmin");
+    }
+  }, [location.pathname]);
 
   return (
     <aside
@@ -168,7 +176,16 @@ const SidebarAdmin = ({ isSidebarOpen, isDesktopSidebarOpen }) => {
         </h2>
         <nav className="space-y-1">
           {Fiturs.map((item, index) => {
-            const isActive = location.pathname === item.href;
+            // Check if current path matches any of the specified paths or the href
+            const pathToCheck = location.pathname.toLowerCase();
+            const isActive =
+              pathToCheck === item.href.toLowerCase() ||
+              (item.href !== "/" &&
+                pathToCheck.startsWith(item.href.toLowerCase())) ||
+              // Also check the paths array if available
+              (item.paths &&
+                item.paths.some((p) => pathToCheck === p.toLowerCase()));
+
             const hover = getSidebarHoverClass(item.text);
             const iconHover = getSidebarIconHoverClass(item.text);
             return (
@@ -205,59 +222,7 @@ const SidebarAdmin = ({ isSidebarOpen, isDesktopSidebarOpen }) => {
       </div>
 
       {/* Footer with Language, Dark Mode, and Notifications */}
-      <div className="p-4 border-t border-gray-100 dark:border-gray-700">
-        <div className="bg-gradient-to-r from-blue-50 to-purple-50 dark:from-gray-700 dark:to-gray-600 rounded-xl p-4">
-          <div className="flex items-center justify-between">
-            {" "}
-            {/* Language Selector */}
-           
-            {/* Notifications */}
-            <div className="relative" ref={notificationRef}>
-              <button
-                onClick={() => setShowNotifications(!showNotifications)}
-                className="p-2 hover:bg-gray-100 dark:hover:bg-gray-600 rounded-lg transition-all duration-200 relative"
-              >
-                <Bell className="w-4 h-4 text-gray-500 dark:text-gray-300" />
-                {notifications.some((n) => n.unread) && (
-                  <span className="absolute -top-1 -right-1 w-2 h-2 bg-red-500 rounded-full"></span>
-                )}
-              </button>
-
-              {showNotifications && (
-                <div className="absolute bottom-full mb-2 right-0 w-72 bg-white dark:bg-gray-700 rounded-lg shadow-lg border border-gray-100 dark:border-gray-600">
-                  <div className="p-3 border-b border-gray-100 dark:border-gray-600">
-                    <h3 className="font-medium text-gray-900 dark:text-white">
-                      Notifications
-                    </h3>
-                  </div>
-                  <div className="max-h-64 overflow-y-auto">
-                    {notifications.map((notification) => (
-                      <div
-                        key={notification.id}
-                        className={`p-3 hover:bg-gray-50 dark:hover:bg-gray-600 ${
-                          notification.unread
-                            ? "bg-blue-50 dark:bg-gray-600"
-                            : ""
-                        }`}
-                      >
-                        <p className="font-medium text-sm text-gray-900 dark:text-white">
-                          {notification.title}
-                        </p>
-                        <p className="text-sm text-gray-600 dark:text-gray-300">
-                          {notification.message}
-                        </p>
-                        <p className="text-xs text-gray-400 dark:text-gray-400 mt-1">
-                          {notification.time}
-                        </p>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      </div>
+      <div className="p-4 border-t border-gray-100 dark:border-gray-700"></div>
     </aside>
   );
 };

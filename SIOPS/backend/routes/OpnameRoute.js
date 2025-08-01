@@ -10,6 +10,11 @@ import {
   getAllOpnames,
   confirmDirectOpname,
   requestEdit,
+  getOpnameById,
+  getOpnameDetails,
+  debugProductBatches,
+  checkCategoryConflict,
+  debugOpnameData,
 } from "../controller/OpnameController.js";
 import { authenticateToken, authorizeRole } from "../auth/authMiddleware.js";
 
@@ -20,6 +25,13 @@ router.post(
   authenticateToken,
   authorizeRole(["admin"]),
   createOpnameTasks
+);
+
+router.post(
+  "/check-category-conflict",
+  authenticateToken,
+  authorizeRole(["admin"]),
+  checkCategoryConflict
 );
 router.get(
   "/tasks",
@@ -69,6 +81,34 @@ router.post(
   authenticateToken,
   authorizeRole(["staff"]),
   requestEdit
+);
+
+router.get(
+  "/debug/product/:productCode",
+  authenticateToken,
+  authorizeRole(["admin"]),
+  debugProductBatches
+);
+
+router.get(
+  "/debug/opname-data",
+  authenticateToken,
+  authorizeRole(["admin"]),
+  debugOpnameData
+);
+
+router.get(
+  "/:id/details",
+  authenticateToken,
+  authorizeRole(["staff", "admin"]),
+  getOpnameDetails
+);
+
+router.get(
+  "/:id",
+  authenticateToken,
+  authorizeRole(["staff", "admin"]),
+  getOpnameById
 );
 
 export default router;

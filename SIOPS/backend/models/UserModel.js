@@ -26,8 +26,8 @@ const User = db.define('users', {
         
 }, {
     freezeTableName: true,
-    timestamps: false,
-    paranoid:true
+    timestamps: true,
+    paranoid:false
 });
 
 export default User;

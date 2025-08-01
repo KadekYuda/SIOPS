@@ -4,14 +4,14 @@ import OrderDetail from "../models/OrderDetailsModel.js";
 import BatchStock from "../models/BatchstockModel.js";
 import Product from "../models/ProductModel.js";
 import db from "../config/Database.js";
-// import {Order, User, OrderDetail, BatchStock, Product} from '../models/index.js';
+
 
 // Create a new order with order details
 export const createOrder = async (req, res) => {
     const t = await db.transaction();
     
     try {
-        const { order_status, order_details } = req.body;
+        const { order_status, order_details, order_date } = req.body;
         
         // Check if user is authenticated
         if (!req.user || !req.user.user_id) {       
@@ -28,13 +28,28 @@ export const createOrder = async (req, res) => {
             total_amount += parseFloat(detail.subtotal);
         }
 
+        // Get the date from request or use current date as fallback
+        let orderDate;
+        if (order_date) {
+            // If order_date is provided, use it but ensure it has proper time
+            orderDate = new Date(order_date);
+            // If the provided date doesn't have time (only date), set it to current time
+            if (orderDate.getHours() === 0 && orderDate.getMinutes() === 0 && orderDate.getSeconds() === 0) {
+                const now = new Date();
+                orderDate.setHours(now.getHours(), now.getMinutes(), now.getSeconds(), now.getMilliseconds());
+            }
+        } else {
+            orderDate = new Date();
+        }
+        
         // Create the order
         const newOrder = await Order.create({
             user_id,
             order_status: order_status || 'pending',
             total_amount,
-            created_at: new Date(),
-            updated_at: new Date()
+            order_date: orderDate,  // Use the provided date with proper time or current date
+            created_at: orderDate,  // Use the same date/time for created_at to maintain consistency
+            updated_at: orderDate
         }, { transaction: t });
 
         // Process order details and handle batch creation if needed
@@ -87,18 +102,18 @@ export const getAllOrders = async (req, res) => {
             whereClause.order_status = order_status;
         }
         if (start_date && end_date) {
-            whereClause.created_at = {
+            whereClause.order_date = {
                 [db.Sequelize.Op.between]: [
                     new Date(start_date),
                     new Date(new Date(end_date).setHours(23, 59, 59))
                 ]
             };
         } else if (start_date) {
-            whereClause.created_at = {
+            whereClause.order_date = {
                 [db.Sequelize.Op.gte]: new Date(start_date)
             };
         } else if (end_date) {
-            whereClause.created_at = {
+            whereClause.order_date = {
                 [db.Sequelize.Op.lte]: new Date(new Date(end_date).setHours(23, 59, 59))
             };
         }
@@ -124,7 +139,7 @@ export const getAllOrders = async (req, res) => {
                     ]
                 }
             ],
-            order: [['created_at', 'DESC']]
+            order: [['order_date', 'DESC']]
         });
         
         res.status(200).json(orders);
@@ -268,8 +283,10 @@ export const createOrderBatches = async (req, res) => {
     const t = await db.transaction();
     
     try {
-        const { expiration_dates } = req.body;
+        const { expiration_dates, quantity_adjustments, price_adjustments } = req.body;
         const orderId = req.params.id;
+
+        console.log('Received data:', { expiration_dates, quantity_adjustments, price_adjustments });
 
         // Get order with its details
         const orderDetails = await OrderDetail.findAll({
@@ -284,7 +301,9 @@ export const createOrderBatches = async (req, res) => {
         if (!orderDetails || orderDetails.length === 0) {
             await t.rollback();
             return res.status(404).json({ msg: "Order details not found" });
-        }        // Get the order to check status
+        }
+
+        // Get the order to check status
         const order = await Order.findByPk(orderId, { transaction: t });
         if (!order) {
             await t.rollback();
@@ -297,14 +316,52 @@ export const createOrderBatches = async (req, res) => {
             return res.status(400).json({ msg: "Order must be in approved status to receive items" });
         }
 
-        // Update order status to received as part of this transaction
+        // Update order details with actual quantities and prices if provided
+        let newTotalAmount = 0;
+        for (const detail of orderDetails) {
+            const detailId = detail.order_detail_id.toString();
+            const actualQuantity = quantity_adjustments && quantity_adjustments[detailId] 
+                ? parseInt(quantity_adjustments[detailId]) 
+                : detail.quantity;
+            const actualPrice = price_adjustments && price_adjustments[detailId] 
+                ? parseFloat(price_adjustments[detailId]) 
+                : detail.ordered_price;
+            const newSubtotal = actualQuantity * actualPrice;
+            
+            // Update order detail if there are adjustments
+            if (quantity_adjustments && quantity_adjustments[detailId] || 
+                price_adjustments && price_adjustments[detailId]) {
+                await detail.update({
+                    quantity: actualQuantity,
+                    ordered_price: actualPrice,
+                    subtotal: newSubtotal,
+                    updated_at: new Date()
+                }, { transaction: t });
+                
+                console.log(`Updated detail ${detailId}: qty ${detail.quantity}->${actualQuantity}, price ${detail.ordered_price}->${actualPrice}`);
+            }
+            
+            newTotalAmount += newSubtotal;
+        }
+
+        // Update order status and total amount
         await order.update({
             order_status: 'received',
+            total_amount: newTotalAmount,
             updated_at: new Date()
         }, { transaction: t });
 
-        // Create or update batches for each order detail
-        for (const detail of orderDetails) {
+        // Create or update batches for each order detail (using updated values)
+        const updatedOrderDetails = await OrderDetail.findAll({
+            where: { order_id: orderId },
+            include: [{ 
+                model: Product,
+                attributes: ['code_product', 'name_product']
+            }],
+            transaction: t
+        });
+
+        for (const detail of updatedOrderDetails) {
             const product = await Product.findByPk(detail.code_product, {
                 attributes: ['code_product', 'name_product'],
                 transaction: t
@@ -319,7 +376,7 @@ export const createOrderBatches = async (req, res) => {
             const existingBatchWithPrice = await BatchStock.findOne({
                 where: { 
                     code_product: detail.code_product,
-                    purchase_price: detail.ordered_price
+                    purchase_price: detail.ordered_price  // This is now the actual price
                 },
                 transaction: t
             });
@@ -334,14 +391,12 @@ export const createOrderBatches = async (req, res) => {
                 };
 
                 if (existingBatchWithPrice.initial_stock === 0) {
-                    updateData.initial_stock = parseInt(detail.quantity);
+                    updateData.initial_stock = parseInt(detail.quantity);  // This is now the actual quantity
                 } else {
                     updateData.stock_quantity = (existingBatchWithPrice.stock_quantity || 0) + parseInt(detail.quantity);
                 }
 
-                // Update exp_date jika:
-                // 1. Batch belum punya exp_date dan ada exp_date baru, atau
-                // 2. Batch sudah expired dan ada exp_date baru
+                // Update exp_date jika ada expiration date baru
                 if (expiration_dates[detail.order_detail_id] && 
                     (!existingBatchWithPrice.exp_date || 
                      (existingBatchWithPrice.exp_date && existingBatchWithPrice.exp_date <= currentDate))) {
@@ -351,7 +406,6 @@ export const createOrderBatches = async (req, res) => {
                 await existingBatchWithPrice.update(updateData, { transaction: t });
                 batchToUse = existingBatchWithPrice;
             } else {
-             
                 const allBatches = await BatchStock.findAll({
                     where: { code_product: detail.code_product },
                     transaction: t
@@ -371,7 +425,7 @@ export const createOrderBatches = async (req, res) => {
                         updated_at: currentDate
                     };
 
-                    // Update exp_date jika batch expired dan ada exp_date baru
+                    // Update exp_date if available
                     if (expiration_dates[detail.order_detail_id] && 
                         (!batchToUpdate.exp_date || 
                          (batchToUpdate.exp_date && batchToUpdate.exp_date <= currentDate))) {
@@ -381,12 +435,13 @@ export const createOrderBatches = async (req, res) => {
                     await batchToUpdate.update(updateData, { transaction: t });
                     batchToUse = batchToUpdate;
                 } else {                    
-                    const quantity = parseInt(detail.quantity);                    batchToUse = await BatchStock.create({
+                    const quantity = parseInt(detail.quantity);  // This is now the actual quantity
+                    batchToUse = await BatchStock.create({
                         code_product: detail.code_product,
                         batch_code: batchCode,
-                        purchase_price: detail.ordered_price,
+                        purchase_price: detail.ordered_price,  // This is now the actual price
                         initial_stock: quantity,
-                        stock_quantity: quantity, // Set initial stock_quantity sama dengan quantity
+                        stock_quantity: quantity,
                         arrival_date: currentDate,
                         exp_date: expiration_dates[detail.order_detail_id] ? new Date(expiration_dates[detail.order_detail_id]) : null,
                         created_at: currentDate,

@@ -47,36 +47,11 @@ const Headers = ({
 }) => {
 const [menuActive, setMenuActive] = useState(false);
   const [userDropdown, setUserDropdown] = useState(false);
-  const [notificationDropdown, setNotificationDropdown] = useState(false);
   const [userData, setUserData] = useState(null);
   const [loading, setLoading] = useState(true);
   const dropdownRef = useRef(null);
-  const notificationRef = useRef(null);
   const navigate = useNavigate();
-   // Data notifikasi (contoh)
-  const notifications = [
-    {
-      id: 1,
-      title: "New order received",
-      message: "Order #1234 needs attention",
-      time: "2 min ago",
-      unread: true,
-    },
-    {
-      id: 2,
-      title: "Low stock alert",
-      message: "Product ABC running low",
-      time: "15 min ago",
-      unread: true,
-    },
-    {
-      id: 3,
-      title: "Daily report ready",
-      message: "Your daily sales report is available",
-      time: "1 hour ago",
-      unread: false,
-    },
-  ];
+  
 
   const fetchUserProfile = useCallback(async () => {
     try {
@@ -112,8 +87,8 @@ const [menuActive, setMenuActive] = useState(false);
     try {
       await api.post("/users/logout", null);
 
-      setUserData(null); // Reset state user
-      navigate("/login"); // Pindah ke halaman login
+      setUserData(null);
+      navigate("/login"); 
     } catch (error) {
       console.error("Error logging out:", error);
     }
@@ -121,14 +96,8 @@ const [menuActive, setMenuActive] = useState(false);
   const toggleDropdown = (e) => {
     e.stopPropagation();
     setUserDropdown((prev) => !prev);
-    setNotificationDropdown(false);
   };
 
-  const toggleNotificationDropdown = (e) => {
-    e.stopPropagation();
-    setNotificationDropdown((prev) => !prev);
-    setUserDropdown(false);
-  };
 
 
   return (
@@ -188,68 +157,7 @@ const [menuActive, setMenuActive] = useState(false);
           <div className="flex items-center space-x-2">
            
 
-            {/* Notifications */}
-            <div className="relative" ref={notificationRef}>
-              <button
-                onClick={toggleNotificationDropdown}
-                className={`relative p-2 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-xl transition-all duration-200 ${
-                  notificationDropdown ? "bg-gray-100 dark:bg-gray-800" : ""
-                }`}
-              >
-                <Bell className="w-5 h-5" />
-                <span className="absolute -top-1 -right-1 w-5 h-5 bg-gradient-to-r from-red-500 to-pink-500 text-white rounded-full text-xs flex items-center justify-center font-bold shadow-lg">
-                  {notifications.filter((n) => n.unread).length}
-                </span>
-              </button>
-
-              {notificationDropdown && (
-                <div className="absolute right-0 top-full mt-2 w-80 bg-white/95 backdrop-blur-xl dark:bg-gray-900/95 rounded-2xl shadow-2xl border border-gray-200/50 dark:border-gray-700/50 z-[100] overflow-hidden">
-                  <div className="p-4 border-b border-gray-200/50 dark:border-gray-700/50">
-                    <div className="flex items-center justify-between">
-                      <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
-                        Notifications
-                      </h3>
-                      <span className="text-xs bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 px-2 py-1 rounded-full">
-                        {notifications.filter((n) => n.unread).length} new
-                      </span>
-                    </div>
-                  </div>
-                  <div className="max-h-80 overflow-y-auto">
-                    {notifications.map((notification) => (
-                      <div
-                        key={notification.id}
-                        className={`p-4 hover:bg-gray-50/80 dark:hover:bg-gray-800/80 transition-colors duration-200 border-b border-gray-100/50 dark:border-gray-700/50 last:border-b-0 ${
-                          notification.unread
-                            ? "bg-blue-50/30 dark:bg-blue-900/10"
-                            : ""
-                        }`}
-                      >
-                        <div className="flex items-start space-x-3">
-                          <div
-                            className={`w-2 h-2 rounded-full mt-2 ${
-                              notification.unread
-                                ? "bg-blue-500"
-                                : "bg-gray-300"
-                            }`}
-                          ></div>
-                          <div className="flex-1 min-w-0">
-                            <p className="text-sm font-medium text-gray-900 dark:text-white">
-                              {notification.title}
-                            </p>
-                            <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-                              {notification.message}
-                            </p>
-                            <p className="text-xs text-gray-500 dark:text-gray-500 mt-2">
-                              {notification.time}
-                            </p>
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
+           
 
           
 

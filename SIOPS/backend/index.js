@@ -27,6 +27,7 @@ import ProductCategoriesRoute from "./routes/ProductCategoriesRoute.js";
 import BatchStockRoute from "./routes/BatchStockRoute.js";
 import OpnameRoute from "./routes/OpnameRoute.js";
 import SalesRoute from "./routes/SalesRoute.js";
+import ReportRoute from "./routes/ReportRoute.js";
 import initializeAdmin from "./utils/initializeAdmin.js";
 import cookieParser from "cookie-parser";
 
@@ -89,6 +90,7 @@ app.use('/api', ProductCategoriesRoute);
 app.use('/api/batch', BatchStockRoute);
 app.use('/api/opname', OpnameRoute);
 app.use('/api/sales', SalesRoute);
+app.use('/api', ReportRoute);
 
 // Create uploads directory if it doesn't exist
 import { mkdirSync } from 'fs';

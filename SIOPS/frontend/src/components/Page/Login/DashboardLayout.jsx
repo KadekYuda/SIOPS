@@ -9,7 +9,6 @@ import MinStockAlert from "../../modal/MinStockAlert";
 import LoadingComponent from "../../LoadingComponent";
 
 const DashboardLayout = () => {
- 
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isDesktopSidebarOpen, setIsDesktopSidebarOpen] = useState(true);
   const [role, setRole] = useState("");
@@ -57,8 +56,6 @@ const DashboardLayout = () => {
     setIsDesktopSidebarOpen((prev) => !prev);
   };
 
-  
-
   useEffect(() => {
     const handleResize = () => {
       if (window.innerWidth >= 1024) {
@@ -76,11 +73,7 @@ const DashboardLayout = () => {
   }
 
   return (
-    <div
-      className={clsx(
-        "flex min-h-screen relative bg-gray-100"
-      )}
-    >
+    <div className={clsx("flex min-h-screen relative bg-gray-100")}>
       {/* Overlay untuk mobile */}
       {isSidebarOpen && (
         <div
@@ -126,16 +119,14 @@ const DashboardLayout = () => {
               "lg:ml-0": !isDesktopSidebarOpen,
             }
           )}
-        > 
+        >
           <main className="h-full flex-1">
             <Outlet />
             <MinStockAlert />
           </main>
-          
+
           {/* Footer */}
-          <div
-            className="text-center text-sm text-gray-400 py-4 mt-auto"
-          >
+          <div className="text-center text-sm text-gray-400 py-4 mt-auto">
             <p>&copy; 2025 Agik Mart. All rights reserved.</p>
           </div>
         </div>

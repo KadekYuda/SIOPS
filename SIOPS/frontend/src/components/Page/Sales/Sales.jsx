@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import {
   Upload,
   Download,
@@ -12,6 +12,7 @@ import {
   ClipboardList,
   Check,
   ShoppingCart,
+  Filter,
 } from "lucide-react";
 import AlertModal from "../../modal/AlertModal";
 import SuccessModal from "../../modal/SuccessModal";
@@ -32,6 +33,36 @@ const Sales = () => {
   const [activeTab, setActiveTab] = useState("manual"); // "manual" or "import"
   const [selectedSaleId, setSelectedSaleId] = useState(null); // For modal
   const fileInputRef = useRef(null);
+  const [isAdmin, setIsAdmin] = useState(false);
+
+  // Filter state
+  const [filters, setFilters] = useState({
+    start_date: "",
+    end_date: "",
+    sort_by: "sales_date",
+    sort_dir: "DESC", // Keep this for backend sorting direction
+  });
+  const [filterMenuOpen, setFilterMenuOpen] = useState(false);
+
+  // Apply filters function
+  const applyFilters = () => {
+    console.log("Applying filters:", filters);
+    setCurrentPage(0); // Reset pagination when applying filters
+    fetchSales(filters);
+  };
+
+  // Reset filters function
+  const resetFilters = () => {
+    const resetFilterState = {
+      start_date: "",
+      end_date: "",
+      sort_by: "sales_date",
+      sort_dir: "DESC",
+    };
+    setFilters(resetFilterState);
+    setCurrentPage(0); // Reset pagination when resetting filters
+    fetchSales(resetFilterState);
+  };
 
   const [manualSale, setManualSale] = useState({
     sales_date: new Date().toISOString().split("T")[0],
@@ -52,74 +83,108 @@ const Sales = () => {
   const [currentPage, setCurrentPage] = useState(0);
   const itemsPerPage = 10;
   const getCurrentPageItems = () => {
-    // Sort sales by date ASC (lama ke baru), lalu ID ASC
-    const sortedSalesAsc = [...sales].sort((a, b) => {
-      const dateA = new Date(a.sales_date);
-      const dateB = new Date(b.sales_date);
-      if (dateA.getTime() !== dateB.getTime()) {
-        return dateA.getTime() - dateB.getTime(); // Lama dulu
-      }
-      return a.sales_id - b.sales_id; // ID kecil dulu
-    });
-    // Beri nomor urut historis (terlama = 1)
-    const salesWithNumber = sortedSalesAsc.map((item, idx) => ({
-      ...item,
-      running_number: idx + 1,
-    }));
-    // Sort ulang untuk tampilan (baru di atas)
-    const sortedDisplay = [...salesWithNumber].sort((a, b) => {
-      const dateA = new Date(a.sales_date);
-      const dateB = new Date(b.sales_date);
-      if (dateA.getTime() !== dateB.getTime()) {
-        return dateB.getTime() - dateA.getTime(); // Baru dulu
-      }
-      return b.sales_id - a.sales_id;
-    });
+    // IMPORTANT: Don't override backend sorting!
+    // Backend already handles sorting based on user's filter choice
+    // We only need to add running numbers and paginate
+
+    // Calculate proper running numbers based on pagination and total data
     const start = currentPage * itemsPerPage;
     const end = start + itemsPerPage;
-    return sortedDisplay.slice(start, end);
+    const currentPageData = sales.slice(start, end);
+
+    // Add running numbers that reflect reverse order (newest gets highest number)
+    const salesWithNumber = currentPageData.map((item, idx) => ({
+      ...item,
+      running_number: sales.length - (start + idx), // Reverse numbering
+    }));
+
+    return salesWithNumber;
   };
 
-  useEffect(() => {
-    fetchSales();
-    fetchProducts();
-  }, []);
-  const fetchSales = async () => {
-    try {
-      setIsLoading(true);
+  // Fetch sales with useCallback to prevent dependency loop in useEffect
+  const fetchSales = useCallback(
+    async (filterParams = {}) => {
+      try {
+        setIsLoading(true);
 
-      // Get sales with user data included from backend
-      const response = await api.get("/sales");
-      // Map sales with formatted dates
-      const salesWithDates = response.data
-        .map((sale) => {
-          const saleDate = new Date(sale.sales_date);
-          const user = sale.User || { name: sale.user?.name || "Unknown" };
-          return {
-            ...sale,
-            sales_date: saleDate.toISOString(),
-            User: user,
-            user: user, // Keep both for compatibility
-          };
-        })
-        .sort((a, b) => {
-          const dateA = new Date(a.sales_date);
-          const dateB = new Date(b.sales_date);
-          if (dateA > dateB) return -1;
-          if (dateA < dateB) return 1;
-          return b.sales_id - a.sales_id;
+        // Build query string from filter parameters
+        const queryParams = new URLSearchParams();
+
+        // Use the filterParams directly if provided, otherwise use current filters
+        const paramsToUse =
+          Object.keys(filterParams).length > 0 ? filterParams : filters;
+        console.log("Parameters being used for API call:", paramsToUse);
+
+        Object.entries(paramsToUse).forEach(([key, value]) => {
+          if (value) queryParams.append(key, value);
         });
 
-      setSales(salesWithDates);
-    } catch (error) {
-      setAlertMessage(error.response?.data?.msg || "Error fetching sales");
-      setShowAlert(true);
-    } finally {
-      setIsLoading(false);
-    }
-  };
+        console.log(
+          "Query params being sent to backend:",
+          queryParams.toString()
+        );
 
-  const fetchProducts = async () => {
+        // Get sales with user data included from backend
+        const response = await api.get(`/sales?${queryParams.toString()}`);
+
+        console.log(
+          "Backend response received:",
+          response.data.length,
+          "items"
+        );
+
+        // Optimize date processing - avoid redundant operations
+        const salesWithDates = response.data.map((sale) => {
+          const user = sale.User || { name: sale.user?.name || "Unknown" };
+
+          // Only parse date once and format it
+          const saleDate = new Date(sale.sales_date);
+          const formattedDate = saleDate.toLocaleString("id-ID", {
+            year: "numeric",
+            month: "2-digit",
+            day: "2-digit",
+            hour: "2-digit",
+            minute: "2-digit",
+            second: "2-digit",
+            hour12: false,
+          });
+
+          return {
+            ...sale,
+            sales_date: sale.sales_date,
+            User: user,
+            user: user,
+            formattedDate: formattedDate,
+          };
+        });
+
+        // Let backend handle sorting instead of frontend
+        setSales(salesWithDates);
+        console.log("Sales state updated with", salesWithDates.length, "items");
+      } catch (error) {
+        console.error("Error fetching sales:", error);
+        setAlertMessage(error.response?.data?.msg || "Error fetching sales");
+        setShowAlert(true);
+      } finally {
+        setIsLoading(false);
+      }
+    },
+    [filters] // Include filters dependency
+  );
+
+  // Function to check if user is admin
+  const checkUserRole = useCallback(async () => {
+    try {
+      const response = await api.get("/users/profile");
+      const userRole = response.data.user?.role;
+      setIsAdmin(userRole === "admin");
+    } catch (error) {
+      console.error("Error checking user role:", error);
+      setIsAdmin(false);
+    }
+  }, []);
+
+  const fetchProducts = useCallback(async () => {
     try {
       const response = await api.get("/products");
       setProducts(response.data.result || []);
@@ -127,7 +192,14 @@ const Sales = () => {
       setAlertMessage(error.response?.data?.msg || "Error fetching products");
       setShowAlert(true);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    // Initial fetch with default filters
+    fetchSales(filters);
+    fetchProducts();
+    checkUserRole();
+  }, [fetchSales, filters, fetchProducts, checkUserRole]); // Include all dependencies
 
   const fetchBatchesForProduct = async (code_product, index) => {
     try {
@@ -165,11 +237,17 @@ const Sales = () => {
       const formData = new FormData();
       formData.append("file", csvFile);
 
-      const response = await api.post("/sales/import", formData, {
-        headers: {
-          "Content-Type": "multipart/form-data",
-        },
-      });
+      // Add timestamp to prevent caching
+      const response = await api.post(
+        `/sales/import?t=${Date.now()}`,
+        formData,
+        {
+          headers: {
+            "Content-Type": "multipart/form-data",
+          },
+          timeout: 30000, // Increase timeout to 30 seconds for larger files
+        }
+      );
 
       setSuccessMessage(
         `✅ Import successful!\n${
@@ -179,6 +257,11 @@ const Sales = () => {
       setShowSuccess(true);
       fetchSales();
       clearCsvFile();
+
+      // Reset file input
+      if (fileInputRef.current) {
+        fileInputRef.current.value = "";
+      }
     } catch (error) {
       let errorMessage =
         error.response?.data?.msg || error.message || "Error importing sales";
@@ -218,10 +301,17 @@ const Sales = () => {
     }
   };
 
+  // Handle CSV file selection with proper reset
   const handleCSVUpload = (e) => {
     const file = e.target.files[0];
     if (file) {
-      setCsvFile(file);
+      // First clear any previous file to reset state
+      clearCsvFile();
+      // Then set the new file
+      setTimeout(() => {
+        // Small timeout to ensure DOM is updated
+        setCsvFile(file);
+      }, 10);
     }
   };
 
@@ -280,9 +370,14 @@ const Sales = () => {
     try {
       setIsLoading(true);
 
-      // Prepare sale data
+      // Prepare sale data with proper date and time
+      const currentDateTime = new Date();
+      const saleDateTime = new Date(
+        manualSale.sales_date + "T" + currentDateTime.toTimeString().slice(0, 8)
+      );
+
       const saleData = {
-        sales_date: manualSale.sales_date,
+        sales_date: saleDateTime.toISOString(), // Send full ISO string with time
         items: manualSale.items.map((item) => ({
           code_product: item.code_product,
           quantity: parseInt(item.quantity, 10),
@@ -292,7 +387,7 @@ const Sales = () => {
       };
 
       // Log the request payload for debugging
-      console.log("Sending sale data:", saleData);
+      console.log("Sending sale data with proper time:", saleData);
 
       // Make the API call
       const response = await api.post("/sales", saleData);
@@ -358,8 +453,13 @@ const Sales = () => {
     document.body.removeChild(link);
   };
 
+  // Completely reset the file input and state
   const clearCsvFile = () => {
     setCsvFile(null);
+    // Reset file input value to ensure we can upload the same file again
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
   };
 
   const formatPrice = (price) => {
@@ -444,10 +544,14 @@ const Sales = () => {
                     e.preventDefault();
                     const file = e.dataTransfer.files[0];
                     if (file && file.type === "text/csv") {
+                      // Clear any previous file first to reset state
+                      clearCsvFile();
+                      // Then set the new file
                       handleCSVUpload({ target: { files: [file] } });
                     }
                   }}
                   onDragOver={(e) => e.preventDefault()}
+                  onDragEnter={(e) => e.preventDefault()}
                 >
                   <input
                     ref={fileInputRef}
@@ -530,10 +634,11 @@ const Sales = () => {
                     </p>
                   </div>
                   <div className="rounded-lg p-4 bg-indigo-50 border-l-4 border-indigo-500">
-                    <h3 className="font-medium mb-2">Duplicate Data</h3>
+                    <h3 className="font-medium mb-2">Duplicate Detection</h3>
                     <p className="text-sm text-gray-600">
-                      System will detect and prevent data duplication based on
-                      date and product.
+                      System uses "NO.Nota" column as unique identifier. Same
+                      products with different receipt numbers will be imported
+                      as separate entries.
                     </p>
                   </div>
                 </div>
@@ -554,6 +659,10 @@ const Sales = () => {
                     <h3 className="font-medium">Tips for Successful Import</h3>
                   </div>
                   <ul className="text-sm text-gray-600 space-y-1 pl-7 list-disc">
+                    <li>
+                      Include "NO.Nota" column with unique receipt numbers to
+                      avoid duplicates
+                    </li>
                     <li>Ensure date column is in YYYY-MM-DD format</li>
                     <li>Use comma (,) as separator for your CSV file</li>
                     <li>
@@ -596,6 +705,11 @@ const Sales = () => {
                       >
                         Sale Date
                       </label>
+                      {!isAdmin && (
+                        <span className="text-xs text-gray-500 ml-2">
+                          (Only editable by admin)
+                        </span>
+                      )}
                     </div>
                     <input
                       id="saleDate"
@@ -607,7 +721,10 @@ const Sales = () => {
                           sales_date: e.target.value,
                         }))
                       }
-                      className="block w-full sm:w-64 rounded-lg border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+                      className={`block w-full sm:w-64 rounded-lg border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm ${
+                        !isAdmin ? "bg-gray-100 cursor-not-allowed" : ""
+                      }`}
+                      disabled={!isAdmin}
                       required
                     />
                   </div>
@@ -842,10 +959,10 @@ const Sales = () => {
 
         {/* Sales List */}
         <div className="bg-white rounded-b-xl shadow-md border border-gray-100 border-t-0">
-          <div className="bg-gradient-to-r from-indigo-500 to-indigo-700 px-4 sm:px-6 py-4 sm:py-6 border-b rounded-t-lg">
+          <div className="bg-indigo-600 px-4 sm:px-6 py-4 sm:py-6 border-b">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <ClipboardList className="text-white mr-2 sm:mr-3" size={30} />
+                <ClipboardList className="text-white mr-2 sm:mr-3" size={24} />
 
                 <div>
                   <h2 className="text-lg font-semibold text-white">
@@ -855,6 +972,170 @@ const Sales = () => {
                     View and manage your sales transactions
                   </p>
                 </div>
+              </div>
+              <div className="relative">
+                <button
+                  onClick={() => setFilterMenuOpen(!filterMenuOpen)}
+                  className="flex items-center text-xs font-medium bg-white/20 text-white px-2 sm:px-3 py-1 sm:py-1.5 rounded-lg hover:bg-white/30 transition-colors"
+                >
+                  <Filter size={12} className="mr-1 sm:mr-1.5" /> Filter
+                </button>
+                {filterMenuOpen && (
+                  <div className="absolute top-full right-0 mt-2 w-64 sm:w-72 bg-white rounded-lg shadow-xl p-3 sm:p-4 z-10 border border-gray-200">
+                    <h4 className="text-sm font-medium text-gray-700 mb-2 flex items-center">
+                      <Calendar size={12} className="mr-1.5" /> Filter by Date
+                      Range
+                    </h4>
+                    <div className="grid grid-cols-2 gap-2 sm:gap-4 mb-3">
+                      <div>
+                        <label className="block text-xs text-gray-600 mb-1">
+                          Start Date
+                        </label>
+                        <input
+                          type="date"
+                          value={filters.start_date || ""}
+                          onChange={(e) =>
+                            setFilters({
+                              ...filters,
+                              start_date: e.target.value,
+                            })
+                          }
+                          className="p-1 sm:p-2 w-full border border-gray-300 rounded-lg focus:ring-1 focus:ring-blue-500 focus:border-blue-500 text-xs"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs text-gray-600 mb-1">
+                          End Date
+                        </label>
+                        <input
+                          type="date"
+                          value={filters.end_date || ""}
+                          onChange={(e) =>
+                            setFilters({ ...filters, end_date: e.target.value })
+                          }
+                          className="p-1 sm:p-2 w-full border border-gray-300 rounded-lg focus:ring-1 focus:ring-blue-500 focus:border-blue-500 text-xs"
+                        />
+                      </div>
+                    </div>
+
+                    <h4 className="text-sm font-medium text-gray-700 mb-2 flex items-center">
+                      <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        className="h-3 w-3 mr-1.5"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        stroke="currentColor"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4"
+                        />
+                      </svg>{" "}
+                      Sort By
+                    </h4>
+                    <div className="grid grid-cols-3 gap-2 mb-3">
+                      <button
+                        className={`px-2 py-1.5 text-xs font-medium rounded-md transition-colors ${
+                          filters.sort_by === "sales_date"
+                            ? "bg-indigo-100 text-indigo-700 border border-indigo-300"
+                            : "bg-gray-100 text-gray-700 border border-gray-200 hover:bg-gray-200"
+                        }`}
+                        onClick={() => {
+                          console.log("Date sort button clicked");
+                          const newFilters = {
+                            ...filters,
+                            sort_by: "sales_date",
+                            sort_dir: "DESC",
+                          };
+                          setFilters(newFilters);
+                          setCurrentPage(0); // Reset pagination when sorting
+                          console.log(
+                            "Setting filters for date sort:",
+                            newFilters
+                          );
+                          fetchSales(newFilters); // Apply immediately
+                        }}
+                      >
+                        Date
+                      </button>
+                      <button
+                        className={`px-2 py-1.5 text-xs font-medium rounded-md transition-colors ${
+                          filters.sort_by === "user_name"
+                            ? "bg-indigo-100 text-indigo-700 border border-indigo-300"
+                            : "bg-gray-100 text-gray-700 border border-gray-200 hover:bg-gray-200"
+                        }`}
+                        onClick={() => {
+                          console.log("User sort button clicked");
+                          const newFilters = {
+                            ...filters,
+                            sort_by: "user_name",
+                            sort_dir: "ASC",
+                          };
+                          setFilters(newFilters);
+                          setCurrentPage(0); // Reset pagination when sorting
+                          console.log(
+                            "Setting filters for user sort:",
+                            newFilters
+                          );
+                          fetchSales(newFilters); // Apply immediately
+                        }}
+                      >
+                        User
+                      </button>
+                      <button
+                        className={`px-2 py-1.5 text-xs font-medium rounded-md transition-colors ${
+                          filters.sort_by === "total_amount"
+                            ? "bg-indigo-100 text-indigo-700 border border-indigo-300"
+                            : "bg-gray-100 text-gray-700 border border-gray-200 hover:bg-gray-200"
+                        }`}
+                        onClick={() => {
+                          console.log("Total sort button clicked");
+                          const newFilters = {
+                            ...filters,
+                            sort_by: "total_amount",
+                            sort_dir: "DESC",
+                          };
+                          setFilters(newFilters);
+                          setCurrentPage(0); // Reset pagination when sorting
+                          console.log(
+                            "Setting filters for total sort:",
+                            newFilters
+                          );
+                          fetchSales(newFilters); // Apply immediately
+                        }}
+                      >
+                        Total
+                      </button>
+                    </div>
+
+                    <div className="flex justify-between space-x-2 mt-4">
+                      {(filters.start_date ||
+                        filters.end_date ||
+                        filters.sort_by !== "sales_date") && (
+                        <button
+                          onClick={() => {
+                            resetFilters();
+                          }}
+                          className="px-2 sm:px-3 py-1 sm:py-1.5 text-xs bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-md flex items-center"
+                        >
+                          <RefreshCw size={12} className="mr-1" /> Reset
+                        </button>
+                      )}
+                      <button
+                        className="px-2 sm:px-3 py-1 sm:py-1.5 text-xs bg-indigo-600 hover:bg-indigo-700 text-white rounded-md ml-auto"
+                        onClick={() => {
+                          console.log("Apply clicked, filters:", filters);
+                          applyFilters();
+                          setFilterMenuOpen(false);
+                        }}
+                      >
+                        Apply
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           </div>
@@ -894,7 +1175,19 @@ const Sales = () => {
                             {sale.user?.name}
                           </td>
                           <td className="px-4 py-3 text-sm text-gray-600">
-                            {new Date(sale.sales_date).toLocaleString()}
+                            {sale.formattedDate ||
+                              new Date(sale.sales_date).toLocaleString(
+                                "id-ID",
+                                {
+                                  year: "numeric",
+                                  month: "2-digit",
+                                  day: "2-digit",
+                                  hour: "2-digit",
+                                  minute: "2-digit",
+                                  second: "2-digit",
+                                  hour12: false,
+                                }
+                              )}
                           </td>
                           <td className="px-4 py-3 text-right font-medium">
                             {formatPrice(sale.total_amount)}
@@ -935,7 +1228,19 @@ const Sales = () => {
                             </span>
                           </div>
                           <div className="text-xs text-gray-500">
-                            {new Date(sale.sales_date).toLocaleString()}
+                            {sale.formattedDate ||
+                              new Date(sale.sales_date).toLocaleString(
+                                "id-ID",
+                                {
+                                  year: "numeric",
+                                  month: "2-digit",
+                                  day: "2-digit",
+                                  hour: "2-digit",
+                                  minute: "2-digit",
+                                  second: "2-digit",
+                                  hour12: false,
+                                }
+                              )}
                           </div>
                         </div>
                         <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
@@ -991,7 +1296,11 @@ const Sales = () => {
         <SuccessModal
           isOpen={showSuccess}
           message={successMessage}
-          onClose={() => setShowSuccess(false)}
+          onClose={() => {
+            setShowSuccess(false);
+            // Ensure file input is completely reset after successful import
+            clearCsvFile();
+          }}
         />
         {selectedSaleId && (
           <SalesDetails

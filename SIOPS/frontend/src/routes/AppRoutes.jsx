@@ -1,20 +1,22 @@
 import { Routes, Route, Navigate, useLocation } from "react-router-dom";
 import { useState, useEffect, useCallback } from "react";
 
+import api from "../service/api";
+import LoadingComponent from "../components/LoadingComponent";
 import Login from "../components/Page/Login/Login";
+import DashboardLayout from "../components/Page/Login/DashboardLayout";
 import DashboardAdmin from "../components/Page/Sidebar/admin/DashboardAdmin";
 import DashboardStaff from "../components/Page/Sidebar/staff/DashboardStaff";
-import DashboardLayout from "../components/Page/Login/DashboardLayout";
 import UserProfile from "../components/Page/Profile/UserProfile";
 import Product from "../components/Page/Product/Product";
 import BatchStok from "../components/Page/Product/BatchStok";
-import Sales from "../components/Page/Sales/Sales";
 import Order from "../components/Page/Order/Staff/Order";
 import OrderAdmin from "../components/Page/Order/Admin/OrderAdmin";
+import Sales from "../components/Page/Sales/Sales";
 import OpnameAdmin from "../components/Page/Opname/Admin/OpnameAdmin";
-import api from "../service/api";
-import LoadingComponent from "../components/LoadingComponent";
-import OpnameStaff from "../components/Page/Opname/Staff/OpnameStaff"
+import OpnameStaff from "../components/Page/Opname/Staff/OpnameStaff";
+import OpnameDetail from "../components/Page/Opname/OpnameDetail";
+import Report from "../components/Page/Report/Report";
 
 function AppRoutes() {
   const [user, setUser] = useState(null);
@@ -25,7 +27,6 @@ function AppRoutes() {
   const fetchUser = useCallback(async () => {
     try {
       const response = await api.get("/users/verify-token");
-      console.log("Fetched user:", response.data.user); // Tambahkan ini
       setUser(response.data.user);
       setLoading(false);
     } catch (error) {
@@ -195,7 +196,7 @@ function AppRoutes() {
         />
 
         <Route
-          path="/opname"    
+          path="/opname"
           element={
             <ProtectedRoute allowedRoles={["admin"]}>
               <OpnameAdmin />
@@ -203,14 +204,32 @@ function AppRoutes() {
           }
         />
 
-          <Route
-          path="/opnames"    
+        <Route
+          path="/opnames"
           element={
             <ProtectedRoute allowedRoles={["staff"]}>
               <OpnameStaff />
             </ProtectedRoute>
           }
-        />   
+        />
+
+        <Route
+          path="/opname-detail/:opnameId"
+          element={
+            <ProtectedRoute allowedRoles={["staff", "admin"]}>
+              <OpnameDetail />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/reports"
+          element={
+            <ProtectedRoute allowedRoles={["staff", "admin"]}>
+              <Report />
+            </ProtectedRoute>
+          }
+        />
 
         {/* Default route - redirect based on role */}
         <Route

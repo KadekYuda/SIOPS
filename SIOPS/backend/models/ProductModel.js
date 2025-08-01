@@ -47,6 +47,8 @@ const Product = db.define('products', {
     },
 }, {
     freezeTableName: true,
+    timestamps: true,
+    paranoid: true,
     
 });
 

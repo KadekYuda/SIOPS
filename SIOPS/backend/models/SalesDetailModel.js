@@ -41,7 +41,9 @@ const SalesDetail = db.define('sales_details', {
     },
     created_at: DataTypes.DATE,
     updated_at: DataTypes.DATE,
-}, { freezeTableName: true });
+}, { freezeTableName: true,
+    paranoid: false,
+ });
 
 
 

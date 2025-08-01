@@ -35,7 +35,8 @@ const Order = db.define('orders', {
     created_at: DataTypes.DATE,
     updated_at: DataTypes.DATE,
 }, { 
-    freezeTableName: true 
+    freezeTableName: true,
+    paranoid: false,
 });
 
 

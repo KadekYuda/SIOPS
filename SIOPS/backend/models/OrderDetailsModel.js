@@ -43,7 +43,8 @@ const OrderDetail = db.define('order_details', {
     updated_at: DataTypes.DATE,
 }, { 
     freezeTableName: true,
-    timestamps: false
+    timestamps: false,
+    paranoid: false,
 });
 
 OrderDetail.belongsTo(Order, { foreignKey: 'order_id' });

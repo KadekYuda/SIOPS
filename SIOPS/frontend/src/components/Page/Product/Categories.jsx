@@ -12,12 +12,28 @@ const Categories = ({ onCategoriesChange }) => {
   const [code, setCode] = useState("");
   const [editing, setEditing] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
   const [alertModal, setAlertModal] = useState({ isOpen: false, message: "" });
 
   const [successModal, setSuccessModal] = useState({
     isOpen: false,
     message: "",
   });
+
+  const checkUserRole = useCallback(async () => {
+    try {
+      const response = await api.get("/users/profile");
+      const userRole = response.data.user?.role;
+      setIsAdmin(userRole === "admin");
+    } catch (error) {
+      console.error("Error fetching user role", error);
+      setIsAdmin(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    checkUserRole();
+  }, [checkUserRole]);
 
   const fetchCategories = useCallback(async () => {
     try {
@@ -243,26 +259,28 @@ const Categories = ({ onCategoriesChange }) => {
                               className="p-1 rounded-full"
                               buttonType="product"
                             />
-                            <CrudButton
-                              icon={Trash2}
-                              onConfirm={() =>
-                                handleDelete(category.code_categories)
-                              }
-                              actionType="delete"
-                              buttonStyle="danger"
-                              className="p-1 rounded-full"
-                              title="Delete Product"
-                              confirmMessage={
-                                <>
-                                  Are you sure you want to delete category{" "}
-                                  <b className="text-gray-700">
-                                    {category.name_categories}
-                                  </b>
-                                  ?
-                                </>
-                              }
-                              buttonType="product"
-                            />
+                            {isAdmin && (
+                              <CrudButton
+                                icon={Trash2}
+                                onConfirm={() =>
+                                  handleDelete(category.code_categories)
+                                }
+                                actionType="delete"
+                                buttonStyle="danger"
+                                className="p-1 rounded-full"
+                                title="Delete Product"
+                                confirmMessage={
+                                  <>
+                                    Are you sure you want to delete category{" "}
+                                    <b className="text-gray-700">
+                                      {category.name_categories}
+                                    </b>
+                                    ?
+                                  </>
+                                }
+                                buttonType="product"
+                              />
+                            )}
                           </div>
                         </td>
                       </tr>

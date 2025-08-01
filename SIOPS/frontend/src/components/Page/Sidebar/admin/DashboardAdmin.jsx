@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import {
   Package,
   Users,
@@ -8,12 +8,15 @@ import {
   FilePlus,
   Edit,
   Trash2,
+  DollarSign,
+  ClipboardList,
 } from "lucide-react";
 import CrudButton from "../../../Button/CrudButton";
 import UserModal from "../../../modal/UserModal.jsx";
 import SuccessModal from "../../../modal/SuccessModal.jsx";
 import AlertModal from "../../../modal/AlertModal.jsx";
-import api from "../../../../service/api.js"
+import api from "../../../../service/api.js";
+import OrderCh from "../../../Chart/OrderCh.jsx";
 
 
 
@@ -28,6 +31,104 @@ const DashboardAdmin = () => {
   const [successModalOpen, setSuccessModalOpen] = useState(false);
   const [errorModalOpen, setErrorModalOpen] = useState(false);
   const [modalMessage, setModalMessage] = useState("");
+
+  // Chart filter state
+  const [activeChartFilter, setActiveChartFilter] = useState("orders");
+  const [timeFilter, setTimeFilter] = useState("weekly"); // 'daily', 'weekly', 'monthly', 'yearly'
+
+  // Prepare order statistics for OrderCh component
+  const prepareOrderStats = useMemo(() => {
+    if (!orders || orders.length === 0) {
+      return {
+        pendingOrders: 0,
+        approvedOrders: 0,
+        receivedOrders: 0,
+        cancelledOrders: 0,
+        pendingValue: 0,
+        approvedValue: 0,
+        receivedValue: 0,
+        cancelledValue: 0,
+        monthlyData: [],
+      };
+    }
+
+    // Count orders by status
+    const statusCounts = {
+      pending: 0,
+      approved: 0,
+      received: 0,
+      cancelled: 0,
+    };
+
+    const statusValues = {
+      pending: 0,
+      approved: 0,
+      received: 0,
+      cancelled: 0,
+    };
+
+    orders.forEach((order) => {
+      const status = order.status_order || order.status || 'pending';
+      const orderValue = parseFloat(order.total_price || order.total_amount || 0);
+      
+      // Normalize status names
+      let normalizedStatus = status.toLowerCase();
+      if (normalizedStatus === 'in_progress' || normalizedStatus === 'progress') {
+        normalizedStatus = 'approved';
+      }
+      if (normalizedStatus === 'completed' || normalizedStatus === 'done') {
+        normalizedStatus = 'received';
+      }
+      if (normalizedStatus === 'rejected' || normalizedStatus === 'canceled') {
+        normalizedStatus = 'cancelled';
+      }
+
+      if (statusCounts.hasOwnProperty(normalizedStatus)) {
+        statusCounts[normalizedStatus]++;
+        statusValues[normalizedStatus] += orderValue;
+      } else {
+        // Default to pending if status not recognized
+        statusCounts.pending++;
+        statusValues.pending += orderValue;
+      }
+    });
+
+    // Generate monthly data for the last 12 months
+    const monthlyData = [];
+    for (let i = 11; i >= 0; i--) {
+      const date = new Date();
+      date.setMonth(date.getMonth() - i);
+      const monthStart = new Date(date.getFullYear(), date.getMonth(), 1);
+      const monthEnd = new Date(date.getFullYear(), date.getMonth() + 1, 0);
+
+      const monthOrders = orders.filter((order) => {
+        const orderDate = new Date(order.tgl_order || order.created_at);
+        return orderDate >= monthStart && orderDate <= monthEnd;
+      });
+
+      const monthTotalValue = monthOrders.reduce((sum, order) => {
+        return sum + parseFloat(order.total_price || order.total_amount || 0);
+      }, 0);
+
+      monthlyData.push({
+        month: monthStart.toISOString().split('T')[0],
+        orders: monthOrders.length,
+        totalValue: monthTotalValue,
+      });
+    }
+
+    return {
+      pendingOrders: statusCounts.pending,
+      approvedOrders: statusCounts.approved,
+      receivedOrders: statusCounts.received,
+      cancelledOrders: statusCounts.cancelled,
+      pendingValue: statusValues.pending,
+      approvedValue: statusValues.approved,
+      receivedValue: statusValues.received,
+      cancelledValue: statusValues.cancelled,
+      monthlyData,
+    };
+  }, [orders]);
 
   useEffect(() => {
     fetchOrderData();
@@ -172,6 +273,156 @@ const DashboardAdmin = () => {
           <p className="text-gray-500">
             Comprehensive overview of your inventory and staff
           </p>
+        </div>
+
+        {/* Analytics Dashboard Section */}
+        <div className="mb-8">
+          <div className="bg-white p-6 rounded-xl shadow-md border border-gray-100 mb-6">
+            <div className="flex flex-col md:flex-row md:justify-between md:items-center mb-6">
+              <h3 className="text-xl font-semibold text-gray-800 mb-2 md:mb-0">
+                Analytics Dashboard
+              </h3>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-all flex items-center ${
+                    activeChartFilter === "sales"
+                      ? "bg-blue-500 text-white"
+                      : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                  }`}
+                  onClick={() => setActiveChartFilter("sales")}
+                >
+                  <DollarSign size={16} className="mr-1" />
+                  Sales
+                </button>
+                <button
+                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-all flex items-center ${
+                    activeChartFilter === "products"
+                      ? "bg-blue-500 text-white"
+                      : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                  }`}
+                  onClick={() => setActiveChartFilter("products")}
+                >
+                  <Package size={16} className="mr-1" />
+                  Products
+                </button>
+                <button
+                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-all flex items-center ${
+                    activeChartFilter === "orders"
+                      ? "bg-blue-500 text-white"
+                      : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                  }`}
+                  onClick={() => setActiveChartFilter("orders")}
+                >
+                  <ShoppingBag size={16} className="mr-1" />
+                  Orders
+                </button>
+                <button
+                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-all flex items-center ${
+                    activeChartFilter === "opname"
+                      ? "bg-blue-500 text-white"
+                      : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                  }`}
+                  onClick={() => setActiveChartFilter("opname")}
+                >
+                  <ClipboardList size={16} className="mr-1" />
+                  Opname
+                </button>
+              </div>
+            </div>
+
+            {/* Time Range Filter */}
+            <div className="mb-6">
+              <div className="bg-gray-50 p-2 rounded-lg flex flex-wrap gap-2 justify-center">
+                <button
+                  className={`px-4 py-1 rounded-md text-xs font-medium transition-all ${
+                    timeFilter === "daily"
+                      ? "bg-blue-500 text-white"
+                      : "bg-white text-gray-700 hover:bg-gray-100"
+                  }`}
+                  onClick={() => setTimeFilter("daily")}
+                >
+                  Daily
+                </button>
+                <button
+                  className={`px-4 py-1 rounded-md text-xs font-medium transition-all ${
+                    timeFilter === "weekly"
+                      ? "bg-blue-500 text-white"
+                      : "bg-white text-gray-700 hover:bg-gray-100"
+                  }`}
+                  onClick={() => setTimeFilter("weekly")}
+                >
+                  Weekly
+                </button>
+                <button
+                  className={`px-4 py-1 rounded-md text-xs font-medium transition-all ${
+                    timeFilter === "monthly"
+                      ? "bg-blue-500 text-white"
+                      : "bg-white text-gray-700 hover:bg-gray-100"
+                  }`}
+                  onClick={() => setTimeFilter("monthly")}
+                >
+                  Monthly
+                </button>
+                <button
+                  className={`px-4 py-1 rounded-md text-xs font-medium transition-all ${
+                    timeFilter === "yearly"
+                      ? "bg-blue-500 text-white"
+                      : "bg-white text-gray-700 hover:bg-gray-100"
+                  }`}
+                  onClick={() => setTimeFilter("yearly")}
+                >
+                  Yearly
+                </button>
+              </div>
+            </div>
+
+            {/* Chart Area */}
+            <div className="h-80 relative">
+              {/* Sales Chart - Empty */}
+              {activeChartFilter === "sales" && (
+                <div className="h-full flex items-center justify-center bg-gray-50 rounded-lg border-2 border-dashed border-gray-300">
+                  <div className="text-center">
+                    <DollarSign size={48} className="text-gray-300 mb-3 mx-auto" />
+                    <p className="text-gray-500 font-medium">Sales Chart</p>
+                    <p className="text-gray-400 text-sm">Coming Soon</p>
+                  </div>
+                </div>
+              )}
+
+              {/* Products Chart - Empty */}
+              {activeChartFilter === "products" && (
+                <div className="h-full flex items-center justify-center bg-gray-50 rounded-lg border-2 border-dashed border-gray-300">
+                  <div className="text-center">
+                    <Package size={48} className="text-gray-300 mb-3 mx-auto" />
+                    <p className="text-gray-500 font-medium">Products Chart</p>
+                    <p className="text-gray-400 text-sm">Coming Soon</p>
+                  </div>
+                </div>
+              )}
+
+              {/* Orders Chart - OrderCh Component */}
+              {activeChartFilter === "orders" && (
+                <div className="h-full">
+                  <OrderCh 
+                    orderStats={prepareOrderStats}
+                    timeFilter={timeFilter}
+                    activeTab="count"
+                  />
+                </div>
+              )}
+
+              {/* Opname Chart - Empty */}
+              {activeChartFilter === "opname" && (
+                <div className="h-full flex items-center justify-center bg-gray-50 rounded-lg border-2 border-dashed border-gray-300">
+                  <div className="text-center">
+                    <ClipboardList size={48} className="text-gray-300 mb-3 mx-auto" />
+                    <p className="text-gray-500 font-medium">Opname Chart</p>
+                    <p className="text-gray-400 text-sm">Coming Soon</p>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
         </div>
 
         {/* Summary Cards */}

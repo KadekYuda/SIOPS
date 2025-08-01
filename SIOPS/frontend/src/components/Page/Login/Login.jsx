@@ -9,37 +9,36 @@ import {
   User,
   Lock,
   AlertCircle,
-  BarChart2,
-  UserCheck,
-  Shield,
   Store,
   Sparkles,
-  CheckCircle2
+  CheckCircle2,
+  Package,
+  ShoppingBag,
 } from "lucide-react";
 import { motion } from "framer-motion";
 import api from "../../../service/api";
 
 const EnterprisePortalCard = () => {
   const [currentFeature, setCurrentFeature] = useState(0);
-  
+
   const features = [
     {
-      icon: <BarChart2 size={24} />,
-      text: "Real-time analytics dashboard",
+      icon: <Package size={24} />,
+      text: "Complete Stock Management",
       color: "from-blue-400 to-blue-600",
-      description: "Monitor your business metrics in real-time"
+      description: "Track inventory with batches and expiry dates",
     },
     {
-      icon: <Shield size={24} />,
-      text: "Enhanced security protocols",
+      icon: <ShoppingBag size={24} />,
+      text: "Order Tracking System",
       color: "from-purple-400 to-purple-600",
-      description: "Enterprise-grade security for your data"
+      description: "Manage and monitor all purchase orders",
     },
     {
-      icon: <UserCheck size={24} />,
-      text: "Role-based access control",
+      icon: <CheckCircle2 size={24} />,
+      text: "Opname Verification",
       color: "from-indigo-400 to-indigo-600",
-      description: "Granular permissions for team members"
+      description: "Verify physical inventory against system data",
     },
   ];
 
@@ -54,7 +53,7 @@ const EnterprisePortalCard = () => {
     <div className="bg-gradient-to-br from-blue-600 via-purple-600 to-pink-600 text-white p-8 rounded-3xl shadow-2xl shadow-black/50 w-full h-full relative overflow-hidden z-20">
       <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full blur-xl animate-pulse"></div>
       <div className="absolute bottom-10 left-10 w-20 h-20 bg-white/5 rounded-full blur-lg animate-bounce"></div>
-      
+
       <div className="flex flex-col items-center mb-8 relative z-10">
         <div className="w-24 h-24 bg-white/20 rounded-2xl flex items-center justify-center backdrop-blur-sm mb-6 shadow-lg hover:scale-105 transition-transform duration-300">
           <ShieldCheck size={40} className="text-white drop-shadow-lg" />
@@ -63,37 +62,44 @@ const EnterprisePortalCard = () => {
         <div className="flex items-center mb-2">
           <Sparkles size={20} className="text-yellow-300 mr-2 animate-pulse" />
           <h1 className="text-3xl font-bold text-center bg-gradient-to-r from-white to-blue-100 bg-clip-text text-transparent">
-            Enterprise Portal
+            SIMSOP
           </h1>
           <Sparkles size={20} className="text-yellow-300 ml-2 animate-pulse" />
         </div>
 
         <p className="text-center mt-2 opacity-90 max-w-xs text-blue-100">
-          Access your complete business management system with enhanced security.
+          Stock Inventory Management, Order Processing & Opname System
         </p>
       </div>
 
       <div className="space-y-6 mb-8">
         {features.map((feature, index) => (
-          <div 
-            key={index} 
+          <div
+            key={index}
             className={`flex items-center transition-all duration-500 ${
-              index === currentFeature ? 'scale-105 opacity-100' : 'opacity-70'
+              index === currentFeature ? "scale-105 opacity-100" : "opacity-70"
             }`}
           >
             <div
-              className={`w-12 h-12 bg-gradient-to-br ${feature.color} rounded-xl flex items-center justify-center mr-4 shadow-lg transition-transform duration-300 ${
-                index === currentFeature ? 'scale-110 shadow-xl' : ''
+              className={`w-12 h-12 bg-gradient-to-br ${
+                feature.color
+              } rounded-xl flex items-center justify-center mr-4 shadow-lg transition-transform duration-300 ${
+                index === currentFeature ? "scale-110 shadow-xl" : ""
               }`}
             >
               {feature.icon}
             </div>
             <div className="flex-1">
               <span className="font-medium block">{feature.text}</span>
-              <span className="text-sm opacity-75 text-blue-100">{feature.description}</span>
+              <span className="text-sm opacity-75 text-blue-100">
+                {feature.description}
+              </span>
             </div>
             {index === currentFeature && (
-              <CheckCircle2 size={20} className="text-green-400 animate-pulse" />
+              <CheckCircle2
+                size={20}
+                className="text-green-400 animate-pulse"
+              />
             )}
           </div>
         ))}
@@ -104,7 +110,7 @@ const EnterprisePortalCard = () => {
           <div
             key={index}
             className={`w-2 h-2 rounded-full transition-all duration-300 ${
-              index === currentFeature ? 'bg-white w-6' : 'bg-white/50'
+              index === currentFeature ? "bg-white w-6" : "bg-white/50"
             }`}
           />
         ))}
@@ -113,11 +119,13 @@ const EnterprisePortalCard = () => {
       <div className="border-t border-white/20 pt-6 mt-6">
         <div className="flex items-center justify-center mb-3">
           <div className="w-3 h-3 bg-green-400 rounded-full mr-2 animate-pulse shadow-lg shadow-green-400/50"></div>
-          <span className="text-sm font-medium">System Status: Operational</span>
+          <span className="text-sm font-medium">
+            System Status: Operational
+          </span>
         </div>
 
         <p className="text-center text-sm opacity-70">
-          © {new Date().getFullYear()} AGIK MART. All rights reserved.
+          © {new Date().getFullYear()} SIMSOP - AGIK MART. All rights reserved.
         </p>
       </div>
     </div>
@@ -139,7 +147,8 @@ const Login = ({ onLoginSuccess }) => {
         const response = await api.get("/users/verify-token");
         if (response.data.user) {
           const role = response.data.user.role;
-          const redirectPath = role === "admin" ? "/dashboardAdmin" : "/dashboard";
+          const redirectPath =
+            role === "admin" ? "/dashboardAdmin" : "/dashboard";
           navigate(redirectPath, { replace: true });
         }
       } catch (error) {
@@ -235,7 +244,7 @@ const Login = ({ onLoginSuccess }) => {
             transition={{ duration: 0.5, delay: 0.6 }}
             className="text-center text-gray-600 dark:text-gray-300 text-lg mb-8"
           >
-            Sign in to access your dashboard
+            Login to manage inventory, orders and opname tasks
           </motion.p>
 
           <motion.form
@@ -302,8 +311,13 @@ const Login = ({ onLoginSuccess }) => {
                 animate={{ opacity: 1, y: 0 }}
                 className="rounded-xl p-4 bg-red-50 dark:bg-red-900/30 border-l-4 border-red-500 flex items-start animate-pulse"
               >
-                <AlertCircle size={20} className="text-red-500 dark:text-red-400 mr-3 mt-0.5 flex-shrink-0" />
-                <p className="text-red-600 dark:text-red-400 text-sm font-medium">{error}</p>
+                <AlertCircle
+                  size={20}
+                  className="text-red-500 dark:text-red-400 mr-3 mt-0.5 flex-shrink-0"
+                />
+                <p className="text-red-600 dark:text-red-400 text-sm font-medium">
+                  {error}
+                </p>
               </motion.div>
             )}
 
@@ -323,7 +337,7 @@ const Login = ({ onLoginSuccess }) => {
               ) : (
                 <>
                   <LogIn size={20} className="mr-3" />
-                  <span>Sign In</span>
+                  <span>Login</span>
                 </>
               )}
             </motion.button>

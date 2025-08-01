@@ -36,6 +36,14 @@ const Sidebars = ({ isSidebarOpen, isDesktopSidebarOpen }) => {
     fetchUserProfile();
   }, []);
 
+  // Handle dashboard selection on first load
+  useEffect(() => {
+    // If we're at the root path, programmatically navigate to dashboard
+    if (location.pathname === "/") {
+      window.history.replaceState(null, "", "/Dashboard");
+    }
+  }, [location.pathname]);
+
   // Data untuk Sidebar
   const Fiturs = [
     {
@@ -44,6 +52,7 @@ const Sidebars = ({ isSidebarOpen, isDesktopSidebarOpen }) => {
       text: "Dashboard",
       color: "text-blue-600",
       bgColor: "bg-blue-50",
+      paths: ["/", "/dashboard", "/Dashboard"], // Match any of these paths
     },
 
     {
@@ -52,6 +61,7 @@ const Sidebars = ({ isSidebarOpen, isDesktopSidebarOpen }) => {
       text: "Product",
       color: "text-green-600",
       bgColor: "bg-green-50",
+      paths: ["/product", "/batchstock"],
     },
     {
       href: "/order",
@@ -59,6 +69,7 @@ const Sidebars = ({ isSidebarOpen, isDesktopSidebarOpen }) => {
       text: "Order",
       color: "text-purple-600",
       bgColor: "bg-purple-50",
+      paths: ["/order"],
     },
     {
       href: "/sales",
@@ -66,21 +77,23 @@ const Sidebars = ({ isSidebarOpen, isDesktopSidebarOpen }) => {
       text: "Sales",
       color: "text-orange-600",
       bgColor: "bg-orange-50",
+      paths: ["/sales"],
     },
-
     {
       href: "/opnames",
       icon: PackageSearch,
       text: "Opname",
       color: "text-teal-600",
       bgColor: "bg-teal-50",
+      paths: ["/opnames", "/opname-detail"],
     },
     {
-      href: "/import",
+      href: "/reports",
       icon: ClipboardList,
       text: "Report",
       color: "text-red-600",
       bgColor: "bg-red-50",
+      paths: ["/reports", "/report"],
     },
   ];
 
@@ -150,7 +163,16 @@ const Sidebars = ({ isSidebarOpen, isDesktopSidebarOpen }) => {
         </h2>
         <nav className="space-y-1">
           {Fiturs.map((item, index) => {
-            const isActive = location.pathname === item.href;
+            // Check if current path matches any of the specified paths or the href
+            const pathToCheck = location.pathname.toLowerCase();
+            const isActive =
+              pathToCheck === item.href.toLowerCase() ||
+              (item.href !== "/" &&
+                pathToCheck.startsWith(item.href.toLowerCase())) ||
+              // Also check the paths array if available
+              (item.paths &&
+                item.paths.some((p) => pathToCheck === p.toLowerCase()));
+
             const hover = getSidebarHoverClass(item.text);
             const iconHover = getSidebarIconHoverClass(item.text);
             return (
@@ -187,23 +209,7 @@ const Sidebars = ({ isSidebarOpen, isDesktopSidebarOpen }) => {
       </div>
 
       {/* Footer with Profile */}
-      <div className="p-4 border-t border-gray-100">
-        <div className="bg-gradient-to-r from-blue-50 to-purple-50 rounded-xl p-4">
-          <div className="flex items-center space-x-3">
-            <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center">
-              <span className="text-white text-sm font-semibold">
-                {userData.name ? userData.name.charAt(0).toUpperCase() : "A"}
-              </span>
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium text-gray-900 truncate">
-                {userData.name}
-              </p>
-              <p className="text-xs text-gray-500 truncate">{userData.role}</p>
-            </div>
-          </div>
-        </div>
-      </div>
+      <div className="p-4 border-t border-gray-100"></div>
     </aside>
   );
 };

@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo } from "react";
 import PropTypes from "prop-types";
+import { useNavigate } from "react-router-dom";
 import {
   Package,
   Calendar,
@@ -9,8 +10,9 @@ import {
   X,
   Check,
   Eye,
+  RefreshCw,
   ChevronDown,
-  ChevronUp,
+  ChevronRight,
 } from "lucide-react";
 import Select from "react-select";
 import api from "../../../../service/api";
@@ -18,6 +20,7 @@ import Pagination from "../../Product/Pagination";
 import AlertModal from "../../../modal/AlertModal";
 import SuccessModal from "../../../modal/SuccessModal";
 import BatchStatus from "../../BatchStatus";
+import BatchExpDate from "../../BatchExpDate";
 
 const Tab = ({ label, icon: Icon, isActive, onClick }) => (
   <button
@@ -42,92 +45,345 @@ const OpnameAdmin = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(null);
+  const [opnamesLoaded, setOpnamesLoaded] = useState(false);
 
-  const fetchData = useCallback(async () => {
-    setLoading(true);
-    setError(null);
+  // Cache duration in milliseconds (5 minutes untuk data statis, 2 menit untuk data dinamis)
+  const CACHE_DURATION = {
+    static: 5 * 60 * 1000, // 5 menit untuk users, categories
+    dynamic: 2 * 60 * 1000, // 2 menit untuk batches, opnames
+  };
+
+  // Session storage keys
+  const CACHE_KEYS = useMemo(
+    () => ({
+      users: "opname_users_cache",
+      categories: "opname_categories_cache",
+      batches: "opname_batches_cache",
+      opnames: "opname_opnames_cache",
+      timestamp: "opname_cache_timestamp",
+    }),
+    []
+  );
+
+  // Helper functions untuk session storage caching
+  const getCachedData = useCallback((key) => {
     try {
-      const usersRes = await api.get("/users");
-      // Make sure to include all staff users, even if they don't have a username set
-      const staffUsers = Array.isArray(usersRes.data)
-        ? usersRes.data
-            .filter((user) => user.role === "staff")
-            .map((user) => ({
-              ...user,
-              username: user.name || user.username || `Staff ${user.user_id}`,
-              user_id: user.user_id,
-            }))
-        : [];
-      setUsers(staffUsers);
+      const cached = sessionStorage.getItem(key);
+      return cached ? JSON.parse(cached) : null;
+    } catch (error) {
+      console.warn("Error reading cache:", error);
+      return null;
+    }
+  }, []);
 
-      const batchesRes = await api.get("/batch/stock");
-      const batchData = batchesRes.data?.result || [];
-      setBatches(batchData);
+  const setCachedData = useCallback((key, data) => {
+    try {
+      sessionStorage.setItem(
+        key,
+        JSON.stringify({
+          data,
+          timestamp: Date.now(),
+        })
+      );
+    } catch (error) {
+      console.warn("Error setting cache:", error);
+    }
+  }, []);
 
-      const opnamesRes = await api.get("/opname/all");
-      console.log("Raw Opname Response:", opnamesRes.data);
+  const isCacheValid = useCallback(
+    (cacheKey, duration) => {
+      const cached = getCachedData(cacheKey);
+      if (!cached) return false;
+      return Date.now() - cached.timestamp < duration;
+    },
+    [getCachedData]
+  );
 
-      // Transform opname data to include user and batch details
-      const transformedOpnames = Array.isArray(opnamesRes.data)
-        ? opnamesRes.data.map((opname) => {
-            const user = staffUsers.find((u) => u.user_id === opname.user_id);
-            const batch = batchData.find((b) => b.batch_id === opname.batch_id);
+  // Fetch initial data (users, batches, categories) dengan caching
+  const fetchInitialData = useCallback(
+    async (force = false) => {
+      // Check session storage cache first
+      if (!force) {
+        const usersCache = getCachedData(CACHE_KEYS.users);
+        const categoriesCache = getCachedData(CACHE_KEYS.categories);
+        const batchesCache = getCachedData(CACHE_KEYS.batches);
 
-            return {
-              ...opname,
-              User: user || { username: `Staff ${opname.user_id}` },
-              batchStock: {
-                ...batch,
-                product: batch?.product || {
-                  name_product: `Batch ${opname.batch_id}`,
-                },
-              },
-            };
-          })
-        : [];
+        const usersValid = isCacheValid(
+          CACHE_KEYS.users,
+          CACHE_DURATION.static
+        );
+        const categoriesValid = isCacheValid(
+          CACHE_KEYS.categories,
+          CACHE_DURATION.static
+        );
+        const batchesValid = isCacheValid(
+          CACHE_KEYS.batches,
+          CACHE_DURATION.dynamic
+        );
 
-      console.log("Transformed Opnames:", transformedOpnames);
-      setOpnames(transformedOpnames);
+        // Jika semua data cached dan valid, gunakan cache
+        if (usersValid && categoriesValid && batchesValid) {
+          setUsers(usersCache.data);
+          setCategories(categoriesCache.data);
+          setBatches(batchesCache.data);
+          setLoading(false);
+          return;
+        }
+      }
 
-      let categoriesData = [];
+      setLoading(true);
+      setError(null);
       try {
-        const categoriesRes = await api.get("/categories");
-        categoriesData = Array.isArray(categoriesRes.data)
-          ? categoriesRes.data
-          : categoriesRes.data?.result || [];
-      } catch (catErr) {
-        try {
-          const altCategoriesRes = await api.get("/products/categories");
-          categoriesData = Array.isArray(altCategoriesRes.data)
-            ? altCategoriesRes.data
-            : altCategoriesRes.data?.result || [];
-        } catch (altErr) {
+        // Fetch essential data first (exclude opnames for faster initial load)
+        const [usersRes, batchesRes, categoriesRes] = await Promise.allSettled([
+          api.get("/users"),
+          api.get("/batch/stock"),
+          api
+            .get("/categories")
+            .catch(() => api.get("/products/categories"))
+            .catch(() => null),
+        ]);
+
+        // Process users (optimized)
+        const staffUsers =
+          usersRes.status === "fulfilled" && Array.isArray(usersRes.value.data)
+            ? usersRes.value.data.reduce((acc, user) => {
+                if (user.role === "staff") {
+                  acc.push({
+                    ...user,
+                    username:
+                      user.name || user.username || `Staff ${user.user_id}`,
+                    user_id: user.user_id,
+                  });
+                }
+                return acc;
+              }, [])
+            : [];
+        setUsers(staffUsers);
+        setCachedData(CACHE_KEYS.users, staffUsers);
+
+        // Process batches (optimized)
+        const batchData =
+          batchesRes.status === "fulfilled"
+            ? batchesRes.value.data?.result || []
+            : [];
+        const validBatches = batchData.filter(
+          (batch) =>
+            batch?.product?.code_product && batch?.product?.name_product
+        );
+        setBatches(validBatches);
+        setCachedData(CACHE_KEYS.batches, validBatches);
+
+        // Process categories (simplified fallback)
+        let categoriesData = [];
+        if (categoriesRes.status === "fulfilled" && categoriesRes.value) {
+          categoriesData = Array.isArray(categoriesRes.value.data)
+            ? categoriesRes.value.data
+            : categoriesRes.value.data?.result || [];
+        } else {
+          // Fallback data
           categoriesData = [
             { code_categories: "cat1", name_categories: "Obat" },
             { code_categories: "cat2", name_categories: "Vitamin" },
             { code_categories: "cat3", name_categories: "Suplemen" },
           ];
         }
+        setCategories(categoriesData);
+        setCachedData(CACHE_KEYS.categories, categoriesData);
+      } catch (err) {
+        setError(err.response?.data?.error || "Gagal memuat data");
+      } finally {
+        setLoading(false);
       }
-      setCategories(categoriesData);
-    } catch (err) {
-      setError(err.response?.data?.error || "Gagal memuat data");
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+    },
+    [
+      CACHE_DURATION.static,
+      CACHE_DURATION.dynamic,
+      CACHE_KEYS.users,
+      CACHE_KEYS.categories,
+      CACHE_KEYS.batches,
+      isCacheValid,
+      getCachedData,
+      setCachedData,
+    ]
+  );
+
+  // Fetch opnames data separately and lazily dengan caching
+  const fetchOpnamesData = useCallback(
+    async (force = false) => {
+      // Check cache first untuk opnames
+      if (!force) {
+        const opnamesCache = getCachedData(CACHE_KEYS.opnames);
+        const opnamesValid = isCacheValid(
+          CACHE_KEYS.opnames,
+          CACHE_DURATION.dynamic
+        );
+
+        if (opnamesValid && opnamesCache?.data) {
+          setOpnames(opnamesCache.data);
+          setOpnamesLoaded(true);
+          return;
+        }
+      }
+
+      if (!force && opnamesLoaded) return;
+
+      try {
+        const opnamesRes = await api.get("/opname/all");
+
+        // Create lookup maps for better performance
+        const userMap = new Map(users.map((user) => [user.user_id, user]));
+        const batchMap = new Map(
+          batches.map((batch) => [batch.batch_id, batch])
+        );
+
+        // Process opnames (optimized with maps)
+        const transformedOpnames = Array.isArray(opnamesRes.data)
+          ? opnamesRes.data.map((opname) => ({
+              ...opname,
+              User: userMap.get(opname.user_id) || {
+                username: `Staff ${opname.user_id}`,
+              },
+              batchStock: {
+                ...batchMap.get(opname.batch_id),
+                product: batchMap.get(opname.batch_id)?.product || {
+                  name_product: `Batch ${opname.batch_id}`,
+                },
+              },
+            }))
+          : [];
+        setOpnames(transformedOpnames);
+        setCachedData(CACHE_KEYS.opnames, transformedOpnames);
+        setOpnamesLoaded(true);
+      } catch (err) {
+        setError(err.response?.data?.error || "Gagal memuat data opname");
+      }
+    },
+    [
+      users,
+      batches,
+      opnamesLoaded,
+      CACHE_DURATION.dynamic,
+      CACHE_KEYS.opnames,
+      getCachedData,
+      isCacheValid,
+      setCachedData,
+    ]
+  );
+
+  // Combined fetch function that calls both initial data and opnames
+  const fetchData = useCallback(
+    async (force = false) => {
+      await fetchInitialData(force);
+      // Load opnames after initial data is loaded
+      if (users.length > 0 && batches.length > 0) {
+        await fetchOpnamesData(force);
+      }
+    },
+    [fetchInitialData, fetchOpnamesData, users.length, batches.length]
+  );
 
   useEffect(() => {
-    fetchData();
-  }, [fetchData]);
+    fetchInitialData();
+  }, [fetchInitialData]);
+
+  // Load opnames data when users and batches are available
+  useEffect(() => {
+    if (users.length > 0 && batches.length > 0 && !opnamesLoaded) {
+      fetchOpnamesData();
+    }
+  }, [users.length, batches.length, opnamesLoaded, fetchOpnamesData]);
+
+  // Function untuk clear cache ketika ada perubahan data
+  const clearOpnameCache = useCallback(() => {
+    sessionStorage.removeItem(CACHE_KEYS.opnames);
+    sessionStorage.removeItem(CACHE_KEYS.batches);
+  }, [CACHE_KEYS]);
 
   const clearError = () => setError(null);
   const clearSuccess = () => setSuccess(null);
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div>
+      <div className="min-h-screen py-20">
+        <div className="px-4">
+          {/* Header Skeleton */}
+          <div className="bg-gradient-to-r from-indigo-500 to-indigo-700 rounded-t-lg shadow-md p-4 sm:p-6 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+            <div className="flex items-center">
+              <Package className="text-white mr-3" size={36} />
+              <div>
+                <h1 className="text-xl md:text-2xl font-bold text-white">
+                  Opname Management
+                </h1>
+                <p className="text-indigo-100 text-sm">Loading data...</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="flex flex-wrap gap-2 sm:gap-3">
+                <div className="flex-1 flex items-center justify-center gap-2 px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg text-sm font-medium bg-white text-indigo-700 shadow-sm">
+                  <Calendar size={18} />
+                  <span className="truncate">Schedule Opname</span>
+                </div>
+                <div className="flex-1 flex items-center justify-center gap-2 px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg text-sm font-medium bg-indigo-500 text-white hover:bg-indigo-600 border border-indigo-400">
+                  <ClipboardEdit size={18} />
+                  <span className="truncate">Direct Opname</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Content Skeleton */}
+          <div className="mb-8">
+            <div className="bg-white rounded-lg shadow-md p-6 animate-pulse">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+                <div className="h-10 bg-gray-200 rounded"></div>
+                <div className="h-10 bg-gray-200 rounded"></div>
+                <div className="h-10 bg-gray-200 rounded"></div>
+                <div className="h-10 bg-gray-200 rounded"></div>
+              </div>
+              <div className="space-y-3">
+                {[...Array(5)].map((_, i) => (
+                  <div key={i} className="h-16 bg-gray-200 rounded"></div>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* Table Skeleton */}
+          <div className="bg-white rounded-b-xl shadow-md border border-gray-100 border-t-0">
+            <div className="bg-gradient-to-r from-indigo-500 to-indigo-700 px-4 sm:px-6 py-4 sm:py-6 border-b rounded-t-lg">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <FileText className="text-white mr-2 sm:mr-3" size={30} />
+                  <div>
+                    <h2 className="text-lg font-semibold text-white">
+                      Opname List
+                    </h2>
+                    <p className="text-sm text-gray-200">
+                      Loading opname transactions...
+                    </p>
+                  </div>
+                </div>
+                <div className="animate-pulse">
+                  <div className="h-10 w-32 bg-indigo-600 rounded-lg"></div>
+                </div>
+              </div>
+            </div>
+            <div className="p-6 animate-pulse">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+                <div className="h-10 bg-gray-200 rounded"></div>
+                <div className="h-10 bg-gray-200 rounded"></div>
+                <div className="h-10 bg-gray-200 rounded"></div>
+                <div className="h-10 bg-gray-200 rounded"></div>
+              </div>
+              <div className="space-y-3">
+                {[...Array(8)].map((_, i) => (
+                  <div key={i} className="h-12 bg-gray-200 rounded"></div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
     );
   }
@@ -147,19 +403,21 @@ const OpnameAdmin = () => {
               </p>
             </div>
           </div>
-          <div className="flex flex-wrap gap-2 sm:gap-3">
-            <Tab
-              label="Schedule Opname"
-              icon={Calendar}
-              isActive={activeTab === "schedule"}
-              onClick={() => setActiveTab("schedule")}
-            />
-            <Tab
-              label="Direct Opname"
-              icon={ClipboardEdit}
-              isActive={activeTab === "direct"}
-              onClick={() => setActiveTab("direct")}
-            />
+          <div className="flex items-center gap-2">
+            <div className="flex flex-wrap gap-2 sm:gap-3">
+              <Tab
+                label="Schedule Opname"
+                icon={Calendar}
+                isActive={activeTab === "schedule"}
+                onClick={() => setActiveTab("schedule")}
+              />
+              <Tab
+                label="Direct Opname"
+                icon={ClipboardEdit}
+                isActive={activeTab === "direct"}
+                onClick={() => setActiveTab("direct")}
+              />
+            </div>
           </div>
         </div>
         <div className="mb-8">
@@ -168,7 +426,11 @@ const OpnameAdmin = () => {
               users={users}
               batches={batches}
               categories={categories}
-              fetchData={fetchData}
+              fetchData={() => {
+                // Clear cache sebelum fetch ulang
+                clearOpnameCache();
+                fetchData(true);
+              }}
               setSuccess={setSuccess}
               setError={setError}
             />
@@ -177,7 +439,11 @@ const OpnameAdmin = () => {
             <DirectOpname
               batches={batches}
               categories={categories}
-              fetchData={fetchData}
+              fetchData={() => {
+                // Clear cache sebelum fetch ulang
+                clearOpnameCache();
+                fetchData(true);
+              }}
               setSuccess={setSuccess}
               setError={setError}
             />
@@ -197,13 +463,29 @@ const OpnameAdmin = () => {
                   </p>
                 </div>
               </div>
+              <button
+                onClick={() => {
+                  // Clear cache untuk refresh paksa
+                  clearOpnameCache();
+                  fetchData(true);
+                }}
+                className="text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg px-4 py-2 text-sm font-medium flex items-center gap-2"
+              >
+                <RefreshCw size={16} />
+                Refresh Data
+              </button>
             </div>
           </div>
           <AllOpname
             opnames={opnames}
             users={users}
             batches={batches}
-            fetchData={fetchData}
+            categories={categories}
+            fetchData={() => {
+              // Clear cache setelah ada perubahan
+              clearOpnameCache();
+              fetchData(true);
+            }}
             setError={setError}
             setSuccess={setSuccess}
           />
@@ -223,25 +505,38 @@ const AllOpname = ({
   opnames,
   users,
   batches,
+  categories,
   fetchData,
   setError,
   setSuccess,
 }) => {
+  const navigate = useNavigate();
   const [search, setSearch] = useState("");
   const [filterDate, setFilterDate] = useState("");
   const [filterStatus, setFilterStatus] = useState("");
   const [filterUser, setFilterUser] = useState("");
-  const [currentPage, setCurrentPage] = useState(0);
   const itemsPerPage = 10;
+  const [expandedGroups, setExpandedGroups] = useState(new Set());
+  // Pagination per group
+  const [groupPagination, setGroupPagination] = useState({});
 
   const userOptions = users.map((user) => ({
     value: user.user_id,
     label: user.username,
   }));
-  const [selectedOpname, setSelectedOpname] = useState(null);
+
+  // Helper function to format categories for display
+  const formatCategoriesForDisplay = (categories) => {
+    if (!categories || categories.length === 0) return "";
+
+    if (categories.length <= 2) {
+      return categories.join(", ");
+    } else {
+      return `${categories.slice(0, 2).join(", ")}...`;
+    }
+  };
 
   const groupedOpnames = opnames.reduce((acc, opname) => {
-    const batch = batches.find((b) => b.batch_id === opname.batch_id);
     const date = opname.scheduled_date || opname.opname_date; // Gunakan opname_date untuk direct opname
     const key = `${date}-${opname.user_id || "admin"}`; // Gunakan "admin" untuk direct opname
     if (!acc[key]) {
@@ -253,46 +548,135 @@ const AllOpname = ({
         user: users.find((u) => u.user_id === opname.user_id) || {
           username: "Admin",
         },
+        categories: new Set(), // Track unique categories
       };
     }
     acc[key].items.push(opname);
+
+    // Add category to the set if it exists
+    const categoryCode = opname.batch_stock?.product?.code_categories;
+    if (categoryCode) {
+      acc[key].categories.add(categoryCode);
+    }
+
     if (opname.status === "adjusted") acc[key].status = "adjusted";
     else if (opname.status === "submitted" && acc[key].status !== "adjusted")
       acc[key].status = "submitted";
-    else if (
-      opname.status === "in_progress" &&
-      acc[key].status !== "adjusted" &&
-      acc[key].status !== "submitted"
-    )
-      acc[key].status = "in_progress";
     return acc;
   }, {});
 
+  // Convert categories Set to array and get category names
+  Object.values(groupedOpnames).forEach((group) => {
+    const categoryNames = Array.from(group.categories)
+      .map((code) => {
+        // Try to find category name from categories data or batches
+        const category = categories.find((cat) => cat.code_categories === code);
+        if (category) {
+          return category.name_categories;
+        }
+
+        // Fallback: get from batches if categories not available
+        const batch = batches.find(
+          (batch) => batch.product?.code_categories === code
+        );
+        return batch?.product?.Categories?.name_categories || code;
+      })
+      .filter(Boolean);
+    group.categoryNames = categoryNames;
+  });
+
   const opnameList = Object.values(groupedOpnames);
 
-  const filteredOpnames = opnameList.filter(
-    (opnameGroup) =>
+  const filteredOpnames = opnameList.filter((opnameGroup) => {
+    // Search in username or product names
+    const searchMatch =
+      search === "" ||
       opnameGroup.user?.username
         ?.toLowerCase()
-        .includes(search.toLowerCase()) &&
-      (!filterDate || opnameGroup.date === filterDate) &&
-      (!filterStatus || opnameGroup.status === filterStatus) &&
-      (!filterUser || opnameGroup.user_id === filterUser)
-  );
+        .includes(search.toLowerCase()) ||
+      opnameGroup.items?.some(
+        (item) =>
+          item.batch_stock?.product?.name_product
+            ?.toLowerCase()
+            .includes(search.toLowerCase()) ||
+          item.batch_stock?.product?.code_product
+            ?.toLowerCase()
+            .includes(search.toLowerCase())
+      );
 
-  const getCurrentPageItems = () => {
-    const start = currentPage * itemsPerPage;
-    const end = start + itemsPerPage;
-    return filteredOpnames.slice(start, end);
+    const dateMatch = !filterDate || opnameGroup.date === filterDate;
+    const statusMatch = !filterStatus || opnameGroup.status === filterStatus;
+    const userMatch = !filterUser || opnameGroup.user_id === filterUser;
+
+    return searchMatch && dateMatch && statusMatch && userMatch;
+  });
+
+  const toggleGroup = (groupKey) => {
+    const newExpanded = new Set(expandedGroups);
+    if (newExpanded.has(groupKey)) {
+      newExpanded.delete(groupKey);
+    } else {
+      newExpanded.add(groupKey);
+    }
+    setExpandedGroups(newExpanded);
+  };
+
+  // Pagination functions per group
+  const getGroupCurrentPage = (groupId) => {
+    return groupPagination[groupId]?.currentPage || 1;
+  };
+
+  const setGroupCurrentPage = (groupId, page) => {
+    setGroupPagination((prev) => ({
+      ...prev,
+      [groupId]: { ...prev[groupId], currentPage: page },
+    }));
+  };
+
+  const getGroupItems = (group, groupKey) => {
+    if (!group || !group.items) return [];
+    const currentPage = getGroupCurrentPage(groupKey);
+    const startIndex = (currentPage - 1) * itemsPerPage;
+    const endIndex = startIndex + itemsPerPage;
+    return group.items.slice(startIndex, endIndex);
+  };
+
+  const getGroupTotalPages = (group) => {
+    if (!group || !group.items) return 1;
+    return Math.ceil(group.items.length / itemsPerPage);
   };
 
   const handleReview = async (action, items) => {
     try {
       if (!items?.length) throw new Error("No items to review");
+
+      // Filter hanya item yang statusnya submitted untuk adjust
+      const submittedItems = items.filter(
+        (item) => item.status === "submitted"
+      );
+
+      if (action === "adjust" && submittedItems.length === 0) {
+        throw new Error("No submitted items to adjust");
+      }
+
+      const itemsToProcess = action === "adjust" ? submittedItems : items;
+
+      // Check if any items have pending edit requests
+      const hasEditRequests = itemsToProcess.some(
+        (item) =>
+          item.edit_requested ||
+          (item.notes && item.notes.includes("[REQUEST EDIT]"))
+      );
+
+      if (action === "adjust" && hasEditRequests) {
+        throw new Error(
+          "Cannot adjust items with pending edit requests. Please approve or reject the edit requests first."
+        );
+      }
       const status = action === "adjust" ? "adjusted" : "reviewed";
 
       await Promise.all(
-        items.map((item) =>
+        itemsToProcess.map((item) =>
           api.post("/opname/review", {
             opname_id: item.opname_id,
             status,
@@ -302,11 +686,16 @@ const AllOpname = ({
       );
 
       setSuccess(
-        action === "adjust" ? "Opnames adjusted!" : "Opnames reviewed!"
+        action === "adjust"
+          ? `${itemsToProcess.length} opnames adjusted!`
+          : "Opnames reviewed!"
       );
       fetchData();
     } catch (err) {
-      setError(err.response?.data?.error || "Failed to review opname");
+      setError(
+        err.response?.data?.error ||
+          "failed adjust opname: waiting for admin to approve or reject edit request."
+      );
     }
   };
 
@@ -321,7 +710,7 @@ const AllOpname = ({
           />
           <input
             type="text"
-            placeholder="Search by staff or product..."
+            placeholder="Search by staff name, product name, or product code..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm"
@@ -339,14 +728,12 @@ const AllOpname = ({
           <Select
             value={[
               { value: "scheduled", label: "Scheduled" },
-              { value: "in_progress", label: "In Progress" },
               { value: "submitted", label: "Submitted" },
               { value: "adjusted", label: "Adjusted" },
             ].find((option) => option.value === filterStatus)}
             onChange={(option) => setFilterStatus(option?.value || "")}
             options={[
               { value: "scheduled", label: "Scheduled" },
-              { value: "in_progress", label: "In Progress" },
               { value: "submitted", label: "Submitted" },
               { value: "adjusted", label: "Adjusted" },
             ]}
@@ -403,210 +790,236 @@ const AllOpname = ({
         </div>
       ) : (
         <>
-          <div className="overflow-x-auto">
-            <table className="min-w-full bg-white divide-y divide-gray-200">
-              <thead className="bg-indigo-700 text-white">
-                <tr>
-                  <th className="px-4 py-3 text-left text-xs font-medium uppercase">
-                    No
-                  </th>
-                  <th className="px-4 py-3 text-left text-xs font-medium uppercase">
-                    Staff
-                  </th>
-                  <th className="px-4 py-3 text-left text-xs font-medium uppercase">
-                    Date
-                  </th>
-                  <th className="px-4 py-3 text-left text-xs font-medium uppercase">
-                    Status
-                  </th>
-                  <th className="px-4 py-3 text-left text-xs font-medium uppercase">
-                    Total Items
-                  </th>
-                  <th className="px-4 py-3 text-right text-xs font-medium uppercase">
-                    Actions
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-200">
-                {getCurrentPageItems().map((opnameGroup, index) => (
-                  <tr
-                    key={`${opnameGroup.date}-${opnameGroup.user_id}`}
-                    className="hover:bg-gray-50"
-                  >
-                    <td className="px-4 py-3 text-indigo-600 font-medium">
-                      #{index + 1 + currentPage * itemsPerPage}
-                    </td>
-                    <td className="px-4 py-3 text-sm text-gray-600">
-                      {opnameGroup.user?.username || "-"}
-                    </td>
-                    <td className="px-4 py-3 text-sm text-gray-600">
-                      {opnameGroup.date}
-                    </td>
-                    <td className="px-4 py-3 text-sm">
-                      <span
-                        className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                          opnameGroup.status === "scheduled"
-                            ? "bg-gray-100 text-gray-800"
-                            : opnameGroup.status === "in_progress"
-                            ? "bg-yellow-100 text-yellow-800"
-                            : opnameGroup.status === "submitted"
-                            ? "bg-blue-100 text-blue-800"
-                            : "bg-green-100 text-green-800"
-                        }`}
-                      >
-                        {opnameGroup.status}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-sm text-gray-600">
-                      {opnameGroup.items.length} items
-                    </td>
-                    <td className="px-4 py-3 text-right">
-                      <button
-                        onClick={() => setSelectedOpname(opnameGroup)}
-                        className="text-xs bg-indigo-50 text-indigo-600 px-3 py-1.5 rounded hover:bg-indigo-100 flex items-center ml-auto"
-                      >
-                        <Eye size={14} className="mr-1.5" />
-                        View Details
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          {/* Expandable List */}
+          <div className="space-y-4">
+            {filteredOpnames.map((opnameGroup, index) => {
+              const groupKey = `${opnameGroup.date}-${opnameGroup.user_id}`;
+              const isExpanded = expandedGroups.has(groupKey);
 
-          <div className="mt-4">
-            <Pagination
-              currentPage={currentPage}
-              totalPages={Math.ceil(filteredOpnames.length / itemsPerPage)}
-              onPageChange={setCurrentPage}
-              itemsPerPage={itemsPerPage}
-              totalItems={filteredOpnames.length}
-            />
-          </div>
-        </>
-      )}
-
-      {/* Detail Modal */}
-      {selectedOpname && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-xl max-w-4xl w-full">
-            <div className="p-6 border-b border-gray-200">
-              <div className="flex justify-between items-center">
-                <div>
-                  <h3 className="text-lg font-semibold text-gray-900">
-                    Opname Details
-                  </h3>
-                  <p className="text-sm text-gray-500">
-                    {selectedOpname.date} - {selectedOpname.user?.username}
-                  </p>
-                </div>
-                <span
-                  className={`inline-flex px-2.5 py-1 text-xs font-semibold rounded-full ${
-                    selectedOpname.status === "scheduled"
-                      ? "bg-gray-100 text-gray-800"
-                      : selectedOpname.status === "in_progress"
-                      ? "bg-yellow-100 text-yellow-800"
-                      : selectedOpname.status === "submitted"
-                      ? "bg-blue-100 text-blue-800"
-                      : "bg-green-100 text-green-800"
-                  }`}
+              return (
+                <div
+                  key={groupKey}
+                  className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden"
                 >
-                  {selectedOpname.status}
-                </span>
-              </div>
-            </div>
-            <div className="p-6 max-h-[calc(100vh-20rem)] overflow-y-auto">
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">
-                      Product
-                    </th>
-                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">
-                      System Stock
-                    </th>
-                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">
-                      Physical Stock
-                    </th>
-                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">
-                      Difference
-                    </th>
-                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">
-                      Status
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-200">
-                  {selectedOpname.items.map((item) => {
-                    const difference =
-                      (item.physical_stock || 0) - (item.system_stock || 0);
-                    return (
-                      <tr key={item.opname_id} className="hover:bg-gray-50">
-                        <td className="px-4 py-2 text-sm text-gray-600">
-                          {item.batchStock?.product?.name_product}
-                        </td>
-                        <td className="px-4 py-2 text-sm text-gray-600">
-                          {item.system_stock}
-                        </td>
-                        <td className="px-4 py-2 text-sm text-gray-600">
-                          {item.physical_stock || "-"}
-                        </td>
-                        <td className="px-4 py-2 text-sm text-gray-600">
-                          {difference !== 0 ? difference : "-"}
-                        </td>
-                        <td className="px-4 py-2 text-sm">
+                  {/* Group Header */}
+                  <div
+                    className="flex items-center justify-between p-4 cursor-pointer hover:bg-gradient-to-r hover:from-indigo-50 hover:to-purple-50 transition-all duration-200"
+                    onClick={() => toggleGroup(groupKey)}
+                  >
+                    <div className="flex items-center space-x-3">
+                      <div className="flex-shrink-0">
+                        <div
+                          className={`w-8 h-8 rounded-full flex items-center justify-center transition-all duration-200 ${
+                            isExpanded
+                              ? "bg-indigo-100 text-indigo-600"
+                              : "bg-gray-100 text-gray-500"
+                          }`}
+                        >
+                          {isExpanded ? (
+                            <ChevronDown className="w-4 h-4" />
+                          ) : (
+                            <ChevronRight className="w-4 h-4" />
+                          )}
+                        </div>
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <h4 className="font-semibold text-gray-900 text-sm truncate">
+                          Schedule: {opnameGroup.user?.username || "Admin"},{" "}
+                          {opnameGroup.date}
+                          {opnameGroup.categoryNames &&
+                            opnameGroup.categoryNames.length > 0 && (
+                              <span className="text-gray-600 font-normal">
+                                {" "}
+                                -{" "}
+                                {formatCategoriesForDisplay(
+                                  opnameGroup.categoryNames
+                                )}
+                              </span>
+                            )}
+                        </h4>
+                        <div className="flex items-center space-x-2 mt-1">
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                            {opnameGroup.items?.length || 0} items
+                          </span>
                           <span
-                            className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                              item.status === "scheduled"
-                                ? "bg-gray-100 text-gray-800"
-                                : item.status === "in_progress"
+                            className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
+                              opnameGroup.status === "scheduled"
                                 ? "bg-yellow-100 text-yellow-800"
-                                : item.status === "submitted"
+                                : opnameGroup.status === "submitted"
                                 ? "bg-blue-100 text-blue-800"
                                 : "bg-green-100 text-green-800"
                             }`}
                           >
-                            {item.status}
+                            {opnameGroup.status}
                           </span>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-            <div className="p-6 border-t border-gray-200 flex justify-end space-x-3">
-              <button
-                onClick={() => setSelectedOpname(null)}
-                className="px-4 py-2 bg-gray-100 text-gray-600 hover:bg-gray-200 rounded-lg text-sm font-medium"
-              >
-                Close
-              </button>
-              {selectedOpname.status === "submitted" && (
-                <>
-                  <button
-                    onClick={() => handleReview("review", selectedOpname.items)}
-                    className="px-4 py-2 bg-indigo-600 text-white hover:bg-indigo-700 rounded-lg text-sm font-medium"
-                  >
-                    Mark as Reviewed
-                  </button>
-                  <button
-                    onClick={() => handleReview("adjust", selectedOpname.items)}
-                    className="px-4 py-2 bg-indigo-600 text-white hover:bg-indigo-700 rounded-lg text-sm font-medium"
-                  >
-                    Adjust Stock
-                  </button>
-                </>
-              )}
-            </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Expanded Content */}
+                  {isExpanded && (
+                    <div className="border-t border-gray-200 bg-gray-50 p-4">
+                      <div className="grid gap-3">
+                        {getGroupItems(opnameGroup, groupKey).map(
+                          (item, itemIndex) => {
+                            // Calculate difference for color coding
+                            const systemStock =
+                              parseInt(item.system_stock) || 0;
+                            const physicalStock =
+                              parseInt(item.physical_stock) || 0;
+                            const difference = physicalStock - systemStock;
+
+                            return (
+                              <div
+                                key={item.opname_id}
+                                className="bg-white rounded-lg p-3 border border-gray-200"
+                              >
+                                <div className="flex justify-between items-start">
+                                  <div className="flex-1">
+                                    <div className="flex items-center space-x-2 mb-2">
+                                      <span className="text-sm font-medium text-gray-900">
+                                        {item.batch_stock?.product
+                                          ?.name_product || "N/A"}
+                                      </span>
+                                      <span className="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded">
+                                        Code:{" "}
+                                        {item.batch_stock?.product
+                                          ?.code_product || "N/A"}
+                                      </span>
+                                    </div>
+                                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs text-gray-600">
+                                      <div>
+                                        <span className="font-medium">
+                                          Difference:
+                                        </span>
+                                        {/* Hanya tampilkan difference jika status submitted/adjusted dan physical stock ada */}
+                                        {item.status === "scheduled" ||
+                                        item.physical_stock === null ||
+                                        item.physical_stock === undefined ? (
+                                          <span className="ml-1 font-semibold text-gray-500">
+                                            -
+                                          </span>
+                                        ) : (
+                                          <span
+                                            className={`ml-1 font-semibold ${
+                                              difference > 0
+                                                ? "text-blue-600"
+                                                : difference < 0
+                                                ? "text-red-600"
+                                                : "text-gray-600"
+                                            }`}
+                                          >
+                                            {difference > 0
+                                              ? `+${difference}`
+                                              : difference}
+                                          </span>
+                                        )}
+                                      </div>
+                                      <div>
+                                        <span className="font-medium">
+                                          System:
+                                        </span>{" "}
+                                        {systemStock}
+                                      </div>
+                                      <div>
+                                        <span className="font-medium">
+                                          Physical:
+                                        </span>{" "}
+                                        {physicalStock}
+                                      </div>
+                                      <div>
+                                        <span className="font-medium">
+                                          Status:
+                                        </span>
+                                        <span
+                                          className={`ml-1 px-1.5 py-0.5 rounded text-xs ${
+                                            item.status === "scheduled"
+                                              ? "bg-yellow-100 text-yellow-800"
+                                              : item.status === "submitted"
+                                              ? "bg-blue-100 text-blue-800"
+                                              : "bg-green-100 text-green-800"
+                                          }`}
+                                        >
+                                          {item.status}
+                                        </span>
+                                      </div>
+                                    </div>
+                                    {item.notes && (
+                                      <div className="mt-2 text-xs text-gray-600">
+                                        <span className="font-medium">
+                                          Notes:
+                                        </span>{" "}
+                                        {item.notes}
+                                      </div>
+                                    )}
+                                  </div>
+                                  <div className="flex space-x-2 ml-4">
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        navigate(
+                                          `/opname-detail/${item.opname_id}`
+                                        );
+                                      }}
+                                      className="text-xs bg-indigo-50 text-indigo-600 px-2 py-1 rounded hover:bg-indigo-100 flex items-center"
+                                    >
+                                      <Eye size={12} className="mr-1" />
+                                      View
+                                    </button>
+                                  </div>
+                                </div>
+                              </div>
+                            );
+                          }
+                        )}
+                      </div>
+
+                      {/* Pagination untuk grup ini */}
+                      {opnameGroup.items &&
+                        opnameGroup.items.length > itemsPerPage && (
+                          <div className="flex justify-center mt-4 pt-4 border-t border-gray-200">
+                            <Pagination
+                              currentPage={getGroupCurrentPage(groupKey) - 1} // Pagination component uses 0-based indexing
+                              totalPages={getGroupTotalPages(opnameGroup)}
+                              onPageChange={(page) =>
+                                setGroupCurrentPage(groupKey, page + 1)
+                              } // Convert back to 1-based
+                              itemsPerPage={itemsPerPage}
+                              totalItems={opnameGroup.items.length}
+                            />
+                          </div>
+                        )}
+
+                      {/* Action Buttons for Group */}
+                      <div className="mt-4 flex space-x-2 justify-end">
+                        {opnameGroup.items.some(
+                          (item) => item.status === "submitted"
+                        ) && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleReview("adjust", opnameGroup.items);
+                            }}
+                            className="bg-green-600 hover:bg-green-700 text-white px-3 py-1.5 rounded text-sm font-medium transition-colors flex items-center"
+                          >
+                            <Check size={14} className="mr-1" />
+                            Approve & Adjust Stock
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
-        </div>
+        </>
       )}
     </div>
   );
 };
-  
+
 const ScheduleOpname = ({
   users,
   batches,
@@ -626,6 +1039,7 @@ const ScheduleOpname = ({
   const [searchCategory, setSearchCategory] = useState("");
   const [searchProduct, setSearchProduct] = useState("");
   const [productList, setProductList] = useState([]);
+  const [allowPastDateScheduling, setAllowPastDateScheduling] = useState(false);
 
   const userOptions = users.map((user) => ({
     value: String(user.user_id),
@@ -637,6 +1051,12 @@ const ScheduleOpname = ({
     label: category.name_categories || `Category ${category.code_categories}`,
   }));
 
+  // Load admin setting for past date scheduling
+  useEffect(() => {
+    const savedSetting = localStorage.getItem("allowPastDateScheduling");
+    setAllowPastDateScheduling(savedSetting === "true");
+  }, []);
+
   useEffect(() => {
     if (!Array.isArray(batches) || batches.length === 0) {
       setProductList([]);
@@ -647,6 +1067,8 @@ const ScheduleOpname = ({
     const productsFromBatches = batches
       .filter(
         (batch) =>
+          batch && // Check if batch exists
+          batch.product && // Check if product exists
           (selectedCategories.length === 0 ||
             selectedCategories.includes(batch.product.code_categories)) &&
           (!searchProduct ||
@@ -695,17 +1117,86 @@ const ScheduleOpname = ({
     setSuccess(null);
     try {
       if (!scheduledDate) throw new Error("Please select a schedule date");
+
+      // Validasi: tidak boleh schedule di masa lalu (kecuali admin mengaktifkan opsi)
+      if (!allowPastDateScheduling) {
+        const today = new Date();
+        const selectedDate = new Date(scheduledDate);
+        today.setHours(0, 0, 0, 0); // Reset time untuk comparison yang akurat
+        selectedDate.setHours(0, 0, 0, 0);
+
+        if (selectedDate < today) {
+          throw new Error(
+            "Schedule date cannot be in the past. Please select today or a future date."
+          );
+        }
+      }
+
       if (selectedCategories.length === 0)
         throw new Error("Please select at least one product category");
 
+      if (!selectedUserId) throw new Error("Pilih staff untuk penugasan");
+
+      // Validasi: cek apakah ada kategori yang sudah di-assign tapi belum selesai
+      console.log("Checking category conflict for:", {
+        categories: selectedCategories,
+        scheduled_date: scheduledDate,
+        assigned_user_id: selectedUserId,
+      });
+
+      try {
+        const conflictResponse = await api.post(
+          "/opname/check-category-conflict",
+          {
+            categories: selectedCategories,
+            scheduled_date: scheduledDate,
+            assigned_user_id: selectedUserId,
+          }
+        );
+
+        console.log("Conflict check response:", conflictResponse.data);
+
+        if (conflictResponse.data.hasConflict) {
+          const conflictDetails = conflictResponse.data.conflicts
+            .map(
+              (conflict) =>
+                `${conflict.category_name} (${conflict.users.join(", ")}, ${
+                  conflict.pending_count
+                } pending items)`
+            )
+            .join(", ");
+
+          const errorMessage = `Cannot assign categories that are already scheduled but not completed: ${conflictDetails}. Please wait until all items in these categories are marked as 'adjusted' or choose different categories.`;
+          console.log("Throwing conflict error:", errorMessage);
+          throw new Error(errorMessage);
+        }
+      } catch (err) {
+        console.error("Category conflict check error:", err);
+        // Always throw the error to prevent schedule creation
+        if (err.response?.status === 409) {
+          throw new Error(err.response.data.error);
+        }
+        if (err.message && err.message.includes("Cannot assign categories")) {
+          throw err; // Re-throw our custom error
+        }
+        if (err.response?.data?.error) {
+          throw new Error(err.response.data.error);
+        }
+        // If there's any error in conflict check, throw it to be safe
+        throw new Error(
+          "Category conflict validation failed. Please try again."
+        );
+      }
+
       const products = batches
-        .filter((batch) =>
-          selectedCategories.includes(batch.product.code_categories)
+        .filter(
+          (batch) =>
+            batch && // Check if batch exists
+            batch.product && // Check if product exists
+            selectedCategories.includes(batch.product.code_categories)
         )
         .map((batch) => batch.product.code_product)
         .filter((value, index, self) => self.indexOf(value) === index);
-
-      if (!selectedUserId) throw new Error("Pilih staff untuk penugasan");
 
       for (const code_product of products) {
         await api.post("/opname/create", {
@@ -723,7 +1214,10 @@ const ScheduleOpname = ({
       setScheduledDate("");
       fetchData();
     } catch (err) {
-      setError(err.response?.data?.error || "Gagal membuat penugasan");
+      console.error("Error in handleCreateTask:", err);
+      setError(
+        err.message || err.response?.data?.error || "Gagal membuat penugasan"
+      );
     }
   };
 
@@ -735,7 +1229,7 @@ const ScheduleOpname = ({
     <div className="bg-white rounded-none shadow-md p-6 border border-gray-100">
       <div className="flex items-center gap-2 mb-6">
         <div className="h-10 w-10 rounded-full bg-indigo-100 flex items-center justify-center">
-          <Calendar clyassName="text-indigo-600" />
+          <Calendar className="text-indigo-600" />
         </div>
         <div>
           <h2 className="text-xl font-semibold text-gray-800">
@@ -820,12 +1314,40 @@ const ScheduleOpname = ({
                 type="date"
                 value={scheduledDate}
                 onChange={(e) => setScheduledDate(e.target.value)}
+                min={
+                  allowPastDateScheduling
+                    ? undefined
+                    : new Date().toISOString().split("T")[0]
+                } // Conditional min based on admin setting
                 className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm"
                 required
               />
             </div>
           </div>
         </div>
+
+        {/* Admin Setting Alert */}
+        {allowPastDateScheduling && (
+          <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
+            <div className="flex items-center">
+              <div className="flex-shrink-0">
+                <Calendar className="h-5 w-5 text-amber-400" />
+              </div>
+              <div className="ml-3">
+                <h3 className="text-sm font-medium text-amber-800">
+                  Past Date Scheduling Enabled
+                </h3>
+                <div className="mt-1 text-sm text-amber-700">
+                  <p>
+                    You can now schedule opname tasks for past dates. This
+                    setting can be changed in your User Profile.
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
         <div className="bg-indigo-50 p-4 rounded-lg border border-indigo-100">
           <h4 className="text-sm font-medium text-indigo-900 mb-2 flex items-center gap-1">
             <Package className="text-indigo-500" size={16} />
@@ -1067,22 +1589,59 @@ const DirectOpname = ({
   const [newExpDate, setNewExpDate] = useState("");
   const [pendingInputs, setPendingInputs] = useState([]); // State untuk tabel sementara
 
+  // Check if product already exists in pending inputs when opening modal
+  useEffect(() => {
+    if (showBatchModal && selectedProduct) {
+      const existingInput = pendingInputs.find(
+        (input) => input.code_product === selectedProduct
+      );
+
+      if (existingInput) {
+        // Fill form with existing data
+        setPhysicalStock(existingInput.physical_stock.toString());
+        setExpiredQuantity(existingInput.expired_stock.toString());
+        setDamagedQuantity(existingInput.damaged_stock.toString());
+        setNotes(existingInput.notes || "");
+      } else {
+        // Clear form for new input
+        setPhysicalStock("");
+        setExpiredQuantity("");
+        setDamagedQuantity("");
+        setNotes("");
+      }
+    }
+  }, [showBatchModal, selectedProduct, pendingInputs]);
+
   const handleUpdateExpDate = (batch) => {
     setSelectedBatch(batch);
-    setNewExpDate(batch.expired_date || "");
+    // Use expired_date or exp_date, whichever is available
+    const currentExpDate = batch.expired_date || batch.exp_date;
+    setNewExpDate(currentExpDate ? currentExpDate.split("T")[0] : "");
     setShowUpdateExpModal(true);
   };
 
   const saveExpDate = async () => {
     try {
-      await api.put(`/batch/stock/${selectedBatch.batch_id}`, {
+      if (!newExpDate) {
+        setError("Please select an expiration date");
+        return;
+      }
+
+      await api.put(`/batch/${selectedBatch.batch_id}`, {
         expired_date: newExpDate,
       });
       setSuccess("Expiration date updated successfully");
       fetchData();
       setShowUpdateExpModal(false);
+      setSelectedBatch(null);
+      setNewExpDate("");
     } catch (err) {
-      setError(err.response?.data?.error || "Failed to update expiration date");
+      const errorMessage =
+        err.response?.data?.error ||
+        err.response?.data?.msg ||
+        "Failed to update expiration date";
+      setError(errorMessage);
+      console.error("Error updating expiration date:", err);
     }
   };
 
@@ -1098,14 +1657,16 @@ const DirectOpname = ({
     return batches
       .filter(
         (batch) =>
+          batch && // Check if batch exists
+          batch.product && // Check if product exists
           (!selectedCategory ||
             batch.product.code_categories === selectedCategory) &&
           (!batchSearch ||
             batch.product.name_product
-              .toLowerCase()
+              ?.toLowerCase()
               .includes(batchSearch.toLowerCase()) ||
             batch.product.code_product
-              .toLowerCase()
+              ?.toLowerCase()
               .includes(batchSearch.toLowerCase()))
       )
       .map((batch) => ({
@@ -1137,10 +1698,26 @@ const DirectOpname = ({
         date: currentDate,
       };
 
-      setPendingInputs([...pendingInputs, newInput]);
-      setSuccess("Opname input saved pending!");
+      // Check if product already exists in pending inputs
+      const existingIndex = pendingInputs.findIndex(
+        (input) => input.code_product === selectedProduct
+      );
+
+      if (existingIndex !== -1) {
+        // Update existing input
+        const updatedInputs = [...pendingInputs];
+        updatedInputs[existingIndex] = newInput;
+        setPendingInputs(updatedInputs);
+        setSuccess("Opname input updated successfully!");
+      } else {
+        // Add new input
+        setPendingInputs([...pendingInputs, newInput]);
+        setSuccess("Opname input saved pending!");
+      }
+
       setShowBatchModal(false);
       setSelectedProduct(null);
+      setSelectedCategory("");
       setPhysicalStock("");
       setExpiredQuantity("");
       setDamagedQuantity("");
@@ -1157,8 +1734,8 @@ const DirectOpname = ({
       if (pendingInputs.length === 0)
         throw new Error("No pending inputs to confirm");
 
-      const currentDate = pendingInputs[0].date;
-      await api.post("/opname/confirm", { opname_date: currentDate });
+      // Send the pendingInputs array to the backend
+      await api.post("/opname/confirm", { pendingInputs });
 
       setPendingInputs([]);
       setSuccess("Direct opname confirmed!");
@@ -1212,50 +1789,6 @@ const DirectOpname = ({
           />
         </div>
 
-        <div className="relative">
-          <label className="block text-sm font-medium text-gray-700 mb-1">
-            Search Products
-          </label>
-          <div className="relative">
-            <input
-              type="text"
-              value={batchSearch}
-              onChange={(e) => setBatchSearch(e.target.value)}
-              placeholder="Search by name or code..."
-              className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm"
-            />
-            <Search
-              className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400"
-              size={16}
-            />
-          </div>
-          {batchSearch && (
-            <div className="absolute z-10 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-60 overflow-auto">
-              {productOptions.length > 0 ? (
-                productOptions.map((product) => (
-                  <button
-                    key={product.value}
-                    onClick={() => {
-                      setSelectedProduct(product.value);
-                      setBatchSearch("");
-                    }}
-                    className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center justify-between"
-                  >
-                    <span>{product.label}</span>
-                    <span className="text-xs text-gray-500">
-                      {product.value}
-                    </span>
-                  </button>
-                ))
-              ) : (
-                <div className="px-4 py-2 text-sm text-gray-500">
-                  No products found
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">
             Selected Product
@@ -1285,7 +1818,6 @@ const DirectOpname = ({
           />
         </div>
       </div>
-
       {selectedProduct && (
         <div className="mt-4 border rounded-lg overflow-hidden">
           <div className="bg-white px-4 py-3 border-b">
@@ -1293,11 +1825,16 @@ const DirectOpname = ({
           </div>
           <div className="divide-y">
             {batches
-              .filter((batch) => batch.product.code_product === selectedProduct)
+              .filter(
+                (batch) =>
+                  batch &&
+                  batch.product &&
+                  batch.product.code_product === selectedProduct
+              )
               .map((batch) => (
                 <div key={batch.batch_id} className="bg-white p-4">
-                  <div className="flex justify-between items-start">
-                    <div className="space-y-1">
+                  <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-3">
+                    <div className="space-y-1 flex-1">
                       <p className="text-sm font-medium">
                         Batch: {batch.batch_code}
                       </p>
@@ -1311,9 +1848,10 @@ const DirectOpname = ({
                     </div>
                     <button
                       onClick={() => handleUpdateExpDate(batch)}
-                      className="text-xs bg-blue-50 text-blue-600 px-2 py-1 rounded hover:bg-blue-100"
+                      className="inline-flex items-center justify-center px-3 py-1.5 text-xs font-medium text-blue-700 bg-blue-50 border border-blue-200 rounded-lg hover:bg-blue-100 hover:border-blue-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 transition-colors duration-200 w-full sm:w-auto"
                     >
-                      Update Exp. Date
+                      <Calendar size={14} className="mr-1" />
+                      <span className="sm:inline">Update Exp. Date</span>
                     </button>
                   </div>
                 </div>
@@ -1347,7 +1885,6 @@ const DirectOpname = ({
           </div>
         </div>
       )}
-
       <button
         onClick={() => {
           if (selectedProduct) setShowBatchModal(true);
@@ -1357,52 +1894,76 @@ const DirectOpname = ({
       >
         Input Opname
       </button>
-
       {pendingInputs.length > 0 && (
         <div className="mt-4">
           <h3 className="text-lg font-semibold mb-2">Pending Inputs</h3>
-          <table className="w-full text-sm text-left text-gray-700">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="px-4 py-2">Product</th>
-                <th className="px-4 py-2">Physical Stock</th>
-                <th className="px-4 py-2">Expired Stock</th>
-                <th className="px-4 py-2">Damaged Stock</th>
-                <th className="px-4 py-2">Date</th>
-                <th className="px-4 py-2">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {pendingInputs.map((input, index) => {
-                const productName = batches.find(
-                  (b) => b.product.code_product === input.code_product
-                )?.product.name_product;
-                return (
-                  <tr key={index} className="hover:bg-gray-50">
-                    <td className="px-4 py-2">
-                      {productName || input.code_product}
-                    </td>
-                    <td className="px-4 py-2">{input.physical_stock}</td>
-                    <td className="px-4 py-2">{input.expired_stock}</td>
-                    <td className="px-4 py-2">{input.damaged_stock}</td>
-                    <td className="px-4 py-2">{input.date}</td>
-                    <td className="px-4 py-2">
-                      <button
-                        onClick={() =>
-                          setPendingInputs(
-                            pendingInputs.filter((_, i) => i !== index)
-                          )
-                        }
-                        className="text-red-500 hover:text-red-700"
-                      >
-                        <X size={16} />
-                      </button>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm text-left text-gray-700">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-4 py-2">Product</th>
+                  <th className="px-4 py-2">Physical Stock</th>
+                  <th className="px-4 py-2">Expired Stock</th>
+                  <th className="px-4 py-2">Damaged Stock</th>
+                  <th className="px-4 py-2">Date</th>
+                  <th className="px-4 py-2">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {pendingInputs.map((input, index) => {
+                  const productName = batches.find(
+                    (b) => b.product.code_product === input.code_product
+                  )?.product.name_product;
+                  return (
+                    <tr key={index} className="hover:bg-gray-50">
+                      <td className="px-4 py-2">
+                        {productName || input.code_product}
+                      </td>
+                      <td className="px-4 py-2">{input.physical_stock}</td>
+                      <td className="px-4 py-2">{input.expired_stock}</td>
+                      <td className="px-4 py-2">{input.damaged_stock}</td>
+                      <td className="px-4 py-2">{input.date}</td>
+                      <td className="px-4 py-2">
+                        <div className="flex space-x-2">
+                          <button
+                            onClick={() => {
+                              setSelectedProduct(input.code_product);
+                              // Set category for the product
+                              const product = batches.find(
+                                (b) =>
+                                  b.product.code_product === input.code_product
+                              )?.product;
+                              if (product) {
+                                setSelectedCategory(
+                                  product.code_categories || ""
+                                );
+                              }
+                              setShowBatchModal(true);
+                            }}
+                            className="text-blue-500 hover:text-blue-700 p-1"
+                            title="Edit"
+                          >
+                            <ClipboardEdit size={16} />
+                          </button>
+                          <button
+                            onClick={() =>
+                              setPendingInputs(
+                                pendingInputs.filter((_, i) => i !== index)
+                              )
+                            }
+                            className="text-red-500 hover:text-red-700 p-1"
+                            title="Delete"
+                          >
+                            <X size={16} />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
           <button
             onClick={handleConfirmOpname}
             className="mt-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 font-medium text-sm"
@@ -1411,19 +1972,32 @@ const DirectOpname = ({
           </button>
         </div>
       )}
-
       {showBatchModal && selectedProduct && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-xl max-w-lg w-full">
             <div className="flex items-center justify-between p-6 border-b border-gray-200">
-              <h3 className="text-lg font-semibold text-gray-900">
-                Input Opname:{" "}
-                {
-                  batches.find(
-                    (b) => b.product.code_product === selectedProduct
-                  )?.product.name_product
-                }
-              </h3>
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900">
+                  {pendingInputs.find(
+                    (input) => input.code_product === selectedProduct
+                  )
+                    ? "Update"
+                    : "Input"}{" "}
+                  Opname:{" "}
+                  {
+                    batches.find(
+                      (b) => b.product.code_product === selectedProduct
+                    )?.product.name_product
+                  }
+                </h3>
+                {pendingInputs.find(
+                  (input) => input.code_product === selectedProduct
+                ) && (
+                  <p className="text-sm text-blue-600 mt-1">
+                    Updating existing opname record
+                  </p>
+                )}
+              </div>
               <button
                 onClick={() => setShowBatchModal(false)}
                 className="text-gray-400 hover:text-gray-600"
@@ -1439,7 +2013,10 @@ const DirectOpname = ({
                 <div className="space-y-3">
                   {batches
                     .filter(
-                      (batch) => batch.product.code_product === selectedProduct
+                      (batch) =>
+                        batch &&
+                        batch.product &&
+                        batch.product.code_product === selectedProduct
                     )
                     .map((batch) => (
                       <div
@@ -1554,45 +2131,81 @@ const DirectOpname = ({
                   type="submit"
                   className="px-4 py-2 bg-indigo-600 text-white hover:bg-indigo-700 rounded-lg text-sm font-medium"
                 >
-                  Save Input
+                  {pendingInputs.find(
+                    (input) => input.code_product === selectedProduct
+                  )
+                    ? "Update Input"
+                    : "Save Input"}
                 </button>
               </div>
             </form>
           </div>
         </div>
-      )}
-
+      )}{" "}
       {/* Update Expiration Date Modal */}
       {showUpdateExpModal && selectedBatch && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-xl max-w-md w-full p-6">
-            <h3 className="text-lg font-semibold mb-4">
-              Update Expiration Date
-            </h3>
+          <div className="bg-white rounded-xl max-w-md w-full mx-4 p-6 shadow-xl">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="h-10 w-10 rounded-full bg-blue-100 flex items-center justify-center">
+                <Calendar className="text-blue-600" size={20} />
+              </div>
+              <div className="flex-1 min-w-0">
+                <h3 className="text-lg font-semibold text-gray-900">
+                  Update Expiration Date
+                </h3>
+                <p className="text-sm text-gray-600 truncate">
+                  Batch: {selectedBatch.batch_code}
+                </p>
+              </div>
+            </div>
+
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Batch {selectedBatch.batch_code}
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Current Expiration Date
+                </label>
+                <div className="text-sm text-gray-600 bg-gray-50 px-3 py-2 rounded-lg border">
+                  <BatchExpDate
+                    expDate={
+                      selectedBatch.expired_date || selectedBatch.exp_date
+                    }
+                    batchId={selectedBatch.batch_id}
+                    showOnlyDate={true}
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  New Expiration Date *
                 </label>
                 <input
                   type="date"
                   value={newExpDate}
                   onChange={(e) => setNewExpDate(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors text-sm"
+                  required
                 />
               </div>
-              <div className="flex justify-end space-x-3">
+
+              <div className="flex flex-col sm:flex-row gap-3 sm:justify-end pt-4 border-t">
                 <button
                   type="button"
-                  onClick={() => setShowUpdateExpModal(false)}
-                  className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200"
+                  onClick={() => {
+                    setShowUpdateExpModal(false);
+                    setSelectedBatch(null);
+                    setNewExpDate("");
+                  }}
+                  className="w-full sm:w-auto px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors order-2 sm:order-1"
                 >
                   Cancel
                 </button>
                 <button
                   type="button"
                   onClick={saveExpDate}
-                  className="px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700"
+                  disabled={!newExpDate}
+                  className="w-full sm:w-auto px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors order-1 sm:order-2"
                 >
                   Save Changes
                 </button>

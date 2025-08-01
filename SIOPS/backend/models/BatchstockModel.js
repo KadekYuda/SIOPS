@@ -55,6 +55,8 @@ const BatchStock = db.define('batch_stock', {
      
 }, {
     freezeTableName: true,
+    paranoid: false,
+    timestamps: true,
 });
 
 export default BatchStock;

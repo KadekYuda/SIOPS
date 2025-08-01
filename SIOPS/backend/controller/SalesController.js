@@ -8,6 +8,9 @@ import fs from "fs";
 import { parse } from "csv-parse";
 import path from "path";
 import multer from "multer";
+// Make sure the Sequelize operators are explicitly defined
+const { Op } = db.Sequelize;
+
 
 // Set up multer for file upload
 const storage = multer.diskStorage({
@@ -94,7 +97,7 @@ const validateStockAvailability = async (items, t) => {
             where: {
                 code_product,
                 stock_quantity: {
-                    [db.Sequelize.Op.gt]: 0
+                    [Op.gt]: 0
                 }
             },
             transaction: t
@@ -114,13 +117,21 @@ const validateStockAvailability = async (items, t) => {
 // Helper to group sales data by date
 const groupSalesByDate = (salesData) => {
     return salesData.reduce((acc, item) => {
-        const date = item.sales_date;
-        if (!acc[date]) {
-            acc[date] = {
-                items: []
+        // Group by receipt_number if available, otherwise by date
+        // If receipt number exists, use date + receipt number as the key
+        // This allows items with the same receipt number to be grouped together
+        const key = item.receipt_number ? 
+            `${item.sales_date.toISOString()}_${item.receipt_number}` : 
+            item.sales_date;
+            
+        if (!acc[key]) {
+            acc[key] = {
+                items: [],
+                sales_date: item.sales_date,
+                receipt_number: item.receipt_number || null
             };
         }
-        acc[date].items.push(item);
+        acc[key].items.push(item);
         return acc;
     }, {});
 };
@@ -134,7 +145,7 @@ const processSaleItem = async (item, sale_id, user_id, t) => {
         where: {
             code_product: item.code_product,
             stock_quantity: {
-                [db.Sequelize.Op.gt]: 0
+                [Op.gt]: 0
             }
         },
         order: [
@@ -209,10 +220,25 @@ const processDailySale = async (date, saleData, user_id, t) => {
 const createSingleSale = async (saleData, user_id, normalizedItems, t) => {
     // Create the sale record
     
+    // Make sure we preserve the exact date and time from the input
+    let salesDate;
+    if (saleData.sales_date instanceof Date) {
+        // If it's already a Date object, use it directly
+        salesDate = saleData.sales_date;
+    } else if (saleData.sales_date) {
+        // If it's a string or timestamp, parse it properly and preserve time
+        salesDate = new Date(saleData.sales_date);
+    } else {
+        // If no date provided, use current date and time
+        salesDate = new Date();
+    }
     
+    // Log the date being saved for debugging
+    console.log('Saving sale with date:', salesDate.toISOString());
+
     const sale = await Sales.create({
         user_id,
-        sales_date: new Date(saleData.sales_date),
+        sales_date: salesDate,
         total_amount: normalizedItems.reduce((sum, item) => sum + parseFloat(item.subtotal), 0),
         created_at: new Date(),
         updated_at: new Date()
@@ -254,8 +280,19 @@ const normalizeItemsWithFallback = async (items, t) => {
     return normalized;
 };
 
-// Helper to check for duplicate sales
+// Helper to check for duplicate sales with improved performance
 const checkDuplicateSale = async (items, sales_date, user_id, t) => {
+    // Create a hash of the items to quickly check for duplicates
+    // Sort items by code_product to ensure consistent hashing
+    const sortedItems = [...items].sort((a, b) => 
+        a.code_product.localeCompare(b.code_product)
+    );
+    
+    // Create a hash string representing this sale
+    const itemsHash = sortedItems.map(item => 
+        `${item.code_product}:${parseFloat(item.selling_price).toFixed(2)}:${parseInt(item.quantity)}`
+    ).join('|');
+    
     const startOfDay = new Date(sales_date);
     startOfDay.setHours(0, 0, 0, 0);
     const endOfDay = new Date(sales_date);
@@ -266,31 +303,35 @@ const checkDuplicateSale = async (items, sales_date, user_id, t) => {
         where: {
             user_id,
             sales_date: {
-                [db.Sequelize.Op.between]: [startOfDay, endOfDay]
+                [Op.between]: [startOfDay, endOfDay]
             }
         },
         include: [{
             model: SalesDetail,
-            include: [{ model: Product }]
+            attributes: ['code_product', 'quantity', 'selling_price'],
+            required: true
         }],
         transaction: t
     });
 
     // Check each existing sale's items against current items
     for (const sale of existingSales) {
-        if (!sale.SalesDetails || !Array.isArray(sale.SalesDetails)) {
-            continue; // Skip this sale if it has no details
+        if (!sale.SalesDetails || !Array.isArray(sale.SalesDetails) || sale.SalesDetails.length !== items.length) {
+            continue; // Skip if no details or different number of items
         }
 
-        const matchingItems = items.filter(newItem => {
-            return sale.SalesDetails.some(detail => 
-                detail.code_product === newItem.code_product && 
-                parseFloat(detail.selling_price) === parseFloat(newItem.selling_price) &&
-                parseInt(detail.quantity) === parseInt(newItem.quantity)
-            );
-        });
-
-        if (matchingItems.length === items.length) {
+        // Sort details by code_product for consistent comparison
+        const sortedDetails = [...sale.SalesDetails].sort((a, b) => 
+            a.code_product.localeCompare(b.code_product)
+        );
+        
+        // Create a hash for the existing sale
+        const existingHash = sortedDetails.map(detail => 
+            `${detail.code_product}:${parseFloat(detail.selling_price).toFixed(2)}:${parseInt(detail.quantity)}`
+        ).join('|');
+        
+        // Direct hash comparison is much faster than nested loops
+        if (existingHash === itemsHash) {
             return true; // Found a duplicate sale
         }
     }
@@ -315,87 +356,117 @@ export const importSalesFromCSV = async (req, res) => {
         let successCount = 0;
         const errors = [];
         const salesData = [];
+        const uniqueDataSet = new Set(); // For checking duplicates within the CSV
         const startTime = Date.now();
 
-        // Read CSV file
+        // Read CSV file with optimizations
         await new Promise((resolve, reject) => {
-            fs.createReadStream(req.file.path)
-                .pipe(parse({
-                    delimiter: ",",
-                    columns: (header) => {
-                        const csvColumns = header.map(h => h.trim());
-                        console.log('CSV columns detected:', csvColumns);
-                        
-                        // Validate required columns
-                        const requiredColumns = ['Tanggal', 'Kode Barang', 'Jumlah', 'Harga Jual'];
-                        const missingColumns = requiredColumns.filter(col => !csvColumns.includes(col));
-                        
-                        if (missingColumns.length > 0) {
-                            reject(new Error(`Missing required columns: ${missingColumns.join(', ')}`));
-                            return false;
-                        }
-                        return csvColumns;
-                    },
-                    trim: true,
-                    skip_empty_lines: true
-                }))
-                .on("data", (row) => {
-                    processedCount++;
-                    try {
-                        // Ambil data sesuai header user
-                        const sales_date = new Date(row['Tanggal']);
-                        const code_product = normalizeProductCode(row['Kode Bara'] || row['Kode Barang'] || row['code_product']);
-                        const name_product = row['Nama Bar'] || row['Nama Barang'] || row['name_product'] || null;
-                        const quantity = parseInt(row['Qty'] || row['quantity']);
-                        const selling_price = parseFloat((row['Harga Jual'] || row['selling_price'] || '').toString().replace(/,/g, '.'));
-                        const subtotal = parseInt(row['Jumlah'] || row['subtotal']);
-
-                        // Validasi minimal
-                        if (!name_product && !code_product) {
-                            errors.push({ row: processedCount, error: 'Product code or name is required' });
-                            return;
-                        }
-                        if (isNaN(quantity) || quantity <= 0) {
-                            errors.push({ row: processedCount, error: 'Invalid quantity' });
-                            return;
-                        }
-                        if (isNaN(selling_price) || selling_price <= 0) {
-                            errors.push({ row: processedCount, error: 'Invalid selling price' });
-                            return;
-                        }
-                        if (isNaN(subtotal) || subtotal <= 0) {
-                            errors.push({ row: processedCount, error: 'Invalid subtotal' });
-                            return;
-                        }
-                        if (isNaN(sales_date.getTime())) {
-                            errors.push({ row: processedCount, error: 'Invalid date format' });
-                            return;
-                        }
-
-                        // Jika subtotal = quantity * selling_price, gunakan quantity asli
-                        // Jika quantity * selling_price != subtotal, coba hitung quantity dari subtotal/selling_price
-                        let final_quantity = quantity;
-                        if (quantity * selling_price !== subtotal && subtotal % selling_price === 0) {
-                            final_quantity = subtotal / selling_price;
-                        }
-
-                        salesData.push({
-                            sales_date,
-                            code_product,
-                            name_product,
-                            quantity: final_quantity,
-                            selling_price,
-                            subtotal
-                        });
-                    } catch (error) {
-                        errors.push({ row: processedCount, error: `Error processing row: ${error.message}` });
+            fs.createReadStream(req.file.path, { 
+                highWaterMark: 64 * 1024 // Increase buffer size to 64KB for faster reading
+            })
+            .pipe(parse({
+                delimiter: ",",
+                columns: (header) => {
+                    const csvColumns = header.map(h => h.trim());
+                    console.log('CSV columns detected:', csvColumns);
+                    
+                    // Validate required columns
+                    const requiredColumns = ['Tanggal', 'Kode Barang', 'Jumlah', 'Harga Jual'];
+                    const missingColumns = requiredColumns.filter(col => !csvColumns.includes(col));
+                    
+                    if (missingColumns.length > 0) {
+                        reject(new Error(`Missing required columns: ${missingColumns.join(', ')}`));
+                        return false;
                     }
-                })
-                .on("error", (error) => reject(error))
-                .on("end", () => resolve());
+                    return csvColumns;
+                },
+                trim: true,
+                skip_empty_lines: true
+            }))
+            .on("data", (row) => {
+                processedCount++;
+                try {
+                    // Extract data from row with fallbacks for different column names
+                    const sales_date = new Date(row['Tanggal']);
+                    const code_product = normalizeProductCode(row['Kode Bara'] || row['Kode Barang'] || row['code_product']);
+                    const name_product = row['Nama Bar'] || row['Nama Barang'] || row['name_product'] || null;
+                    const quantity = parseInt(row['Qty'] || row['Jumlah Barang'] || row['quantity']);
+                    const selling_price = parseFloat((row['Harga Jual'] || row['selling_price'] || '').toString().replace(/,/g, '.'));
+                    const subtotal = parseInt(row['Jumlah'] || row['subtotal'] || (quantity * selling_price));
+
+                    // Basic validation
+                    if (!name_product && !code_product) {
+                        errors.push({ row: processedCount, error: 'Product code or name is required' });
+                        return;
+                    }
+                    if (isNaN(quantity) || quantity <= 0) {
+                        errors.push({ row: processedCount, error: 'Invalid quantity' });
+                        return;
+                    }
+                    if (isNaN(selling_price) || selling_price <= 0) {
+                        errors.push({ row: processedCount, error: 'Invalid selling price' });
+                        return;
+                    }
+                    if (isNaN(subtotal) || subtotal <= 0) {
+                        errors.push({ row: processedCount, error: 'Invalid subtotal' });
+                        return;
+                    }
+                    if (isNaN(sales_date.getTime())) {
+                        errors.push({ row: processedCount, error: 'Invalid date format' });
+                        return;
+                    }
+                    
+                    // Check if receipt number is provided but empty
+                    const receiptNumber = row['NO.Nota'] || null;
+                    if (receiptNumber !== null && receiptNumber.trim() === '') {
+                        errors.push({ row: processedCount, error: 'Receipt number (NO.Nota) cannot be empty if provided' });
+                        return;
+                    }
+
+                    // Calculate quantity based on subtotal if needed
+                    let final_quantity = quantity;
+                    if (quantity * selling_price !== subtotal && subtotal % selling_price === 0) {
+                        final_quantity = subtotal / selling_price;
+                    }
+                    
+                    
+                    // Create a unique key for this row to detect duplicates within the CSV
+                    // If NO.Nota exists, use it as the primary identifier
+                    const rowKey = receiptNumber ? 
+                      `nota:${receiptNumber}_product:${code_product}` : 
+                      `${sales_date.toISOString()}_${code_product}_${final_quantity}_${selling_price}`;
+                    
+                    // Check for duplicates within the CSV
+                    if (uniqueDataSet.has(rowKey)) {
+                        // Skip duplicates silently - we already have this exact entry
+                        return;
+                    }
+                    
+                    // Add to unique set
+                    uniqueDataSet.add(rowKey);
+                    
+                    // Add to salesData for processing
+                    salesData.push({
+                        sales_date,
+                        code_product,
+                        name_product,
+                        quantity: final_quantity,
+                        selling_price,
+                        subtotal,
+                        receipt_number: row['NO.Nota'] || null, // Store the receipt number
+                        cashier_name: row['Kasir'] || null,     // Store the cashier name
+                        unit: row['Satuan'] || null,           // Store the unit information
+                        barcode: row['Barcode'] || null        // Store the barcode for reference
+                    });
+                } catch (error) {
+                    errors.push({ row: processedCount, error: `Error processing row: ${error.message}` });
+                }
+            })
+            .on("error", (error) => reject(error))
+            .on("end", () => resolve());
         });
 
-        // Delete uploaded file
+        // Delete uploaded file right away to free up disk space
         fs.unlinkSync(req.file.path);
 
         if (salesData.length === 0) {
@@ -428,18 +499,34 @@ export const importSalesFromCSV = async (req, res) => {
         }
         // Group ulang hanya yang valid
         const validSalesByDate = groupSalesByDate(sufficientItems);
-        // Process each day's sales (hanya yang valid)
+        // Process each day's or receipt's sales (hanya yang valid)
         const results = [];
-        for (const [date, saleData] of Object.entries(validSalesByDate)) {
+        for (const [key, saleData] of Object.entries(validSalesByDate)) {
             try {
+                // Check if we've already processed a sale with this receipt number (if one exists)
+                if (saleData.receipt_number) {
+                    const existingReceiptSales = results.filter(r => r.receipt_number === saleData.receipt_number);
+                    if (existingReceiptSales.length > 0) {
+                        console.log(`Skipping duplicate receipt number: ${saleData.receipt_number}`);
+                        continue; // Skip this sale as we already processed one with this receipt number
+                    }
+                }
+                
                 const normalizedItems = await normalizeItemsWithFallback(saleData.items, t);
                 const sale = await createSingleSale(
-                    { sales_date: new Date(date) },
+                    { 
+                        sales_date: saleData.sales_date,
+                        receipt_number: saleData.receipt_number // Pass the receipt number
+                    },
                     req.user?.user_id,
                     normalizedItems,
                     t
                 );
-                results.push(sale);
+                // Add receipt number to the result for tracking
+                results.push({
+                    ...sale, 
+                    receipt_number: saleData.receipt_number
+                });
                 successCount++;
             } catch (error) {
                 errors.push({
@@ -564,31 +651,143 @@ export const createSale = async (req, res) => {
 
 export const getSales = async (req, res) => {
     try {
-        // Build where clause based on user role
+        // Extract filter parameters from query string
+        const { 
+            start_date, 
+            end_date, 
+            code_product,
+            min_total,
+            max_total,
+            sort_by = 'sales_date',
+            sort_dir = 'DESC'
+        } = req.query;
+        
+        // console.log('=== getSales Request ===');
+        // console.log('Query params received:', req.query);
+        // console.log('Sort params:', { sort_by, sort_dir });
+        
+        // Build where clause based on filters
         let whereClause = {};
-        if (req.user.role === 'staff') {
-            whereClause.user_id = req.user.user_id;
-        }        const response = await Sales.findAll({
+        let includeWhere = {};
+        
+        // Date range filter
+        if (start_date || end_date) {
+            whereClause.sales_date = {};
+            
+            if (start_date) {
+                const startDateTime = new Date(start_date);
+                startDateTime.setHours(0, 0, 0, 0);
+                whereClause.sales_date[Op.gte] = startDateTime;
+            }
+            
+            if (end_date) {
+                const endDateTime = new Date(end_date);
+                endDateTime.setHours(23, 59, 59, 999);
+                whereClause.sales_date[Op.lte] = endDateTime;
+            }
+        }
+        
+        // Total amount range filter
+        if (min_total) {
+            whereClause.total_amount = whereClause.total_amount || {};
+            whereClause.total_amount[Op.gte] = parseFloat(min_total);
+        }
+        
+        if (max_total) {
+            whereClause.total_amount = whereClause.total_amount || {};
+            whereClause.total_amount[Op.lte] = parseFloat(max_total);
+        }
+        
+        // Product code filter - requires joining SalesDetail
+        if (code_product) {
+            includeWhere.code_product = code_product;
+        }
+        
+        // Set up the include options for the query
+        const includeOptions = [
+            {
+                model: User,
+                as: "User",
+                attributes: ['user_id', 'name', 'email', 'role']
+            },
+            {
+                model: SalesDetail,
+                include: [{
+                    model: Product,
+                    attributes: ['name_product']
+                }, {
+                    model: BatchStock,
+                    attributes: ['batch_code', 'exp_date']
+                }],
+                // Apply product filtering if specified
+                ...(Object.keys(includeWhere).length > 0 ? { where: includeWhere } : {})
+            }
+        ];
+        
+        // Determine sorting
+        let orderBy = []; 
+        // console.log('Determining sort order...');
+        // console.log('Sort parameters received:', { sort_by, sort_dir });
+        
+        switch(sort_by) {
+            case 'total_amount':
+                orderBy.push(['total_amount', sort_dir]);
+                // console.log('Applied total_amount sort:', orderBy);
+                break;
+            case 'user_name':
+                orderBy.push([{ model: User, as: 'User' }, 'name', sort_dir]);
+                // console.log('Applied user_name sort:', orderBy);
+                break;
+            case 'sales_date':
+            default:
+                orderBy.push(['sales_date', sort_dir]);
+                // console.log('Applied sales_date sort (default):', orderBy);
+                break;
+        }
+        
+        // console.log('Final orderBy clause:', JSON.stringify(orderBy, null, 2));
+        
+        const queryOptions = {
             where: whereClause,
-            include: [
-                {
-                    model: User,
-                    as: "User", // Make sure the alias matches your model association
-                    attributes: ['user_id', 'name', 'email', 'role']
-                },
-                {
-                    model: SalesDetail,
-                    include: [{
-                        model: Product,
-                        attributes: ['name_product']
-                    }, {
-                        model: BatchStock,
-                        attributes: ['batch_code', 'exp_date']
-                    }]
-                }
+            include: includeOptions,
+            order: orderBy,
+            // Add distinct to handle cases where the same sale appears multiple times due to joins
+            distinct: true,
+            // Remove limit to show all data
+            // Add specific attributes to reduce data transfer
+            attributes: [
+                'sales_id', 
+                'sales_date', 
+                'total_amount', 
+                'user_id',
+                'created_at'
             ],
-            order: [['sales_date', 'DESC']]
-        });
+            // Add logging to see the actual SQL query
+            // logging: (sql) => {
+            //     console.log('=== SQL QUERY ===');
+            //     console.log(sql);
+            //     console.log('==================');
+            // }
+        };
+        
+        // console.log('Query options:', JSON.stringify({
+        //     where: queryOptions.where,
+        //     order: queryOptions.order,
+        //     attributes: queryOptions.attributes
+        // }, null, 2));
+
+        const response = await Sales.findAll(queryOptions);
+        
+        // console.log(`Found ${response.length} sales with sort ${sort_by} ${sort_dir}`);
+        
+        // Log first few items to debug sorting
+        if (response.length > 0) {
+            // console.log('First 5 items after sorting:');
+            // response.slice(0, 5).forEach((sale, index) => {
+            //     console.log(`${index + 1}. ID: ${sale.sales_id}, Date: ${sale.sales_date}, Total: ${sale.total_amount}, User: ${sale.User?.name || 'N/A'}`);
+            // });
+        }
+        
         res.status(200).json(response);
     } catch (error) {
         res.status(500).json({ msg: error.message });

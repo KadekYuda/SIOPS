@@ -52,6 +52,7 @@ const Order = () => {
     start_date: "",
     end_date: "",
   });
+    const [sortOption, setSortOption] = useState("date"); // Default sort by date (newest first for staff)
   const [showOrderDetail, setShowOrderDetail] = useState(false);
   const [selectedOrder, setSelectedOrder] = useState(null);
   const [orderDetails, setOrderDetails] = useState([]);
@@ -490,9 +491,10 @@ const Order = () => {
   };
 
   const handleFilterChange = (field, option) => {
+    const value = option && typeof option === "object" ? option.value : option;
     setFilters((prev) => ({
       ...prev,
-      [field]: option ? option.value : "",
+      [field]: value || "",
     }));
   };
 
@@ -504,9 +506,24 @@ const Order = () => {
   };
 
   const getCurrentPageItems = () => {
+    // First sort the orders based on the selected sort option
+    const sortedOrders = [...orders].sort((a, b) => {
+      if (sortOption === "id") {
+        return b.order_id - a.order_id; // Sort by ID (descending - newest first for staff)
+      } else if (sortOption === "date") {
+        // Sort by date (newest first)
+        return (
+          new Date(b.order_date || b.created_at) -
+          new Date(a.order_date || a.created_at)
+        );
+      }
+      return 0;
+    });
+
+    // Then paginate the sorted orders
     const startIndex = currentPage * itemsPerPage;
     const endIndex = startIndex + itemsPerPage;
-    return orders.slice(startIndex, endIndex);
+    return sortedOrders.slice(startIndex, endIndex);
   };
 
   const totalPages = Math.ceil(orders.length / itemsPerPage);
@@ -545,7 +562,7 @@ const Order = () => {
                     <div className="flex items-center">
                       <ShoppingBag className="text-white mr-3" size={24} />
                       <h1 className="text-sm md:text-xl font-bold text-white whitespace-nowrap">
-                        Sales Management
+                        Order Management
                       </h1>
                     </div>
                     <p className="text-indigo-100 text-xs mt-2 md:mt-0 md:text-lg whitespace-nowrap md:ml-auto">
@@ -970,9 +987,10 @@ const Order = () => {
                                   type="date"
                                   value={filters.start_date || ""}
                                   onChange={(e) =>
-                                    handleFilterChange("start_date", {
-                                      value: e.target.value,
-                                    })
+                                    handleFilterChange(
+                                      "start_date",
+                                      e.target.value
+                                    )
                                   }
                                   className="p-1 sm:p-2 w-full border border-gray-300 rounded-lg focus:ring-1 focus:ring-blue-500 focus:border-blue-500 text-xs"
                                 />
@@ -985,13 +1003,60 @@ const Order = () => {
                                   type="date"
                                   value={filters.end_date || ""}
                                   onChange={(e) =>
-                                    handleFilterChange("end_date", {
-                                      value: e.target.value,
-                                    })
+                                    handleFilterChange(
+                                      "end_date",
+                                      e.target.value
+                                    )
                                   }
                                   className="p-1 sm:p-2 w-full border border-gray-300 rounded-lg focus:ring-1 focus:ring-blue-500 focus:border-blue-500 text-xs"
                                 />
                               </div>
+                            </div>
+
+                            <h4 className="text-sm font-medium text-gray-700 mb-2 flex items-center">
+                              <svg
+                                xmlns="http://www.w3.org/2000/svg"
+                                className="h-3 w-3 mr-1.5"
+                                fill="none"
+                                viewBox="0 0 24 24"
+                                stroke="currentColor"
+                              >
+                                <path
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  strokeWidth={2}
+                                  d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4"
+                                />
+                              </svg>{" "}
+                              Sort By
+                            </h4>
+                            <div className="flex space-x-2 mb-3">
+                              <button
+                                className={`flex-1 px-2 py-1.5 text-xs font-medium rounded-md transition-colors ${
+                                  sortOption === "id"
+                                    ? "bg-indigo-100 text-indigo-700 border border-indigo-300"
+                                    : "bg-gray-100 text-gray-700 border border-gray-200 hover:bg-gray-200"
+                                }`}
+                                onClick={() => {
+                                  setSortOption("id");
+                                  setCurrentPage(0); // Reset to first page when changing sort
+                                }}
+                              >
+                                Newest
+                              </button>
+                              <button
+                                className={`flex-1 px-2 py-1.5 text-xs font-medium rounded-md transition-colors ${
+                                  sortOption === "date"
+                                    ? "bg-indigo-100 text-indigo-700 border border-indigo-300"
+                                    : "bg-gray-100 text-gray-700 border border-gray-200 hover:bg-gray-200"
+                                }`}
+                                onClick={() => {
+                                  setSortOption("date");
+                                  setCurrentPage(0); // Reset to first page when changing sort
+                                }}
+                              >
+                                Date
+                              </button>
                             </div>
 
                             <div className="flex justify-end space-x-2">
@@ -1004,6 +1069,7 @@ const Order = () => {
                                     start_date: "",
                                     end_date: "",
                                   });
+                                  setTimeout(() => fetchOrders(), 0); // Fetch orders after reset
                                   setFilterMenuOpen(false);
                                 }}
                               >
@@ -1011,7 +1077,10 @@ const Order = () => {
                               </button>
                               <button
                                 className="px-2 sm:px-3 py-1 sm:py-1.5 text-xs bg-indigo-600 hover:bg-indigo-700 text-white rounded-md"
-                                onClick={() => setFilterMenuOpen(false)}
+                                onClick={() => {
+                                  setTimeout(() => fetchOrders(), 0); // Fetch orders with the current filters
+                                  setFilterMenuOpen(false);
+                                }}
                               >
                                 Apply
                               </button>

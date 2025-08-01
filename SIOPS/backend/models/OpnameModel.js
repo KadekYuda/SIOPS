@@ -53,9 +53,14 @@ const Opname = db.define('opnames', {
     type: DataTypes.ENUM('scheduled', 'submitted', 'adjusted'),
     defaultValue: 'scheduled'
   },
-  notes: DataTypes.TEXT
+  notes: DataTypes.STRING,
+  edit_requested: {
+    type: DataTypes.BOOLEAN,
+    defaultValue: false
+  },
 }, { 
-    freezeTableName: true 
+    freezeTableName: true,
+    paranoid: false
 });
 
 export default Opname;
