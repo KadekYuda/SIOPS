@@ -412,7 +412,7 @@ const DashboardStaff = () => {
                   )}
                 </p>
                 <p className="text-sm opacity-80 mt-1">
-                  Items expire in 30 days
+                  Batch expire in 30 days
                 </p>
               </div>
               <Target className="opacity-80 flex-shrink-0" size={48} />
@@ -423,7 +423,7 @@ const DashboardStaff = () => {
             <div className="flex items-center justify-between h-full">
               <div className="flex-1">
                 <h3 className="text-lg font-semibold mb-2 opacity-90">
-                  Expired Items
+                  Expired Batch
                 </h3>
                 <p className="text-3xl font-bold">
                   {cardLoadingState.expiredCount ? (
@@ -432,7 +432,7 @@ const DashboardStaff = () => {
                     stockStats.expiredCount
                   )}
                 </p>
-                <p className="text-sm opacity-80 mt-1">Items already expired</p>
+                <p className="text-sm opacity-80 mt-1">Batch already expired</p>
               </div>
               <Activity className="opacity-80 flex-shrink-0" size={48} />
             </div>
