@@ -222,15 +222,36 @@ const Sales = () => {
   };
 
   const handleProductSelect = async (index, code_product) => {
-    const product = products.find((p) => p.code_product === code_product);
-    if (product) {
-      handleItemChange(index, "code_product", product.code_product);
-      handleItemChange(index, "product_name", product.name_product);
-      await fetchBatchesForProduct(product.code_product, index);
+    if (!code_product || code_product === "") {
+      // Handle clearing/removing product selection
+      handleItemChange(index, "code_product", "");
+      handleItemChange(index, "product_name", "");
+      handleItemChange(index, "selling_price", "");
+      handleItemChange(index, "available_batches", []);
+      // Reset subtotal when product is cleared
+      handleItemChange(index, "subtotal", 0);
+    } else {
+      // Handle selecting a product
+      const product = products.find((p) => p.code_product === code_product);
+      if (product) {
+        handleItemChange(index, "code_product", product.code_product);
+        handleItemChange(index, "product_name", product.name_product);
+        await fetchBatchesForProduct(product.code_product, index);
+      }
     }
   };
   const handleUpload = async () => {
-    if (!csvFile) return;
+    if (!csvFile) {
+      setAlertMessage("Please select a CSV file");
+      setShowAlert(true);
+      return;
+    }
+
+    if (!csvFile.name.endsWith(".csv")) {
+      setAlertMessage("Please select a valid CSV file");
+      setShowAlert(true);
+      return;
+    }
 
     try {
       setIsLoading(true);
@@ -249,11 +270,21 @@ const Sales = () => {
         }
       );
 
-      setSuccessMessage(
-        `✅ Import successful!\n${
-          response.data.msg || "Sales data imported successfully"
-        }`
-      );
+      let successMsg = `✅ Import successful!\n${
+        response.data.msg || "Sales data imported successfully"
+      }`;
+
+      // Add information about skipped inactive products
+      if (response.data.skipped_inactive_count > 0) {
+        successMsg += `\n\n⚠️ ${response.data.skipped_inactive_count} inactive products were skipped:`;
+        if (response.data.skipped_inactive_items) {
+          response.data.skipped_inactive_items.forEach((item) => {
+            successMsg += `\n• ${item.name_product} (${item.code_product})`;
+          });
+        }
+      }
+
+      setSuccessMessage(successMsg);
       setShowSuccess(true);
       fetchSales();
       clearCsvFile();

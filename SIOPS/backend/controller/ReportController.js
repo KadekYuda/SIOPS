@@ -61,7 +61,7 @@ export const getOpnameReports = async (req, res) => {
                 p.name_product,
                 c.code_categories,
                 c.name_categories
-            FROM opnames o
+            FROM stock_opname o
             LEFT JOIN users u ON o.user_id = u.user_id
             LEFT JOIN batch_stock b ON o.batch_id = b.batch_id
             LEFT JOIN products p ON b.code_product = p.code_product

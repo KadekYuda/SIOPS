@@ -8,8 +8,14 @@ const User = db.define('users', {
         autoIncrement: true,
         primaryKey: true,
     },
-    name: DataTypes.STRING,
-    email: DataTypes.STRING,
+    name: {
+        type: DataTypes.STRING,
+        unique: true
+    },
+    email: {
+        type: DataTypes.STRING,
+        unique: true
+    },
     password: DataTypes.STRING,
     role: {
         type: DataTypes.ENUM('admin', 'staff'),

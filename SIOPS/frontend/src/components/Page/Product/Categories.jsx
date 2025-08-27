@@ -106,22 +106,7 @@ const Categories = ({ onCategoriesChange }) => {
     setIsModalOpen(true);
   };
 
-  const handleDelete = async (code) => {
-    try {
-      await api.delete(`/categories/${code}`);
-      await fetchCategories();
 
-      setSuccessModal({
-        isOpen: true,
-        message: "Category deleted successfully!",
-      });
-    } catch (error) {
-      setAlertModal({
-        isOpen: true,
-        message: error.response?.data?.message || "Error deleting category",
-      });
-    }
-  };
 
   return (
     <div className="h-full">
@@ -259,28 +244,6 @@ const Categories = ({ onCategoriesChange }) => {
                               className="p-1 rounded-full"
                               buttonType="product"
                             />
-                            {isAdmin && (
-                              <CrudButton
-                                icon={Trash2}
-                                onConfirm={() =>
-                                  handleDelete(category.code_categories)
-                                }
-                                actionType="delete"
-                                buttonStyle="danger"
-                                className="p-1 rounded-full"
-                                title="Delete Product"
-                                confirmMessage={
-                                  <>
-                                    Are you sure you want to delete category{" "}
-                                    <b className="text-gray-700">
-                                      {category.name_categories}
-                                    </b>
-                                    ?
-                                  </>
-                                }
-                                buttonType="product"
-                              />
-                            )}
                           </div>
                         </td>
                       </tr>

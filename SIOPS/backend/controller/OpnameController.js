@@ -28,6 +28,22 @@ export const createOpnameTasks = async (req, res) => {
       return res.status(400).json({ error: "assigned_user_id is required" });
     }
 
+    // Check if product exists
+    const product = await Product.findByPk(code_product, { transaction });
+    if (!product) {
+      await transaction.rollback();
+      return res.status(404).json({ error: "Product not found" });
+    }
+    
+    // For schedule opname: Skip inactive products silently (don't create tasks for them)
+    if (product.status === 'inactive') {
+      await transaction.commit();
+      return res.status(200).json({ 
+        message: `Product "${product.name_product}" is inactive and was skipped from scheduling`,
+        count: 0
+      });
+    }
+
     const batchStocks = await BatchStock.findAll({
       where: { code_product },
       transaction,
@@ -123,6 +139,20 @@ export const submitOpnameResult = async (req, res) => {
       return res
         .status(400)
         .json({ error: "physical_stock is required and must be non-negative" });
+    }
+    
+    // Check if product exists and is active
+    const product = await Product.findByPk(code_product, { transaction });
+    if (!product) {
+      await transaction.rollback();
+      return res.status(404).json({ error: "Product not found" });
+    }
+    
+    if (product.status === 'inactive') {
+      await transaction.rollback();
+      return res.status(400).json({ 
+        error: `Product "${product.name_product}" is inactive and cannot be used for opname` 
+      });
     }
     
     const totalExpiredDamaged = (parseInt(expired_stock) || 0) + (parseInt(damaged_stock) || 0);
@@ -335,6 +365,20 @@ export const directOpnameByAdmin = async (req, res) => {
         .json({ error: "physical_stock is required and must be non-negative" });
     }
 
+    // Check if product exists and is active
+    const product = await Product.findByPk(code_product, { transaction });
+    if (!product) {
+      await transaction.rollback();
+      return res.status(404).json({ error: "Product not found" });
+    }
+    
+    if (product.status === 'inactive') {
+      await transaction.rollback();
+      return res.status(400).json({ 
+        error: `Product "${product.name_product}" is inactive and cannot be used for opname` 
+      });
+    }
+
     const batches = await BatchStock.findAll({
       where: { code_product },
       order: [["createdAt", "ASC"]], // FIFO
@@ -412,9 +456,31 @@ export const confirmDirectOpname = async (req, res) => {
   try {
     // Process each pending input
     for (const input of pendingInputs) {
+      // First check if product exists and get its status
+      const product = await Product.findByPk(input.code_product, { 
+        attributes: ['code_product', 'name_product', 'status'],
+        transaction 
+      });
+
+      if (!product) {
+        await transaction.rollback();
+        return res.status(404).json({ error: `Product ${input.code_product} not found` });
+      }
+      
+      if (product.status === 'inactive') {
+        await transaction.rollback();
+        return res.status(400).json({ 
+          error: `Cannot perform opname on inactive product "${product.name_product}". Only active products can be processed.` 
+        });
+      }
+
       const batches = await BatchStock.findAll({
         where: { code_product: input.code_product },
-        include: [{ model: Product, required: true }],
+        include: [{ 
+          model: Product, 
+          required: true,
+          attributes: ['code_product', 'name_product', 'status']
+        }],
         transaction,
       });
 
@@ -816,16 +882,51 @@ export const getOpnameDetails = async (req, res) => {
   try {
     console.log(`Fetching opname details for ID: ${id}`);
     
-    // First get the opname record (simpler query)
-    const opname = await Opname.findByPk(id);
+    // First get the opname record with user information
+    console.log(`Trying to find opname with user_id: ${id}`);
+    
+    const opname = await Opname.findByPk(id, {
+      include: [{
+        model: User,
+        attributes: ['user_id', 'name', 'email', 'role'],
+        required: false // LEFT JOIN instead of INNER JOIN
+      }]
+    });
 
     if (!opname) {
       return res.status(404).json({ error: "Opname not found" });
     }
 
+    // Also try to manually fetch the user to debug
+    let userData = null;
+    if (opname.user_id) {
+      console.log(`Manually fetching user with ID: ${opname.user_id}`);
+      const user = await User.findByPk(opname.user_id);
+      console.log(`Manual user fetch result:`, user ? {
+        id: user.user_id,
+        name: user.name,
+        role: user.role
+      } : 'User not found');
+      
+      if (user) {
+        userData = {
+          user_id: user.user_id,
+          name: user.name,
+          email: user.email,
+          role: user.role
+        };
+      }
+    }
+
     console.log(`Found opname:`, {
       id: opname.opname_id,
-      batchId: opname.batch_id
+      batchId: opname.batch_id,
+      userId: opname.user_id,
+      user: opname.User ? {
+        id: opname.User.user_id,
+        name: opname.User.name,
+        role: opname.User.role
+      } : null
     });
 
     // Get batch details separately
@@ -890,6 +991,7 @@ export const getOpnameDetails = async (req, res) => {
       // Return opname details with all related batches
       const response = {
         ...opname.toJSON(),
+        User: userData, // Force include user data manually
         batchStock: batchStock,
         allBatches: allBatches,
         totalSystemStock: allBatches.reduce((sum, batch) => sum + batch.stock_quantity, 0),
@@ -902,12 +1004,14 @@ export const getOpnameDetails = async (req, res) => {
       };
 
       console.log(`Returning response with ${response.batchCount} batches, total stock: ${response.totalSystemStock}`);
+      console.log(`User data in response:`, response.User);
       return res.json(response);
     }
 
     console.log("No product found, returning basic opname data with batchStock");
     res.json({
       ...opname.toJSON(),
+      User: userData, // Force include user data manually
       batchStock: batchStock
     });
   } catch (err) {

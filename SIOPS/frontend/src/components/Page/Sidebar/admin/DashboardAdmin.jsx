@@ -146,7 +146,6 @@ const DashboardAdmin = () => {
     try {
       await Promise.all([
         getRole(),
-        fetchSummaryData(),
         fetchOrderData(),
         fetchUserData(),
         fetchRecentSales(),
@@ -154,8 +153,10 @@ const DashboardAdmin = () => {
         fetchCategories(),
         fetchOpnames(),
         fetchBatchStocks(),
-        fetchSystemStats(),
       ]);
+      // Calculate system stats after all data is loaded
+      calculateSummaryData();
+      fetchSystemStats();
     } catch (error) {
       console.error("Error fetching dashboard data:", error);
     }
@@ -170,12 +171,83 @@ const DashboardAdmin = () => {
     }
   };
 
-  const fetchSummaryData = async () => {
+  // Menghitung data summary langsung dari data batch stock yang sudah diambil
+  const calculateSummaryData = () => {
     try {
-      const response = await api.get("/report/summary");
-      setSummaryData(response.data);
+      console.log("Calculating summary data from batch stocks and products");
+
+      // Gunakan data batch dan product yang sudah diambil sebelumnya
+      const allBatches = batchStocks || [];
+      const productsArray = products || [];
+
+      // Hitung jumlah produk berdasarkan kriteria
+      const today = new Date();
+      let expiredCount = 0;
+      let lowStockCount = 0;
+      let nearExpiryCount = 0;
+
+      // Analisis setiap batch
+      allBatches.forEach((batch) => {
+        // Cek expired batches
+        const expDate = batch.exp_date ? new Date(batch.exp_date) : null;
+        if (expDate && expDate <= today) {
+          expiredCount++;
+        }
+
+        // Cek near expiry (30 hari)
+        if (expDate && expDate > today) {
+          const diffDays = Math.ceil((expDate - today) / (1000 * 60 * 60 * 24));
+          if (diffDays <= 60) {
+            nearExpiryCount++;
+          }
+        }
+
+        // Cek low stock berdasarkan minimum stock dari produk
+        const stockQuantity = parseInt(batch.stock_quantity) || 0;
+        const relatedProduct = productsArray.find(
+          (p) => p.code_product === batch.code_product
+        );
+        const minStock = relatedProduct
+          ? parseInt(relatedProduct.min_stock) || 0
+          : 0;
+
+        // Ubah definisi low stock: stok sedikit di atas min_stock (1-5 di atas min_stock)
+        if (stockQuantity > minStock && stockQuantity <= minStock + 5) {
+          lowStockCount++;
+        }
+      });
+
+      // Update summary data dengan nilai yang dihitung
+      const updatedSummary = {
+        products: {
+          total: productsArray.length,
+          low_stock: lowStockCount,
+        },
+        sales: {
+          total_transactions: sales.length,
+          total_amount: sales.reduce(
+            (sum, sale) => sum + (parseFloat(sale.total_amount) || 0),
+            0
+          ),
+        },
+        orders: {
+          total_orders: orders.length,
+          total_amount: orders.reduce(
+            (sum, order) => sum + (parseFloat(order.total_amount) || 0),
+            0
+          ),
+        },
+        inventory: {
+          total_batches: allBatches.length,
+          expired_batches: expiredCount,
+          near_expiry_batches: nearExpiryCount,
+        },
+      };
+
+      console.log("Calculated summary data:", updatedSummary);
+      setSummaryData(updatedSummary);
     } catch (error) {
-      console.error("Error fetching summary data:", error);
+      console.error("Error calculating summary data:", error);
     }
   };
 
@@ -220,8 +292,15 @@ const DashboardAdmin = () => {
 
   const fetchBatchStocks = async () => {
     try {
-      const response = await api.get("/batch/stock");
-      setBatchStocks(response.data.result || response.data);
+      // Ambil semua batch stock dengan limit yang besar untuk memastikan semua data terambil
+      const response = await api.get("/batch/stock?limit=2500");
+      const batchData = response.data.result || response.data;
+      setBatchStocks(batchData);
+      console.log(`Fetched ${batchData.length} batch stocks`);
+
+      // Gunakan endpoint minstock untuk mendapatkan produk yang low stock
+      const minStockResponse = await api.get("/batch/minstock");
+      console.log("Min stock alert:", minStockResponse.data);
     } catch (error) {
       console.error("Error fetching batch stocks:", error);
     }
@@ -295,11 +374,14 @@ const DashboardAdmin = () => {
         ...userData,
         role: "staff",
       });
+      // Reset form and close modal only on success
+      setSelectedUser(null);
       setIsModalOpen(false);
       fetchUserData();
       setModalMessage("Staff has been added successfully");
       setSuccessModalOpen(true);
     } catch (error) {
+      // Don't close modal or reset form on error - let user fix and retry
       setModalMessage(error.response?.data?.msg || "Failed add staff");
       setErrorModalOpen(true);
     }
@@ -323,11 +405,14 @@ const DashboardAdmin = () => {
       }
 
       await api.put(`/users/${selectedUser.user_id}`, dataToUpdate);
+      // Reset form and close modal only on success
+      setSelectedUser(null);
       setIsModalOpen(false);
       fetchUserData();
       setModalMessage("Staff has been updated successfully");
       setSuccessModalOpen(true);
     } catch (error) {
+      // Don't close modal or reset form on error - let user fix and retry
       setModalMessage(error.response?.data?.msg || "Gagal memperbarui staff");
       setErrorModalOpen(true);
     }
@@ -534,7 +619,7 @@ const DashboardAdmin = () => {
               </div>
               <div className="flex-1 min-w-0">
                 <p className="text-sm text-gray-600 truncate">
-                  Low Stock Products
+                  Low Stock batches
                 </p>
                 <p className="text-xl font-bold text-gray-800">
                   {summaryData.products?.low_stock || 0}
@@ -551,9 +636,7 @@ const DashboardAdmin = () => {
                 </div>
               </div>
               <div className="flex-1 min-w-0">
-                <p className="text-sm text-gray-600 truncate">
-                  Expired Products
-                </p>
+                <p className="text-sm text-gray-600 truncate">Expired Batch</p>
                 <p className="text-xl font-bold text-gray-800">
                   {summaryData.inventory?.expired_batches || 0}
                 </p>
@@ -975,7 +1058,11 @@ const DashboardAdmin = () => {
         {/* Modals */}
         <UserModal
           isOpen={isModalOpen}
-          onClose={() => setIsModalOpen(false)}
+          onClose={() => {
+            setIsModalOpen(false);
+            // Don't reset selectedUser automatically - preserve form data
+            // setSelectedUser(null);
+          }}
           onSubmit={modalMode === "add" ? handleAddUser : handleEditUser}
           user={selectedUser}
           title={modalMode === "add" ? "Create Staff" : "Edit Staff"}
@@ -984,7 +1071,13 @@ const DashboardAdmin = () => {
 
         <SuccessModal
           isOpen={successModalOpen}
-          onClose={() => setSuccessModalOpen(false)}
+          onClose={() => {
+            setSuccessModalOpen(false);
+            // Reset selectedUser when success modal is closed
+            if (modalMode === "add") {
+              setSelectedUser(null);
+            }
+          }}
           message={modalMessage}
         />
 

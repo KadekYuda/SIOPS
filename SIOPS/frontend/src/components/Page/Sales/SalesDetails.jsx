@@ -80,7 +80,7 @@ const SalesDetails = ({ isOpen, saleId, onClose }) => {
                     </div>
                     <div>
                       <h6 className="text-xs font-medium text-gray-500 uppercase tracking-wide">
-                        Sale ID
+                        Sales No
                       </h6>
                       <p className="mt-1 text-sm font-semibold text-gray-900">
                         #{sale?.sales_id}

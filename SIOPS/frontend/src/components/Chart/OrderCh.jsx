@@ -38,6 +38,15 @@ const OrderCh = ({
   title = "Status Distribution",
   trendsTitle = "Trends",
 }) => {
+  console.log(`OrderCh ${dataType} received chartData:`, chartData);
+  console.log(`OrderCh ${dataType} chartData type:`, typeof chartData);
+
+  // Helper function to format numbers with thousand separators
+  const formatNumber = (num) => {
+    if (num == null || isNaN(num)) return "0";
+    return Number(num).toLocaleString("id-ID");
+  };
+
   const [chartType, setChartType] = useState("line");
   const [activeDataTab, setActiveDataTab] = useState(activeTab);
   const [animate, setAnimate] = useState(false);
@@ -54,6 +63,22 @@ const OrderCh = ({
   const totals = useMemo(() => {
     if (!chartData) return { count: 0, value: 0 };
 
+    // Use dataType-aware totals to avoid relying on alias fields
+    if (dataType === "stock") {
+      const count =
+        (chartData.lowStock || 0) +
+        (chartData.expiringSoon || 0) +
+        (chartData.expired || 0) +
+        (chartData.normalStock || 0);
+      const value =
+        (chartData.lowStockValue || 0) +
+        (chartData.expiringSoonValue || 0) +
+        (chartData.expiredValue || 0) +
+        (chartData.normalStockValue || 0);
+      return { count, value };
+    }
+
+    // Default behavior (orders/sales/opname use existing fields and fallbacks)
     const count =
       (chartData.pendingOrders || chartData.pending || 0) +
       (chartData.approvedOrders || chartData.approved || 0) +
@@ -69,38 +94,6 @@ const OrderCh = ({
       (chartData.receivedValue || chartData.completedValue || 0) +
       (chartData.cancelledValue || 0);
 
-    // Debug log for opname total calculation
-    if (dataType === "opname") {
-      console.log("=== OrderCh Total Calculation Debug ===");
-      console.log("chartData:", chartData);
-      console.log("pendingOrders:", chartData.pendingOrders);
-      console.log("pending:", chartData.pending);
-      console.log("approvedOrders:", chartData.approvedOrders);
-      console.log("approved:", chartData.approved);
-      console.log("receivedOrders:", chartData.receivedOrders);
-      console.log("received:", chartData.received);
-      console.log("cancelledOrders:", chartData.cancelledOrders);
-      console.log("cancelled:", chartData.cancelled);
-      console.log("Calculated total count:", count);
-      console.log("=======================================");
-    }
-
-    // Debug log for opname total calculation
-    if (dataType === "opname") {
-      console.log("=== OrderCh Total Calculation Debug ===");
-      console.log("chartData:", chartData);
-      console.log("pendingOrders:", chartData.pendingOrders);
-      console.log("pending:", chartData.pending);
-      console.log("approvedOrders:", chartData.approvedOrders);
-      console.log("approved:", chartData.approved);
-      console.log("receivedOrders:", chartData.receivedOrders);
-      console.log("received:", chartData.received);
-      console.log("cancelledOrders:", chartData.cancelledOrders);
-      console.log("cancelled:", chartData.cancelled);
-      console.log("Calculated total count:", count);
-      console.log("=======================================");
-    }
-
     return { count, value };
   }, [chartData, dataType]);
 
@@ -114,8 +107,8 @@ const OrderCh = ({
         const userNames = chartData?.userNames || [];
         return userNames.length > 0 ? userNames : ["No Users"];
       }
-      if (dataType === "products")
-        return ["Low Stock", "Expiring Soon", "Expired", "Min Stock"];
+      if (dataType === "stock")
+        return ["Low Stock", "Expiring Soon", "Expired", "Normal Stock"];
       if (dataType === "opname")
         return ["Scheduled", "Submitted", "Adjusted", "Overdue"]; // Changed "Pending" to "Scheduled" to match database terminology
       return ["Pending", "Approved", "Received", "Cancelled"];
@@ -160,24 +153,12 @@ const OrderCh = ({
             chartData?.salesCancelled ||
             0,
         ];
-      } else if (dataType === "products") {
+      } else if (dataType === "stock") {
         return [
-          chartData?.lowStock ||
-            chartData?.pendingOrders ||
-            chartData?.pending ||
-            0,
-          chartData?.expiringSoon ||
-            chartData?.approvedOrders ||
-            chartData?.approved ||
-            0,
-          chartData?.expired ||
-            chartData?.receivedOrders ||
-            chartData?.received ||
-            0,
-          chartData?.minStock ||
-            chartData?.cancelledOrders ||
-            chartData?.cancelled ||
-            0,
+          chartData?.lowStock,
+          chartData?.expiringSoon,
+          chartData?.expired,
+          chartData?.normalStock,
         ];
       } else if (dataType === "opname") {
         const opnameArray = [
@@ -240,12 +221,12 @@ const OrderCh = ({
             chartData?.salesCancelledValue ||
             0,
         ];
-      } else if (dataType === "products") {
+      } else if (dataType === "stock") {
         return [
-          chartData?.lowStockValue || chartData?.pendingValue || 0,
-          chartData?.expiringSoonValue || chartData?.approvedValue || 0,
-          chartData?.expiredValue || chartData?.receivedValue || 0,
-          chartData?.minStockValue || chartData?.cancelledValue || 0,
+          chartData?.lowStockValue,
+          chartData?.expiringSoonValue,
+          chartData?.expiredValue,
+          chartData?.normalStockValue,
         ];
       } else if (dataType === "opname") {
         return [
@@ -394,7 +375,7 @@ const OrderCh = ({
                 item.orders ||
                 item.count ||
                 item.sales ||
-                item.products ||
+                item.stock ||
                 item.opname ||
                 0
             )
@@ -440,24 +421,12 @@ const OrderCh = ({
             chartData?.salesCancelled ||
             0,
         ];
-      } else if (dataType === "products") {
+      } else if (dataType === "stock") {
         return [
-          chartData?.lowStock ||
-            chartData?.pendingOrders ||
-            chartData?.pending ||
-            0,
-          chartData?.expiringSoon ||
-            chartData?.approvedOrders ||
-            chartData?.approved ||
-            0,
-          chartData?.expired ||
-            chartData?.receivedOrders ||
-            chartData?.received ||
-            0,
-          chartData?.minStock ||
-            chartData?.cancelledOrders ||
-            chartData?.cancelled ||
-            0,
+          chartData?.lowStock,
+          chartData?.expiringSoon,
+          chartData?.expired,
+          chartData?.normalStock,
         ];
       } else if (dataType === "opname") {
         return [
@@ -508,12 +477,12 @@ const OrderCh = ({
             chartData?.salesCancelledValue ||
             0,
         ];
-      } else if (dataType === "products") {
+      } else if (dataType === "stock") {
         return [
-          chartData?.lowStockValue || chartData?.pendingValue || 0,
-          chartData?.expiringSoonValue || chartData?.approvedValue || 0,
-          chartData?.expiredValue || chartData?.receivedValue || 0,
-          chartData?.minStockValue || chartData?.cancelledValue || 0,
+          chartData?.lowStockValue,
+          chartData?.expiringSoonValue,
+          chartData?.expiredValue,
+          chartData?.normalStockValue,
         ];
       } else if (dataType === "opname") {
         return [
@@ -548,8 +517,8 @@ const OrderCh = ({
       if (dataType === "sales") {
         const userNames = chartData?.userNames || [];
         return userNames.length > 0 ? userNames : ["No Users"];
-      } else if (dataType === "products") {
-        return ["Low Stock", "Expiring Soon", "Expired", "Min Stock"];
+      } else if (dataType === "stock") {
+        return ["Low Stock", "Expiring Soon", "Expired", "Normal Stock"];
       } else if (dataType === "opname") {
         return ["Scheduled", "Submitted", "Adjusted", "Overdue"];
       } else {
@@ -610,15 +579,14 @@ const OrderCh = ({
   // Chart data - Dynamic labels based on data type
   const getStatusLabels = () => {
     if (dataType === "sales") {
-      // Use actual user names from chartData
       const userNames = chartData?.userNames || [];
       return userNames.length > 0 ? userNames : ["No Users"];
     }
-    if (dataType === "products")
-      return ["Low Stock", "Expiring Soon", "Expired", "Min Stock"];
+    if (dataType === "stock" || dataType === "stock")
+      return ["Low Stock", "Expiring Soon", "Expired", "Normal Stock"];
     if (dataType === "opname")
-      return ["Scheduled", "Submitted", "Adjusted", "Overdue"]; // Changed from "Pending" to "Scheduled" to match database terminology
-    return ["Pending", "Approved", "Received", "Cancelled"]; // default for orders
+      return ["Scheduled", "Submitted", "Adjusted", "Overdue"];
+    return ["Pending", "Approved", "Received", "Cancelled"];
   };
 
   const getTitles = () => {
@@ -628,11 +596,11 @@ const OrderCh = ({
         trends: "Sales Trends",
         total: "Total Sales",
       };
-    if (dataType === "products")
+    if (dataType === "stock" || dataType === "stock")
       return {
-        distribution: "Product Stock Distribution",
-        trends: "Product Trends",
-        total: "Total Products",
+        distribution: "Batch Stock Distribution",
+        trends: "Batch Stock Trends",
+        total: "Total Stock",
       };
     if (dataType === "opname")
       return {
@@ -644,15 +612,24 @@ const OrderCh = ({
       distribution: "Order Status Distribution",
       trends: "Order Trends",
       total: "Total Orders",
-    }; // default for orders
+    };
   };
 
   const statusLabels = getStatusLabels();
   const titles = getTitles();
   const statusColors = {
-    background: ["#FEF3C7", "#DBEAFE", "#D1FAE5", "#FEE2E2"],
-    border: ["#F59E0B", "#3B82F6", "#10B981", "#EF4444"],
-    hover: ["#FBBF24", "#60A5FA", "#34D399", "#F87171"],
+    background:
+      dataType === "stock" || dataType === "stock"
+        ? ["#FEF3C7", "#DBEAFE", "#FEE2E2", "#D1FAE5"] // For stock: Low Stock, Expiring Soon, Expired (red), Normal Stock (green)
+        : ["#FEF3C7", "#DBEAFE", "#D1FAE5", "#FEE2E2"],
+    border:
+      dataType === "stock" || dataType === "stock"
+        ? ["#F59E0B", "#3B82F6", "#EF4444", "#10B981"] // For stock: Low Stock, Expiring Soon, Expired (red), Normal Stock (green)
+        : ["#F59E0B", "#3B82F6", "#10B981", "#EF4444"],
+    hover:
+      dataType === "stock" || dataType === "stock"
+        ? ["#FBBF24", "#60A5FA", "#F87171", "#34D399"] // For stock: Low Stock, Expiring Soon, Expired (red), Normal Stock (green)
+        : ["#FBBF24", "#60A5FA", "#34D399", "#F87171"],
   };
 
   // Calculate values for each status based on proportions
@@ -690,14 +667,12 @@ const OrderCh = ({
           chartData.salesCancelledValue ||
           0,
       };
-    } else if (dataType === "products") {
-      // For products, use special handling in value mode
+    } else if (dataType === "stock" || dataType === "stock") {
       return {
-        firstValue: chartData.lowStockValue || chartData.pendingValue || 0,
-        secondValue:
-          chartData.expiringSoonValue || chartData.approvedValue || 0,
-        thirdValue: chartData.expiredValue || chartData.receivedValue || 0,
-        fourthValue: chartData.minStockValue || chartData.cancelledValue || 0,
+        firstValue: chartData.lowStockValue,
+        secondValue: chartData.expiringSoonValue,
+        thirdValue: chartData.expiredValue,
+        fourthValue: chartData.normalStockValue,
       };
     } else if (dataType === "opname") {
       // For opname, value makes sense as it represents inventory value adjustments
@@ -755,24 +730,12 @@ const OrderCh = ({
           chartData?.salesCancelled ||
           0,
       ];
-    } else if (dataType === "products") {
+    } else if (dataType === "stock" || dataType === "stock") {
       return [
-        chartData?.lowStock ||
-          chartData?.pendingOrders ||
-          chartData?.pending ||
-          0,
-        chartData?.expiringSoon ||
-          chartData?.approvedOrders ||
-          chartData?.approved ||
-          0,
-        chartData?.expired ||
-          chartData?.receivedOrders ||
-          chartData?.received ||
-          0,
-        chartData?.minStock ||
-          chartData?.cancelledOrders ||
-          chartData?.cancelled ||
-          0,
+        chartData?.lowStock,
+        chartData?.expiringSoon,
+        chartData?.expired,
+        chartData?.normalStock,
       ];
     } else if (dataType === "opname") {
       return [
@@ -839,12 +802,12 @@ const OrderCh = ({
   const countMovingAverage = getMovingAverage(activeCountData);
   const valueMovingAverage = getMovingAverage(activeValueData);
 
-  // Get dynamic labels for time series
+  // This is a temporary marker for GitHub Copilot - MARKER_XYZ_123
   const getTimeSeriesLabel = () => {
     if (dataType === "sales")
       return { count: "Sales Count", value: "Sales Value" };
-    if (dataType === "products")
-      return { count: "Product Count", value: "Product Value" };
+    if (dataType === "stock" || dataType === "stock")
+      return { count: "Stock Count", value: "Stock Value" };
     if (dataType === "opname")
       return { count: "Opname Count", value: "Opname Value" };
     return { count: "Orders Count", value: "Order Value" }; // default
@@ -992,14 +955,16 @@ const OrderCh = ({
                 ? "orders"
                 : dataType === "sales"
                 ? "sales"
-                : dataType === "products"
-                ? "products"
-                : "items";
+                : dataType === "stock" || dataType === "stock"
+                ? "stock"
+                : "stock";
 
             if (activeDataTab === "value") {
               return `${label}: ${formatCurrency(value)} (${percentage}%)`;
             }
-            return `${label}: ${value} ${itemType} (${percentage}%)`;
+            return `${label}: ${formatNumber(
+              value
+            )} ${itemType} (${percentage}%)`;
           },
           afterLabel: (context) => {
             // Additional information on hover
@@ -1009,7 +974,7 @@ const OrderCh = ({
             );
             const percentage =
               total > 0 ? ((context.parsed / total) * 100).toFixed(1) : 0;
-            return `Total: ${total} | Share: ${percentage}%`;
+            return `Total: ${formatNumber(total)} | Share: ${percentage}%`;
           },
         },
       },
@@ -1082,13 +1047,15 @@ const OrderCh = ({
                 ? "orders"
                 : dataType === "sales"
                 ? "sales"
-                : dataType === "products"
-                ? "products"
-                : "items";
+                : dataType === "stock" || dataType === "stock"
+                ? "stock"
+                : "stock";
             if (activeDataTab === "value") {
               return `${context.dataset.label}: ${formatCurrency(value)}`;
             }
-            return `${context.dataset.label}: ${value} ${itemType}`;
+            return `${context.dataset.label}: ${formatNumber(
+              value
+            )} ${itemType}`;
           },
         },
       },
@@ -1109,7 +1076,7 @@ const OrderCh = ({
             if (activeDataTab === "value") {
               return formatCurrency(value);
             }
-            return value;
+            return formatNumber(value);
           },
         },
       },
@@ -1216,7 +1183,7 @@ const OrderCh = ({
                     <div className="text-xl font-bold text-gray-900">
                       {activeDataTab === "value"
                         ? formatCurrency(displayTotals[activeDataTab] || 0)
-                        : displayTotals[activeDataTab] || 0}
+                        : formatNumber(displayTotals[activeDataTab] || 0)}
                     </div>
                     <div className="text-xs text-gray-500">
                       {hiddenStatuses.length === 0
@@ -1286,7 +1253,7 @@ const OrderCh = ({
                       >
                         {hasData ? (
                           activeDataTab === "count" ? (
-                            countValue
+                            formatNumber(countValue)
                           ) : (
                             formatCurrency(valueAmount).replace("Rp ", "Rp")
                           )
@@ -1348,6 +1315,15 @@ OrderCh.propTypes = {
     approvedValue: PropTypes.number,
     receivedValue: PropTypes.number,
     cancelledValue: PropTypes.number,
+    // Stock-specific fields
+    lowStock: PropTypes.number,
+    expiringSoon: PropTypes.number,
+    expired: PropTypes.number,
+    normalStock: PropTypes.number,
+    lowStockValue: PropTypes.number,
+    expiringSoonValue: PropTypes.number,
+    expiredValue: PropTypes.number,
+    normalStockValue: PropTypes.number,
     monthlyData: PropTypes.arrayOf(
       PropTypes.shape({
         month: PropTypes.string,
@@ -1355,6 +1331,9 @@ OrderCh.propTypes = {
         totalValue: PropTypes.number,
       })
     ),
+    weeklyData: PropTypes.array,
+    dailyData: PropTypes.array,
+    yearlyData: PropTypes.array,
   }),
   timeFilter: PropTypes.string,
   activeTab: PropTypes.string,

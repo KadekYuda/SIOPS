@@ -469,7 +469,7 @@ const ProductOpname = ({ setError, setSuccess, fetchData }) => {
 
       await Promise.all(batchUpdates);
 
-      setSuccess("Hasil opname berhasil dikirim!");
+      setSuccess("Stock opname submitted successfully!");
       setSelectedProduct(null);
       resetForm();
       fetchTasks();
@@ -1200,6 +1200,7 @@ const ProductOpname = ({ setError, setSuccess, fetchData }) => {
                                 </div>
                               </div>
                             </div>
+
                             <div className="text-sm text-gray-500">
                               Page {currentPage} of {totalPages}
                             </div>
@@ -1321,9 +1322,9 @@ const ProductOpname = ({ setError, setSuccess, fetchData }) => {
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-xl max-w-lg w-full max-h-[90vh] overflow-y-auto">
             <div className="sticky top-0 bg-white border-b px-6 py-4">
-              <h2 className="text-xl font-bold text-gray-900">Opname Produk</h2>
+              <h2 className="text-xl font-bold text-gray-900">Opname Stock</h2>
               <p className="text-sm text-gray-600">
-                Input hasil perhitungan fisik
+                Input physical stock count
               </p>
             </div>
             <div className="p-6">
@@ -1339,7 +1340,7 @@ const ProductOpname = ({ setError, setSuccess, fetchData }) => {
                     </span>
                   </div>
                   <div>
-                    <span className="text-gray-600">Total Sistem:</span>
+                    <span className="text-gray-600">Total System:</span>
                     <span className="ml-2 font-semibold text-indigo-600">
                       {selectedProduct.batches.reduce(
                         (sum, p) => sum + p.stock_quantity,

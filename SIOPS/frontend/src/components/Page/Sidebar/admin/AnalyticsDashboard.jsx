@@ -9,12 +9,23 @@ const AnalyticsDashboard = () => {
   const [products, setProducts] = useState([]);
   const [opnames, setOpnames] = useState([]);
 
+  // Debug - Log current state values when they change
+  useEffect(() => {
+    console.log("Products state updated:", products.length);
+  }, [products]);
+
   // Chart filter state
   const [activeChartFilter, setActiveChartFilter] = useState("orders");
   const [timeFilter, setTimeFilter] = useState("weekly");
 
   // Universal chart data preparation function
+  // Note: Using useMemo to avoid recalculating this function on every render
   const prepareChartStats = useMemo(() => {
+    console.log(
+      "Preparing chart stats with activeChartFilter:",
+      activeChartFilter
+    );
+    console.log("Products data available:", products.length);
     let dataSource = [];
     let statusField = "status";
     let dateField = "created_at";
@@ -30,7 +41,10 @@ const AnalyticsDashboard = () => {
           const date = new Date(now);
           date.setDate(date.getDate() - i);
           periods.push({
-            label: date.toLocaleDateString(),
+            label: date.toLocaleDateString("id-ID", {
+              day: "2-digit",
+              month: "short",
+            }),
             value: i,
           });
         }
@@ -40,8 +54,14 @@ const AnalyticsDashboard = () => {
           date.setDate(date.getDate() - i * 7);
           const weekStart = new Date(date);
           weekStart.setDate(date.getDate() - date.getDay());
+
+          // Format yang lebih user-friendly untuk weekly
+          const monthName = weekStart.toLocaleDateString("id-ID", {
+            month: "short",
+          });
+
           periods.push({
-            label: `W${Math.ceil(date.getDate() / 7)}`,
+            label: `W${12 - i} ${monthName}`,
             value: i,
           });
         }
@@ -50,7 +70,10 @@ const AnalyticsDashboard = () => {
           const date = new Date(now);
           date.setMonth(date.getMonth() - i);
           periods.push({
-            label: date.toLocaleDateString("default", { month: "short" }),
+            label: date.toLocaleDateString("id-ID", {
+              month: "short",
+              year: "numeric",
+            }),
             value: i,
           });
         }
@@ -139,7 +162,7 @@ const AnalyticsDashboard = () => {
           // Add alternative field names for different data types
           orders: activeChartFilter === "orders" ? periodData.length : 0,
           sales: activeChartFilter === "sales" ? periodData.length : 0,
-          products: activeChartFilter === "products" ? periodData.length : 0,
+          stock: activeChartFilter === "stock" ? periodData.length : 0,
           opname: activeChartFilter === "opname" ? periodData.length : 0,
           totalValue: totalValue,
           amount: totalValue,
@@ -151,10 +174,10 @@ const AnalyticsDashboard = () => {
           result.salesAmount = totalValue;
           result.salesCount = periodData.length;
           result.salesValue = totalValue;
-        } else if (activeChartFilter === "products") {
-          result.productAmount = totalValue;
-          result.productCount = periodData.length;
-          result.productValue = totalValue;
+        } else if (activeChartFilter === "stock") {
+          result.stockAmount = totalValue;
+          result.stockCount = periodData.length;
+          result.stockValue = totalValue;
         } else if (activeChartFilter === "opname") {
           result.opnameAmount = totalValue;
           result.opnameCount = periodData.length;
@@ -190,9 +213,9 @@ const AnalyticsDashboard = () => {
         valueField = "total_amount";
         break;
 
-      case "products":
+      case "stock":
         dataSource = Array.isArray(products) ? products : [];
-        statusField = null; // Products don't have status field
+        statusField = null; // Stock items don't have status field
         dateField = "created_at";
         valueField = "sell_price";
         break;
@@ -241,8 +264,25 @@ const AnalyticsDashboard = () => {
       const userValues = {};
       const userNames = [];
 
-      dataSource.forEach((item) => {
-        const userName = item.User?.name || item.user_name || "Unknown";
+      dataSource.forEach((item, index) => {
+        // Coba berbagai cara untuk mendapatkan nama user
+        let userName = "System"; // Default yang lebih baik dari "Unknown"
+
+        if (item.User?.name) {
+          userName = item.User.name;
+        } else if (item.user?.name) {
+          userName = item.user.name;
+        } else if (item.user_name) {
+          userName = item.user_name;
+        } else if (item.User?.user_id) {
+          userName = `User ${item.User.user_id}`;
+        } else if (item.user_id) {
+          userName = `User ${item.user_id}`;
+        } else {
+          // Jika benar-benar tidak ada informasi user, berikan nama berdasarkan urutan
+          userName = `Staff ${index + 1}`;
+        }
+
         if (!userNames.includes(userName)) {
           userNames.push(userName);
         }
@@ -286,29 +326,57 @@ const AnalyticsDashboard = () => {
         userNames: limitedUserNames,
       };
     }
-    // Special handling for products - group by batch stock status
-    else if (activeChartFilter === "products") {
+    // Special handling for batch stock - group by batch stock status
+    else if (activeChartFilter === "stock") {
+      console.log(
+        "Preparing batch stock chart data from batches:",
+        dataSource.length
+      );
+
       const stockCategories = {
         lowStock: 0,
         expiringSoon: 0,
         expired: 0,
-        minStock: 0,
+        normalStock: 0,
       };
       const stockValues = {
         lowStock: 0,
         expiringSoon: 0,
         expired: 0,
-        minStock: 0,
+        normalStock: 0,
       };
 
-      dataSource.forEach((item) => {
+      dataSource.forEach((item, index) => {
+        console.log(
+          `Processing product ${index}:`,
+          item.name_product || item.code_product
+        );
+        console.log(
+          `  Has BatchStocks: ${item.BatchStocks ? "yes" : "no"}, Count: ${
+            item.BatchStocks?.length || 0
+          }`
+        );
+
         const currentStock =
-          item.BatchStocks?.reduce(
-            (sum, batch) => sum + (batch.quantity || 0),
-            0
-          ) || 0;
-        const minStock = item.min_stock || 0;
-        const price = parseFloat(item.price) || 0;
+          item.BatchStocks?.reduce((sum, batch) => {
+            const stockQty = parseInt(batch.stock_quantity) || 0;
+            // Use only stock_quantity (not initial_stock) to match BatchStok.jsx
+            console.log(
+              `    Batch ${
+                batch.batch_code
+              }: stock_quantity=${stockQty}, initial_stock=${
+                parseInt(batch.initial_stock) || 0
+              }`
+            );
+            return sum + stockQty;
+          }, 0) || 0;
+        console.log(`  Total stock: ${currentStock}`);
+
+        // Use 5 as fallback value if min_stock is not defined, to match BatchStok.jsx
+        const minStock = item.min_stock ? parseInt(item.min_stock) || 5 : 5;
+        const price =
+          parseFloat(item.price) || parseFloat(item.sell_price) || 0;
+        console.log(`  Min stock: ${minStock}, Price: ${price}`);
 
         // Check for expired or expiring batches
         const now = new Date();
@@ -322,47 +390,57 @@ const AnalyticsDashboard = () => {
           item.BatchStocks?.filter((batch) => {
             const expDate = new Date(batch.exp_date);
             const daysUntilExp = (expDate - now) / (1000 * 60 * 60 * 24);
-            return daysUntilExp > 0 && daysUntilExp <= 30;
+            return daysUntilExp > 0 && daysUntilExp <= 60;
           }) || [];
 
         if (expiredBatches.length > 0) {
           stockCategories.expired++;
           stockValues.expired += price;
+          console.log(`  Categorized as: expired`);
         } else if (expiringSoonBatches.length > 0) {
           stockCategories.expiringSoon++;
           stockValues.expiringSoon += price;
-        } else if (currentStock <= minStock) {
-          stockCategories.minStock++;
-          stockValues.minStock += price;
-        } else if (currentStock <= minStock * 2) {
-          stockCategories.lowStock++;
-          stockValues.lowStock += price;
+          console.log(`  Categorized as: expiringSoon`);
+        } else {
+          // Normal stock (above low stock threshold + 5)
+          stockCategories.normalStock++;
+          stockValues.normalStock += price;
+          console.log(
+            `  Categorized as: normalStock (${currentStock} > ${minStock + 5})`
+          );
         }
       });
 
-      return {
-        pendingOrders: stockCategories.lowStock,
-        approvedOrders: stockCategories.expiringSoon,
-        receivedOrders: stockCategories.expired,
-        cancelledOrders: stockCategories.minStock,
-        pendingValue: stockValues.lowStock,
-        approvedValue: stockValues.expiringSoon,
-        receivedValue: stockValues.expired,
-        cancelledValue: stockValues.minStock,
-        // Add specific product field names that OrderCh expects
-        lowStock: stockCategories.lowStock,
-        expiringSoon: stockCategories.expiringSoon,
-        expired: stockCategories.expired,
-        minStock: stockCategories.minStock,
-        lowStockValue: stockValues.lowStock,
-        expiringSoonValue: stockValues.expiringSoon,
-        expiredValue: stockValues.expired,
-        minStockValue: stockValues.minStock,
+      // Use window.batchStockStats if available, fallback to product categorization
+      const batchStockData = window.batchStockStats || {
+        lowStock: 0,
+        expiringSoon: 0,
+        expired: 0,
+        normalStock: 0,
+        lowStockValue: 0,
+        expiringSoonValue: 0,
+        expiredValue: 0,
+        normalStockValue: 0,
+      };
+
+      const stockChartData = {
+        // Stock-specific fields using real batch data
+        lowStock: batchStockData.lowStock,
+        expiringSoon: batchStockData.expiringSoon,
+        expired: batchStockData.expired,
+        normalStock: batchStockData.normalStock,
+        lowStockValue: batchStockData.lowStockValue,
+        expiringSoonValue: batchStockData.expiringSoonValue,
+        expiredValue: batchStockData.expiredValue,
+        normalStockValue: batchStockData.normalStockValue,
         monthlyData: generateTimeData(),
         dailyData: timeFilter === "daily" ? generateTimeData() : [],
         weeklyData: timeFilter === "weekly" ? generateTimeData() : [],
         yearlyData: timeFilter === "yearly" ? generateTimeData() : [],
       };
+
+      console.log("Stock chart data ready:", stockChartData);
+      return stockChartData;
     }
     // Handle orders and opname with actual status
     else {
@@ -420,7 +498,7 @@ const AnalyticsDashboard = () => {
             );
           } else {
             // For unknown status, use fourth position
-            statusCounts.cancelled++;
+            statusCounts.canc1elled++;
             statusValues.cancelled += value;
             console.log(
               `Unknown opname status: "${status}" - counted in fourth position. New count: ${statusCounts.cancelled}`
@@ -441,7 +519,6 @@ const AnalyticsDashboard = () => {
             statusCounts.cancelled++;
             statusValues.cancelled += value;
           }
-          // No default case for orders to avoid conflicts
         }
       });
     }
@@ -519,7 +596,7 @@ const AnalyticsDashboard = () => {
   useEffect(() => {
     fetchOrderData();
     fetchSalesData();
-    fetchProductsData();
+    fetchStockData();
     fetchOpnameData();
   }, []);
 
@@ -531,6 +608,21 @@ const AnalyticsDashboard = () => {
           new Date(b.sales_date || b.created_at) -
           new Date(a.sales_date || a.created_at)
       );
+
+      // Debug: Log sample sales data to check user information
+      console.log(
+        "Sales data sample:",
+        sortedSales.length > 0 ? sortedSales[0] : "No sales data"
+      );
+      if (sortedSales.length > 0) {
+        console.log("User info in first sale:", {
+          User: sortedSales[0].User,
+          user: sortedSales[0].user,
+          user_name: sortedSales[0].user_name,
+          user_id: sortedSales[0].user_id,
+        });
+      }
+
       setSales(sortedSales);
     } catch (error) {
       console.error("Error fetching sales data:", error);
@@ -538,40 +630,154 @@ const AnalyticsDashboard = () => {
     }
   };
 
-  const fetchProductsData = async () => {
+  const fetchStockData = async () => {
     try {
-      const response = await api.get("/products");
-      console.log("Products response:", response.data);
+      // Ambil semua batch stock langsung dengan limit yang sama seperti BatchStok
+      const batchResponse = await api.get(`/batch/stock?limit=10000`);
+      console.log("All batch stock response:", batchResponse.data);
 
-      const productsArray = Array.isArray(response.data)
-        ? response.data
-        : response.data && Array.isArray(response.data.data)
-        ? response.data.data
-        : [];
+      // Ambil batch dari response
+      const allBatches = batchResponse.data.result || [];
 
-      const productsWithBatches = await Promise.all(
-        productsArray.map(async (product) => {
-          try {
-            const batchResponse = await api.get(
-              `/batch-stock/product/${product.code_product}`
-            );
-            return {
-              ...product,
-              BatchStocks: Array.isArray(batchResponse.data)
-                ? batchResponse.data
-                : [],
-            };
-          } catch (error) {
-            return {
-              ...product,
-              BatchStocks: [],
-            };
-          }
-        })
-      );
-      setProducts(productsWithBatches);
+      console.log("Total batches:", allBatches.length);
+
+      // Hitung jumlah produk di setiap kategori
+      const today = new Date();
+
+      // Hitung kategori untuk setiap batch
+      const lowStockBatches = [];
+      const expiringSoonBatches = [];
+      const expiredBatches = [];
+      const normalStockBatches = [];
+
+      allBatches.forEach((batch) => {
+        const expDate = batch.exp_date ? new Date(batch.exp_date) : null;
+        const diffDays = expDate
+          ? Math.ceil((expDate - today) / (1000 * 60 * 60 * 24))
+          : null;
+        const stockQuantity = parseInt(batch.stock_quantity) || 0;
+
+        // Use batch.Product?.min_stock to match BatchStok exactly
+        const minStock = batch.Product?.min_stock
+          ? parseInt(batch.Product.min_stock) || 5
+          : 5;
+
+        // Kategorisasi dengan prioritas: Expired > Expiring > Low > Normal
+        // Setiap batch hanya masuk 1 kategori
+
+        // Expired batches (highest priority)
+        if (expDate && diffDays <= 0) {
+          expiredBatches.push(batch);
+        }
+        // Expiring soon batches
+        else if (expDate && diffDays > 0 && diffDays <= 60) {
+          expiringSoonBatches.push(batch);
+        }
+        // Low stock batches (match BatchStok Low tab logic - exactly same as BatchStok)
+        else if (stockQuantity <= minStock + 5) {
+          lowStockBatches.push(batch);
+        }
+        // Normal stock: must be above minStock + 5 (exactly same as BatchStok)
+        else {
+          normalStockBatches.push(batch);
+        }
+      });
+
+      // Siapkan data untuk chart (tanpa menambah produk yang tidak punya batch)
+      console.log("Final category counts:", {
+        lowStock: lowStockBatches.length,
+        expiringSoon: expiringSoonBatches.length,
+        expired: expiredBatches.length,
+        normalStock: normalStockBatches.length,
+        totalBatches:
+          lowStockBatches.length +
+          expiringSoonBatches.length +
+          expiredBatches.length +
+          normalStockBatches.length,
+        allBatchesLength: allBatches.length,
+      });
+
+      // Siapkan data untuk chart berdasarkan QUANTITY (bukan batch count)
+      const batchStockChartData = {
+        // Hitung total quantity per kategori (bukan jumlah batch)
+        lowStock: lowStockBatches.reduce((sum, batch) => {
+          return sum + (parseInt(batch.stock_quantity) || 0);
+        }, 0),
+        expiringSoon: expiringSoonBatches.reduce((sum, batch) => {
+          return sum + (parseInt(batch.stock_quantity) || 0);
+        }, 0),
+        expired: expiredBatches.reduce((sum, batch) => {
+          return sum + (parseInt(batch.stock_quantity) || 0);
+        }, 0),
+        normalStock: normalStockBatches.reduce((sum, batch) => {
+          return sum + (parseInt(batch.stock_quantity) || 0);
+        }, 0),
+
+        // Hitung nilai untuk tiap kategori (berdasarkan harga * kuantitas)
+        lowStockValue: lowStockBatches.reduce((sum, batch) => {
+          const quantity = parseInt(batch.stock_quantity) || 0;
+          const price = parseFloat(batch.purchase_price) || 0;
+          return sum + quantity * price;
+        }, 0),
+        expiringSoonValue: expiringSoonBatches.reduce((sum, batch) => {
+          const quantity = parseInt(batch.stock_quantity) || 0;
+          const price = parseFloat(batch.purchase_price) || 0;
+          return sum + quantity * price;
+        }, 0),
+        expiredValue: expiredBatches.reduce((sum, batch) => {
+          const quantity = parseInt(batch.stock_quantity) || 0;
+          const price = parseFloat(batch.purchase_price) || 0;
+          return sum + quantity * price;
+        }, 0),
+        normalStockValue: normalStockBatches.reduce((sum, batch) => {
+          const quantity = parseInt(batch.stock_quantity) || 0;
+          const price = parseFloat(batch.purchase_price) || 0;
+          return sum + quantity * price;
+        }, 0),
+      };
+
+      console.log("Batch stock chart data:", batchStockChartData);
+
+      // Debug: Hitung total seperti BatchStok untuk perbandingan
+      const totalLikeBatchStok = allBatches.reduce((sum, batch) => {
+        return sum + (parseInt(batch.stock_quantity) || 0);
+      }, 0);
+
+      const totalFromCategories =
+        batchStockChartData.lowStock +
+        batchStockChartData.expiringSoon +
+        batchStockChartData.expired +
+        batchStockChartData.normalStock;
+
+      console.log("ANALYTICS DASHBOARD: Total calculation comparison:");
+      console.log("- Sum of categories:", totalFromCategories);
+      console.log("- Simple sum like BatchStok:", totalLikeBatchStok);
+      console.log("- All batches count:", allBatches.length);
+      console.log("- Category breakdown:", {
+        lowStock: batchStockChartData.lowStock,
+        expiringSoon: batchStockChartData.expiringSoon,
+        expired: batchStockChartData.expired,
+        normalStock: batchStockChartData.normalStock,
+      });
+
+      // Simpan data chart dalam state global untuk digunakan di seluruh aplikasi
+      window.batchStockStats = batchStockChartData;
+
+      // Atur data produk dengan kategori batch stock
+      setProducts([
+        ...lowStockBatches.map((batch) => ({ ...batch, category: "lowStock" })),
+        ...expiringSoonBatches.map((batch) => ({
+          ...batch,
+          category: "expiringSoon",
+        })),
+        ...expiredBatches.map((batch) => ({ ...batch, category: "expired" })),
+        ...normalStockBatches.map((batch) => ({
+          ...batch,
+          category: "normalStock",
+        })),
+      ]);
     } catch (error) {
-      console.error("Error fetching products data:", error);
+      console.error("Error fetching batch stock data:", error);
       setProducts([]);
     }
   };
@@ -673,14 +879,14 @@ const AnalyticsDashboard = () => {
             </button>
             <button
               className={`px-4 py-2 rounded-lg text-sm font-medium transition-all flex items-center shadow-sm ${
-                activeChartFilter === "products"
+                activeChartFilter === "stock"
                   ? "bg-blue-500 text-white shadow-md"
                   : "bg-gray-50 text-gray-700 hover:bg-gray-100 border border-gray-200"
               }`}
-              onClick={() => setActiveChartFilter("products")}
+              onClick={() => setActiveChartFilter("stock")}
             >
               <Package size={16} className="mr-2" />
-              Products
+              Stock
             </button>
             <button
               className={`px-4 py-2 rounded-lg text-sm font-medium transition-all flex items-center shadow-sm ${
@@ -755,6 +961,90 @@ const AnalyticsDashboard = () => {
 
         {/* Chart Area */}
         <div className="h-96 relative">
+          {/* We'll show a debug message if we have no data */}
+          {products.length === 0 && activeChartFilter === "stock" && (
+            <div className="flex items-center justify-center h-full">
+              <div className="text-center text-gray-500">
+                <p className="text-lg">Loading batch stock data...</p>
+                <p className="text-sm mt-2">
+                  If this message persists, there might be an issue with the
+                  batch stock data.
+                </p>
+              </div>
+            </div>
+          )}
+
+          {/* If we have products but chart still shows no data, let's force some data */}
+          {products.length > 0 && activeChartFilter === "stock" && (
+            <div className="h-full">
+              <OrderCh
+                chartData={{
+                  lowStock:
+                    window.batchStockStats?.lowStock ||
+                    products.filter((item) => item.category === "lowStock")
+                      .length,
+                  expiringSoon:
+                    window.batchStockStats?.expiringSoon ||
+                    products.filter((item) => item.category === "expiringSoon")
+                      .length,
+                  expired:
+                    window.batchStockStats?.expired ||
+                    products.filter((item) => item.category === "expired")
+                      .length,
+                  normalStock:
+                    window.batchStockStats?.normalStock ||
+                    products.filter((item) => item.category === "normalStock")
+                      .length,
+                  // Hitung nilai untuk masing-masing kategori (harga * kuantitas)
+                  lowStockValue:
+                    window.batchStockStats?.lowStockValue ||
+                    products
+                      .filter((item) => item.category === "lowStock")
+                      .reduce((sum, item) => {
+                        const quantity = parseInt(item.stock_quantity) || 0;
+                        const price = parseFloat(item.purchase_price) || 0;
+                        return sum + quantity * price;
+                      }, 0),
+                  expiringSoonValue:
+                    window.batchStockStats?.expiringSoonValue ||
+                    products
+                      .filter((item) => item.category === "expiringSoon")
+                      .reduce((sum, item) => {
+                        const quantity = parseInt(item.stock_quantity) || 0;
+                        const price = parseFloat(item.purchase_price) || 0;
+                        return sum + quantity * price;
+                      }, 0),
+                  expiredValue:
+                    window.batchStockStats?.expiredValue ||
+                    products
+                      .filter((item) => item.category === "expired")
+                      .reduce((sum, item) => {
+                        const quantity = parseInt(item.stock_quantity) || 0;
+                        const price = parseFloat(item.purchase_price) || 0;
+                        return sum + quantity * price;
+                      }, 0),
+                  normalStockValue:
+                    window.batchStockStats?.normalStockValue ||
+                    products
+                      .filter((item) => item.category === "normalStock")
+                      .reduce((sum, item) => {
+                        const quantity = parseInt(item.stock_quantity) || 0;
+                        const price = parseFloat(item.purchase_price) || 0;
+                        return sum + quantity * price;
+                      }, 0),
+                  // Data untuk grafik time series (kosong karena tidak kita gunakan untuk products)
+                  monthlyData: [],
+                  dailyData: [],
+                  weeklyData: [],
+                  yearlyData: [],
+                }}
+                timeFilter={timeFilter}
+                activeTab="count"
+                dataType="stock"
+              />
+            </div>
+          )}
+
           {/* Sales Chart */}
           {activeChartFilter === "sales" && (
             <div className="h-full">
@@ -763,18 +1053,6 @@ const AnalyticsDashboard = () => {
                 timeFilter={timeFilter}
                 activeTab="count"
                 dataType="sales"
-              />
-            </div>
-          )}
-
-          {/* Products Chart */}
-          {activeChartFilter === "products" && (
-            <div className="h-full">
-              <OrderCh
-                chartData={prepareChartStats}
-                timeFilter={timeFilter}
-                activeTab="count"
-                dataType="products"
               />
             </div>
           )}

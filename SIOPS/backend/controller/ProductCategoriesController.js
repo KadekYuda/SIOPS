@@ -408,11 +408,102 @@ export const importProductsFromCSV = async (req, res) => {
       return new Date(randomTimestamp);
     };
 
-    const getRandomExpDate = (arrivalDate) => {
+    // Categories that don't have expiration dates
+    const nonExpiringCategories = ['ACC', 'ATL', 'BK', 'BTI', 'GNTG', 'JAS', 'KRT', 'KRTS', 'KRK', 'LBN', 'LMP', 'LL', 'PEN', 'PL', 'PS', 'SDL', 'SG', 'STR', 'PY'];
+    
+    
+    const longExpiringCategories = ['RK', 'AIR'];
+    
+    // Track how many batches in each expiration category
+    let alreadyExpiredCount = 0;
+    const MAX_ALREADY_EXPIRED = 150; 
+    
+    // Track expiring soon products
+    let expiringSoonCount = 0;
+    const TARGET_EXPIRING_SOON = 200; // Target untuk produk yang akan kadaluarsa dalam 30 hari
+    
+    // Aturan penentuan tanggal kadaluarsa:
+    // 1. Kategori nonExpiringCategories tidak memiliki tanggal kadaluarsa
+    // 2. Kategori longExpiringCategories memiliki masa kadaluarsa yang panjang (1-2 tahun)
+    // 3. Produk dengan stok > 50:
+    //    - 15% akan kadaluarsa dalam 10-60 hari (masuk kategori "expiring soon")
+    //    - 85% diberi tanggal kadaluarsa yang jauh (1-2 tahun)
+    // 4. Produk lainnya:
+    //    - 30% kemungkinan sudah kadaluarsa (hingga MAX_ALREADY_EXPIRED produk)
+    //    - 20% akan kadaluarsa dalam 1-60 hari (hingga TARGET_EXPIRING_SOON produk)
+    //    - Sisanya akan kadaluarsa dalam 1-5 tahun
+    
+
+    const getRandomExpDate = (arrivalDate, categoryCode, batch = null) => {
+      // For categories that don't expire, return null
+      if (nonExpiringCategories.includes(categoryCode)) {
+        console.log(`Product in category ${categoryCode} has no expiration date`);
+        return null;
+      }
+      
+    
+      if (longExpiringCategories.includes(categoryCode)) {
+        const randomYears = 1 + Math.floor(Math.random() * 2); 
+        const longExpDate = new Date(arrivalDate);
+        longExpDate.setFullYear(longExpDate.getFullYear() + randomYears);
+        console.log(`Product in category ${categoryCode} has long expiration (${randomYears} years)`);
+        return longExpDate;
+      }
+      
+      const now = new Date();
       const expDate = new Date(arrivalDate);
-      // Random between 3-12 months after arrival
-      const randomMonths = Math.floor(Math.random() * 10) + 3;
-      expDate.setMonth(expDate.getMonth() + randomMonths);
+      
+     
+      const stockQty = parseInt(batch?.stock_quantity) || 0;
+      if (stockQty > 50) {
+        console.log(`Product has high stock (${stockQty} > 50)`);
+        
+        // 15% produk dengan stok tinggi juga bisa masuk "expiring soon" category
+        const highStockRandom = Math.random();
+        if (highStockRandom < 0.15) {
+          // Set tanggal kadaluarsa 10-60 hari dari sekarang
+          const daysToExpire = 10 + Math.floor(Math.random() * 51); // 10-60 hari
+          const expiringSoonDate = new Date(now);
+          expiringSoonDate.setDate(expiringSoonDate.getDate() + daysToExpire);
+          console.log(`High stock product (${stockQty}) expiring soon in ${daysToExpire} days: ${expiringSoonDate}`);
+          return expiringSoonDate;
+        }
+        
+        // Sisanya diberi tanggal kadaluarsa yang jauh
+        const distantYears = 1 + Math.floor(Math.random() * 2); 
+        expDate.setFullYear(expDate.getFullYear() + distantYears);
+        console.log(`High stock product with distant expiration (${distantYears} years)`);
+        return expDate;
+      }
+      
+      // Benar-benar random: gunakan Math.random() untuk menentukan expired atau tidak
+      // regardless of counter to avoid patterns
+      const randomValue = Math.random(); // 0-1 nilai acak
+      
+      // 30% chance to be expired (completely random)
+      if (randomValue < 0.3 && alreadyExpiredCount < MAX_ALREADY_EXPIRED) {
+        // Random date between arrival date and now (already expired)
+        const randomExpiredTime = arrivalDate.getTime() + 
+          Math.random() * (now.getTime() - arrivalDate.getTime()) * 0.8;
+        alreadyExpiredCount++;
+        console.log(`Creating already expired product: ${alreadyExpiredCount}/${MAX_ALREADY_EXPIRED}`);
+        return new Date(randomExpiredTime);
+      }
+      
+      // 20% chance to be expiring soon (akan kadaluarsa dalam 1-60 hari)
+      if (randomValue >= 0.3 && randomValue < 0.5 && expiringSoonCount < TARGET_EXPIRING_SOON) {
+        expiringSoonCount++;
+        const daysToExpire = 1 + Math.floor(Math.random() * 60); // 1-60 hari
+        const expiringSoonDate = new Date(now);
+        expiringSoonDate.setDate(expiringSoonDate.getDate() + daysToExpire);
+        console.log(`Creating product expiring soon in ${daysToExpire} days: ${expiringSoonDate} (${expiringSoonCount}/${TARGET_EXPIRING_SOON})`);
+        return expiringSoonDate;
+      }
+      
+      // Rest have normal expiration (1-5 years)
+      const randomYears = 1 + Math.floor(Math.random() * 5); // 1-5 years
+      expDate.setFullYear(expDate.getFullYear() + randomYears);
+      console.log(`Creating product with ${randomYears}-year expiration: ${new Date(expDate)}`);
       return expDate;
     };
     
@@ -452,7 +543,14 @@ export const importProductsFromCSV = async (req, res) => {
             
             if (!existingBatchCodes.has(batch_code)) {
                 const arrivalDate = getRandomArrivalDate();
-                const expDate = getRandomExpDate(arrivalDate);
+                const batchData = {
+                    code_product,
+                    batch_code,
+                    purchase_price: row.purchase_price,
+                    initial_stock: row.initial_stock,
+                    stock_quantity: row.stock_quantity,
+                };
+                const expDate = getRandomExpDate(arrivalDate, row.code_categories, batchData);
                 
                 batchStocksToCreate.push({
                     code_product,
@@ -562,6 +660,7 @@ export const getProducts = async (req, res) => {
     const limit = parseInt(req.query.limit) || 2500; 
     const search = req.query.search || "";
     const category = req.query.category || "";
+    const status = req.query.status || "";
 
     const offset = limit * page;
 
@@ -572,13 +671,18 @@ export const getProducts = async (req, res) => {
         { name_product: { [Op.like]: `%${search}%` } },
         { barcode: { [Op.like]: `%${search}%` } },
       ],
-      deleted_at: null,
     };
 
     // Add category filter if provided and not "all"
     if (category && category !== "all") {
       whereCondition.code_categories = category;
     }
+    
+    // Add status filter if provided and not "all"
+    if (status && status !== "all") {
+      whereCondition.status = status;
+    }
+    // No default status filter - show all products
 
     // Get total count first
     const totalCount = await Product.count({
@@ -670,7 +774,6 @@ export const getProductById = async (req, res) => {
     const product = await Product.findOne({
       where: {
         code_product: req.params.code_product,
-        deleted_at: null,
       },
       include: [
         {
@@ -739,7 +842,7 @@ export const updateProduct = async (req, res) => {
     const product = await Product.findOne({
       where: {
         code_product: req.params.code_product,
-        deleted_at: null,
+        status: 'active',
       },
     });
 
@@ -772,13 +875,48 @@ export const updateProduct = async (req, res) => {
   }
 };
 
+// Toggle product status
+export const toggleProductStatus = async (req, res) => {
+  try {
+    const product = await Product.findOne({
+      where: {
+        code_product: req.params.code_product,
+      },
+    });
+
+    if (!product) {
+      return res.status(404).json({ message: "Product not found" });
+    }
+
+    // Toggle status between 'active' and 'inactive'
+    const newStatus = product.status === 'active' ? 'inactive' : 'active';
+
+    await Product.update(
+      { 
+        status: newStatus,
+        updated_at: new Date()
+      },
+      { 
+        where: { code_product: req.params.code_product } 
+      }
+    );
+
+    res.json({
+      message: `Product status changed to ${newStatus} successfully`,
+      status: newStatus
+    });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
 // Soft delete product
 export const deleteProduct = async (req, res) => {
   try {
     const product = await Product.findOne({
       where: {
         code_product: req.params.code_product,
-        deleted_at: null,
+        status: 'active',
       },
     });
 
@@ -787,7 +925,7 @@ export const deleteProduct = async (req, res) => {
     }
 
     await Product.update(
-      { deleted_at: new Date() },
+      { status: 'inactive', updated_at: new Date() },
       { where: { code_product: req.params.code_product } }
     );
 
@@ -802,11 +940,13 @@ export const deleteProduct = async (req, res) => {
 // Get all categories
 export const getCategories = async (req, res) => {
   try {
+    // Base where condition
+    const whereCondition = {};
+    
     const categories = await Categories.findAll({
       attributes: ["code_categories", "name_categories"],
-      where: {
-        deleted_at: null,
-      },
+      where: whereCondition,
+      order: [["name_categories", "ASC"]],
     });
 
     res.json({
@@ -823,7 +963,6 @@ export const getCategoryById = async (req, res) => {
     const category = await Categories.findOne({
       where: {
         code_categories: req.params.code_categories,
-        deleted_at: null,
       },
     });
 
@@ -867,7 +1006,6 @@ export const updateCategory = async (req, res) => {
     const category = await Categories.findOne({
       where: {
         code_categories: req.params.code_categories,
-        deleted_at: null,
       },
     });
 
@@ -889,32 +1027,5 @@ export const updateCategory = async (req, res) => {
     });
   } catch (error) {
     res.status (500).json({ message: error.message });
-  }
-};
-
-// Soft delete category
-export const deleteCategory = async (req, res) => {
-  try {
-    const category = await Categories.findOne({
-      where: {
-        code_categories: req.params.code_categories,
-        deleted_at: null,
-      },
-    });
-
-    if (!category) {
-      return res.status(404).json({ message: "Category not found" });
-    }
-
-    await Categories.update(
-      { deleted_at: new Date() },
-      { where: { code_categories: req.params.code_categories } }
-    );
-
-    res.json({
-      message: "Category deleted successfully",
-    });
-  } catch (error) {
-    res.status(500).json({ message: error.message });
   }
 };

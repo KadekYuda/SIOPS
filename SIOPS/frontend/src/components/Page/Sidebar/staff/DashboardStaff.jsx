@@ -239,7 +239,7 @@ const DashboardStaff = () => {
           expiredCount++;
         } else {
           const diffDays = Math.ceil((expDate - today) / (1000 * 60 * 60 * 24));
-          if (diffDays > 0 && diffDays <= 30) {
+          if (diffDays > 0 && diffDays <= 60) {
             nearExpiryCount++;
           }
         }
@@ -412,7 +412,7 @@ const DashboardStaff = () => {
                   )}
                 </p>
                 <p className="text-sm opacity-80 mt-1">
-                  Batch expire in 30 days
+                  Batch expire in 60 days
                 </p>
               </div>
               <Target className="opacity-80 flex-shrink-0" size={48} />

@@ -35,6 +35,11 @@
             const response = await User.findAll({
                 attributes: ['user_id', 'name', 'email', 'role','phone_number','status']
             });
+            
+            console.log("All users from database:", response);
+            console.log("Staff users:", response.filter(user => user.role === 'staff'));
+            console.log("Active staff users:", response.filter(user => user.role === 'staff' && user.status === 'active'));
+            
             res.status(200).json(response);
         } catch (error) {
             console.log(error.message);
@@ -63,10 +68,18 @@
     export const createUser = async (req, res) => {
         const { name, email, password, role} = req.body;
         try {
-            const existingUser = await User.findOne({ where: { email } });
-            if (existingUser) {
+            // Check if email already exists
+            const existingUserByEmail = await User.findOne({ where: { email } });
+            if (existingUserByEmail) {
                 return res.status(400).json({ msg: "A user with this email already exists." });
             }
+            
+            // Check if name already exists
+            const existingUserByName = await User.findOne({ where: { name } });
+            if (existingUserByName) {
+                return res.status(400).json({ msg: "A user with this name already exists." });
+            }
+            
             const hashedPassword = await bcrypt.hash(password, 10);
 
             const newUser = await User.create({ 
@@ -102,15 +115,23 @@
           }
       
           // Update fields
-          user.name = name || user.name;
           user.role = role || user.role;
           user.phone_number = phone_number !== undefined ? phone_number : user.phone_number;
           user.status= status || user.status;
       
+          // Check if name is being changed and if it already exists
+          if (name && name !== user.name) {
+            const nameExists = await User.findOne({ where: { name } });
+            if (nameExists) {
+              return res.status(400).json({ msg: "Name is already in use" });
+            }
+            user.name = name;
+          }
+      
           if (email && email !== user.email) {
             const emailExists = await User.findOne({ where: { email } });
             if (emailExists) {
-            return res.status(400).json({ msg: "email is already in use" });
+            return res.status(400).json({ msg: "Email is already in use" });
             }
             user.email = email;
           }

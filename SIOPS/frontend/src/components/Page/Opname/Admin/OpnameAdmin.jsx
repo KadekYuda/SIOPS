@@ -144,11 +144,14 @@ const OpnameAdmin = () => {
             .catch(() => null),
         ]);
 
+        console.log("Users API response:", usersRes); // Debug log
+
         // Process users (optimized)
         const staffUsers =
           usersRes.status === "fulfilled" && Array.isArray(usersRes.value.data)
             ? usersRes.value.data.reduce((acc, user) => {
-                if (user.role === "staff") {
+                // Only include active staff users
+                if (user.role === "staff" && user.status === "active") {
                   acc.push({
                     ...user,
                     username:
@@ -159,6 +162,8 @@ const OpnameAdmin = () => {
                 return acc;
               }, [])
             : [];
+
+        console.log("Fetched staff users:", staffUsers); // Debug log
         setUsers(staffUsers);
         setCachedData(CACHE_KEYS.users, staffUsers);
 
@@ -699,6 +704,25 @@ const AllOpname = ({
     }
   };
 
+  const handleEditRequestDecision = async (opnameId, approve) => {
+    try {
+      await api.post("/opname/review", {
+        opname_id: opnameId,
+        approve_edit: approve,
+        status: approve ? "scheduled" : "submitted", // If approved, back to scheduled for editing; if rejected, keep as submitted
+      });
+
+      setSuccess(
+        approve
+          ? "Edit request approved! Staff can now edit the opname."
+          : "Edit request rejected."
+      );
+      fetchData();
+    } catch (err) {
+      setError(err.response?.data?.error || "Failed to process edit request");
+    }
+  };
+
   return (
     <div className="p-3 sm:p-4">
       {/* Search and filter controls */}
@@ -950,11 +974,67 @@ const AllOpname = ({
                                         <span className="font-medium">
                                           Notes:
                                         </span>{" "}
-                                        {item.notes}
+                                        <span
+                                          className={
+                                            item.edit_requested ||
+                                            (item.notes &&
+                                              item.notes.includes(
+                                                "[REQUEST EDIT]"
+                                              ))
+                                              ? "text-orange-600 font-medium"
+                                              : ""
+                                          }
+                                        >
+                                          {item.notes}
+                                        </span>
+                                        {(item.edit_requested ||
+                                          (item.notes &&
+                                            item.notes.includes(
+                                              "[REQUEST EDIT]"
+                                            ))) && (
+                                          <span className="inline-flex items-center px-2 py-0.5 ml-2 rounded-full text-xs font-medium bg-orange-100 text-orange-800">
+                                            Edit Requested
+                                          </span>
+                                        )}
                                       </div>
                                     )}
                                   </div>
                                   <div className="flex space-x-2 ml-4">
+                                    {/* Show Approve/Reject buttons for edit requests */}
+                                    {(item.edit_requested ||
+                                      (item.notes &&
+                                        item.notes.includes(
+                                          "[REQUEST EDIT]"
+                                        ))) && (
+                                      <>
+                                        <button
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            handleEditRequestDecision(
+                                              item.opname_id,
+                                              true
+                                            );
+                                          }}
+                                          className="text-xs bg-green-50 text-green-600 px-2 py-1 rounded hover:bg-green-100 flex items-center"
+                                        >
+                                          <Check size={12} className="mr-1" />
+                                          Approve Edit
+                                        </button>
+                                        <button
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            handleEditRequestDecision(
+                                              item.opname_id,
+                                              false
+                                            );
+                                          }}
+                                          className="text-xs bg-red-50 text-red-600 px-2 py-1 rounded hover:bg-red-100 flex items-center"
+                                        >
+                                          <X size={12} className="mr-1" />
+                                          Reject Edit
+                                        </button>
+                                      </>
+                                    )}
                                     <button
                                       onClick={(e) => {
                                         e.stopPropagation();
@@ -1135,7 +1215,7 @@ const ScheduleOpname = ({
       if (selectedCategories.length === 0)
         throw new Error("Please select at least one product category");
 
-      if (!selectedUserId) throw new Error("Pilih staff untuk penugasan");
+      if (!selectedUserId) throw new Error("- Select staff for assignment");
 
       // Validasi: cek apakah ada kategori yang sudah di-assign tapi belum selesai
       console.log("Checking category conflict for:", {
@@ -1207,7 +1287,7 @@ const ScheduleOpname = ({
       }
 
       setSuccess(
-        `Penugasan opname untuk ${products.length} produk berhasil dibuat!`
+        `Opname assignment for ${products.length} products has been successfully created!`
       );
       setSelectedCategories([]);
       setSelectedUserId("");
@@ -1216,7 +1296,9 @@ const ScheduleOpname = ({
     } catch (err) {
       console.error("Error in handleCreateTask:", err);
       setError(
-        err.message || err.response?.data?.error || "Gagal membuat penugasan"
+        err.message ||
+          err.response?.data?.error ||
+          "Unable to create opname assignment"
       );
     }
   };
@@ -1283,7 +1365,7 @@ const ScheduleOpname = ({
               )}
               onChange={(option) => setSelectedUserId(option?.value || "")}
               options={userOptions}
-              placeholder="Pilih Staff..."
+              placeholder="Select Staff..."
               className="text-sm"
               isClearable
               isSearchable
@@ -1357,6 +1439,11 @@ const ScheduleOpname = ({
             <div>
               <strong>Total Products:</strong> {batchSummary.count}
             </div>
+            <div className="text-xs text-indigo-600 bg-indigo-100 p-2 rounded">
+              <strong>Note:</strong> All products in selected categories will be
+              displayed, but only active products will be assigned to staff.
+              Inactive products will be automatically skipped.
+            </div>
             {batchSummary.categories.length > 0 && (
               <button
                 type="button"
@@ -1402,6 +1489,9 @@ const ScheduleOpname = ({
                     <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">
                       Category
                     </th>
+                    <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">
+                      Status
+                    </th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
@@ -1418,6 +1508,17 @@ const ScheduleOpname = ({
                           (cat) =>
                             cat.code_categories === product.code_categories
                         )?.name_categories || "-"}
+                      </td>
+                      <td className="px-3 py-2 text-xs">
+                        <span
+                          className={`px-2 py-1 rounded-full text-xs font-medium ${
+                            product.status === "active"
+                              ? "bg-green-100 text-green-800"
+                              : "bg-red-100 text-red-800"
+                          }`}
+                        >
+                          {product.status || "unknown"}
+                        </span>
                       </td>
                     </tr>
                   ))}
@@ -1671,7 +1772,10 @@ const DirectOpname = ({
       )
       .map((batch) => ({
         value: batch.product.code_product,
-        label: batch.product.name_product,
+        label: `${batch.product.name_product}${
+          batch.product.status === "inactive" ? " (Inactive)" : ""
+        }`,
+        status: batch.product.status,
       }))
       .filter(
         (value, index, self) =>
@@ -1753,7 +1857,10 @@ const DirectOpname = ({
         </div>
         <div>
           <h2 className="text-xl font-semibold text-gray-800">Direct Opname</h2>
-          <p className="text-sm text-gray-500">Input opname data directly</p>
+          <p className="text-sm text-gray-500">
+            Input opname data directly. Inactive products will show error on
+            save.
+          </p>
         </div>
       </div>
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
@@ -1797,7 +1904,30 @@ const DirectOpname = ({
             value={productOptions.find(
               (option) => option.value === selectedProduct
             )}
-            onChange={(option) => setSelectedProduct(option?.value || null)}
+            onChange={(option) => {
+              if (option) {
+                // Check if selected product is inactive
+                const selectedProductOption = productOptions.find(
+                  (p) => p.value === option.value
+                );
+                if (
+                  selectedProductOption &&
+                  selectedProductOption.status === "inactive"
+                ) {
+                  setError(
+                    `Cannot select inactive product "${selectedProductOption.label.replace(
+                      " (Inactive)",
+                      ""
+                    )}". Please select an active product.`
+                  );
+                  setSelectedProduct(null);
+                  return;
+                }
+                setSelectedProduct(option.value);
+              } else {
+                setSelectedProduct(null);
+              }
+            }}
             options={productOptions}
             placeholder="Select Product..."
             className="text-sm"
@@ -1888,7 +2018,7 @@ const DirectOpname = ({
       <button
         onClick={() => {
           if (selectedProduct) setShowBatchModal(true);
-          else setError("Pilih produk terlebih dahulu");
+          else setError("Please select a product first");
         }}
         className="mt-4 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 font-medium text-sm"
       >

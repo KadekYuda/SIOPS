@@ -46,6 +46,9 @@ const normalizeProductCode = (code) => {
     // Convert to string first
     let strCode = String(code);
     
+    // Remove quote prefixes from CSV (Excel sometimes adds quotes to preserve leading zeros)
+    strCode = strCode.replace(/^['"`]+/, '').replace(/['"`]+$/, '');
+    
     // If it's in scientific notation, convert to full number
     if (strCode.toLowerCase().includes('e')) {
         try {
@@ -58,6 +61,74 @@ const normalizeProductCode = (code) => {
     
     // Remove any remaining decimals and clean the string
     return strCode.replace(/\.0+$/, '').trim();
+};
+
+// Helper function for flexible date parsing
+const parseDateFlexible = (dateInput) => {
+    if (!dateInput) return null;
+    
+    const input = String(dateInput).trim();
+    if (!input) return null;
+    
+    // Try direct Date parsing first
+    let date = new Date(input);
+    if (!isNaN(date.getTime())) {
+        return date;
+    }
+    
+    // Try common Indonesian date formats
+    const formats = [
+        // DD/MM/YYYY or DD-MM-YYYY
+        /^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/,
+        // YYYY/MM/DD or YYYY-MM-DD
+        /^(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})$/,
+        // DD/MM/YY or DD-MM-YY
+        /^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2})$/
+    ];
+    
+    for (const format of formats) {
+        const match = input.match(format);
+        if (match) {
+            let day, month, year;
+            
+            if (format.source.startsWith('^(\\d{4})')) {
+                // YYYY/MM/DD format
+                year = parseInt(match[1]);
+                month = parseInt(match[2]) - 1; // Month is 0-based
+                day = parseInt(match[3]);
+            } else if (format.source.includes('(\\d{2})$')) {
+                // DD/MM/YY format
+                day = parseInt(match[1]);
+                month = parseInt(match[2]) - 1;
+                year = parseInt(match[3]);
+                // Assume 20xx for years 00-30, 19xx for years 31-99
+                year += (year <= 30) ? 2000 : 1900;
+            } else {
+                // DD/MM/YYYY format
+                day = parseInt(match[1]);
+                month = parseInt(match[2]) - 1;
+                year = parseInt(match[3]);
+            }
+            
+            date = new Date(year, month, day);
+            if (!isNaN(date.getTime())) {
+                return date;
+            }
+        }
+    }
+    
+    // Try Excel serial date (number of days since 1900-01-01)
+    const numericInput = parseFloat(input);
+    if (!isNaN(numericInput) && numericInput > 0) {
+        // Excel date serial number
+        const excelEpoch = new Date(1900, 0, 1);
+        date = new Date(excelEpoch.getTime() + (numericInput - 1) * 24 * 60 * 60 * 1000);
+        if (!isNaN(date.getTime())) {
+            return date;
+        }
+    }
+    
+    return null;
 };
 
 // Helper function to validate stock availability
@@ -136,11 +207,11 @@ const groupSalesByDate = (salesData) => {
     }, {});
 };
 
-// Helper to process a single sale item
+// Helper to process a single sale item - OPTIMIZED VERSION
 const processSaleItem = async (item, sale_id, user_id, t) => {
     let remainingQuantity = parseInt(item.quantity);
 
-    // Get batches in FIFO order
+    // Get batches in FIFO order - but limit to only what we need
     const availableBatches = await BatchStock.findAll({
         where: {
             code_product: item.code_product,
@@ -152,9 +223,13 @@ const processSaleItem = async (item, sale_id, user_id, t) => {
             ['exp_date', 'ASC'],
             ['arrival_date', 'ASC']
         ],
+        limit: 5, // Limit to first 5 batches to reduce query size
         transaction: t,
         lock: t.LOCK.UPDATE
     });
+
+    const salesDetailsToCreate = [];
+    const batchUpdates = [];
 
     // Process each batch until quantity is fulfilled
     for (const batch of availableBatches) {
@@ -164,9 +239,9 @@ const processSaleItem = async (item, sale_id, user_id, t) => {
         const quantityToDeduct = Math.min(remainingQuantity, batchStock);
 
         if (quantityToDeduct > 0) {
-            // Create sales detail
-            await SalesDetail.create({
-                sales_id: sale_id, // pastikan ini sale_id, bukan sales_id
+            // Prepare sales detail for bulk creation
+            salesDetailsToCreate.push({
+                sales_id: sale_id,
                 code_product: item.code_product,
                 batch_id: batch.batch_id,
                 quantity: quantityToDeduct,
@@ -175,16 +250,35 @@ const processSaleItem = async (item, sale_id, user_id, t) => {
                 created_by: user_id,
                 created_at: new Date(),
                 updated_at: new Date()
-            }, { transaction: t });
+            });
 
-            // Update batch stock
-            await batch.update({
-                stock_quantity: batchStock - quantityToDeduct,
-                updated_at: new Date()
-            }, { transaction: t });
+            // Prepare batch update
+            batchUpdates.push({
+                batch_id: batch.batch_id,
+                newStock: batchStock - quantityToDeduct
+            });
 
             remainingQuantity -= quantityToDeduct;
         }
+    }
+
+    // Bulk create sales details
+    if (salesDetailsToCreate.length > 0) {
+        await SalesDetail.bulkCreate(salesDetailsToCreate, { transaction: t });
+    }
+
+    // Bulk update batch stocks
+    for (const update of batchUpdates) {
+        await BatchStock.update(
+            { 
+                stock_quantity: update.newStock,
+                updated_at: new Date()
+            },
+            { 
+                where: { batch_id: update.batch_id },
+                transaction: t 
+            }
+        );
     }
 
     return remainingQuantity === 0;
@@ -239,7 +333,7 @@ const createSingleSale = async (saleData, user_id, normalizedItems, t) => {
     const sale = await Sales.create({
         user_id,
         sales_date: salesDate,
-        total_amount: normalizedItems.reduce((sum, item) => sum + parseFloat(item.subtotal), 0),
+        total_amount: normalizedItems.reduce((sum, item) => sum + (parseFloat(item.selling_price) * parseInt(item.quantity)), 0),
         created_at: new Date(),
         updated_at: new Date()
     }, { transaction: t });
@@ -257,27 +351,149 @@ const createSingleSale = async (saleData, user_id, normalizedItems, t) => {
     return sale;
 };
 
-// Helper untuk normalisasi items dengan fallback ke name_product
+// Helper untuk normalisasi items dengan fallback ke name_product (optimized for batch processing)
 const normalizeItemsWithFallback = async (items, t) => {
     const normalized = [];
-    for (const item of items) {
-        let code_product = normalizeProductCode(item.code_product);
-        let product = null;
-        if (code_product) {
-            product = await Product.findOne({ where: { code_product }, transaction: t });
-        }
-        if ((!product || !code_product) && item.name_product) {
-            product = await Product.findOne({ where: { name_product: item.name_product }, transaction: t });
-            if (product) {
-                code_product = product.code_product;
+    const skippedItems = [];
+    
+    // Use global cache if available, otherwise fallback to database
+    const useGlobalCache = global.productLookup && global.batchLookup;
+    
+    if (useGlobalCache) {
+        // Use pre-loaded cache for faster processing
+        for (const item of items) {
+            let code_product = normalizeProductCode(item.code_product);
+            let product = null;
+            
+            // Try to find by code first
+            if (code_product) {
+                product = global.productLookup.get(code_product);
             }
+            
+            // Fallback to name if not found by code
+            if (!product && item.name_product) {
+                product = global.productLookup.get(item.name_product);
+                if (product) {
+                    code_product = product.code_product;
+                }
+            }
+            
+            // Check if product exists
+            if (!product) {
+                throw new Error(`Product not found: ${item.name_product || item.code_product}`);
+            }
+            
+            // Skip status check since we already loaded only active products from cache
+            // All products in global cache are guaranteed to be active
+            
+            // Get available batch stocks from cache
+            const availableBatches = global.batchLookup.get(code_product) || [];
+            const validBatches = availableBatches.filter(batch => batch.stock_quantity > 0); // Fix: use stock_quantity
+            
+            if (validBatches.length === 0) {
+                throw new Error(`No available stock for product: ${product.name_product}`);
+            }
+            
+            // Use the earliest expiring batch
+            const batch = validBatches.sort((a, b) => new Date(a.exp_date) - new Date(b.exp_date))[0];
+            
+            normalized.push({
+                code_product,
+                name_product: product.name_product,
+                batch_code: batch.batch_code,
+                quantity: parseInt(item.quantity) || 1,
+                selling_price: parseFloat(item.selling_price) || product.sell_price || 0 // Fix: use sell_price
+            });
         }
-        normalized.push({
-            ...item,
-            code_product,
-        });
+    } else {
+        // Fallback to original database-based method
+        // Collect all unique product codes and names for batch loading
+        const productCodes = [...new Set(items.map(item => normalizeProductCode(item.code_product)).filter(Boolean))];
+        const productNames = [...new Set(items.map(item => item.name_product).filter(Boolean))];
+        
+        // Batch load all products to reduce database queries
+        const productsByCode = new Map();
+        const productsByName = new Map();
+        
+        if (productCodes.length > 0) {
+            const products = await Product.findAll({ 
+                where: { code_product: productCodes },
+                attributes: ['code_product', 'name_product', 'status', 'sell_price'], // Fix: add sell_price
+                transaction: t,
+                logging: false
+            });
+            products.forEach(p => productsByCode.set(p.code_product, p));
+        }
+        
+        if (productNames.length > 0) {
+            const products = await Product.findAll({ 
+                where: { name_product: productNames },
+                attributes: ['code_product', 'name_product', 'status', 'sell_price'], // Fix: add sell_price
+                transaction: t,
+                logging: false
+            });
+            products.forEach(p => productsByName.set(p.name_product, p));
+        }
+        
+        // Process items using cached products
+        for (const item of items) {
+            let code_product = normalizeProductCode(item.code_product);
+            let product = null;
+            
+            // Try to find by code first
+            if (code_product) {
+                product = productsByCode.get(code_product);
+            }
+            
+            // Fallback to name if not found by code
+            if (!product && item.name_product) {
+                product = productsByName.get(item.name_product);
+                if (product) {
+                    code_product = product.code_product;
+                }
+            }
+            
+            // Check if product exists
+            if (!product) {
+                throw new Error(`Product not found: ${item.name_product || item.code_product}`);
+            }
+            
+            // Skip inactive products instead of throwing error
+            if (product.status === 'inactive') {
+                skippedItems.push({
+                    code_product: product.code_product,
+                    name_product: product.name_product,
+                    reason: 'Product is inactive'
+                });
+                continue; // Skip this item and continue with next
+            }
+            
+            // Get the first available batch for this product
+            const availableBatch = await BatchStock.findOne({
+                where: { 
+                    code_product,
+                    stock_quantity: { [Op.gt]: 0 } // Fix: use stock_quantity
+                },
+                order: [['exp_date', 'ASC']],
+                transaction: t,
+                logging: false
+            });
+            
+            if (!availableBatch) {
+                throw new Error(`No available stock for product: ${product.name_product}`);
+            }
+            
+            normalized.push({
+                code_product,
+                name_product: product.name_product,
+                batch_code: availableBatch.batch_code,
+                quantity: parseInt(item.quantity) || 1,
+                selling_price: parseFloat(item.selling_price) || product.sell_price || 0 // Fix: use sell_price
+            });
+        }
     }
-    return normalized;
+    
+    return { normalized, skippedItems };
 };
 
 // Helper to check for duplicate sales with improved performance
@@ -339,7 +555,10 @@ const checkDuplicateSale = async (items, sales_date, user_id, t) => {
 };
 
 export const importSalesFromCSV = async (req, res) => {
-    const t = await db.transaction();
+    const BATCH_SIZE = 100; // Reduce batch size for better performance and less memory usage
+    const MAX_CONCURRENT_BATCHES = 1; // Process one batch at a time to prevent lock contention
+    
+    let mainTransaction;
     
     try {
         if (!req.file) {
@@ -348,7 +567,6 @@ export const importSalesFromCSV = async (req, res) => {
 
         const user_id = req.user?.user_id;
         if (!user_id) {
-            await t.rollback();
             return res.status(401).json({ msg: "User ID is required" });
         }
 
@@ -356,13 +574,50 @@ export const importSalesFromCSV = async (req, res) => {
         let successCount = 0;
         const errors = [];
         const salesData = [];
-        const uniqueDataSet = new Set(); // For checking duplicates within the CSV
+        const uniqueDataSet = new Set();
         const startTime = Date.now();
+        
+        console.log(`Starting CSV import for user ${user_id} at ${new Date().toISOString()}`);
+        
+        // Pre-load data for better performance - OPTIMIZED LOADING
+        console.log('Pre-loading product and batch stock data...');
+        const [allProducts, allBatchStocks] = await Promise.all([
+            Product.findAll({
+                where: { status: 'active' },
+                attributes: ['code_product', 'name_product', 'sell_price', 'status'],
+                raw: true,
+                logging: false
+            }),
+            BatchStock.findAll({
+                where: { stock_quantity: { [Op.gt]: 0 } },
+                attributes: ['batch_code', 'code_product', 'stock_quantity', 'exp_date', 'batch_id'],
+                raw: true,
+                logging: false
+            })
+        ]);
+        
+        // Create lookup maps
+        global.productLookup = new Map();
+        global.batchLookup = new Map();
+        
+        allProducts.forEach(p => {
+            global.productLookup.set(p.code_product, p);
+            global.productLookup.set(p.name_product, p);
+        });
+        
+        allBatchStocks.forEach(b => {
+            if (!global.batchLookup.has(b.code_product)) {
+                global.batchLookup.set(b.code_product, []);
+            }
+            global.batchLookup.get(b.code_product).push(b);
+        });
+        
+        console.log(`Loaded ${allProducts.length} products and ${allBatchStocks.length} batches`);
 
-        // Read CSV file with optimizations
+        // Read CSV file with streaming and batching - OPTIMIZED
         await new Promise((resolve, reject) => {
             fs.createReadStream(req.file.path, { 
-                highWaterMark: 64 * 1024 // Increase buffer size to 64KB for faster reading
+                highWaterMark: 64 * 1024 // Reduce buffer to 64KB for better memory usage
             })
             .pipe(parse({
                 delimiter: ",",
@@ -381,13 +636,35 @@ export const importSalesFromCSV = async (req, res) => {
                     return csvColumns;
                 },
                 trim: true,
-                skip_empty_lines: true
+                skip_empty_lines: true,
+                max_limit_on_data_read: 100000 // Reduce row size limit
             }))
             .on("data", (row) => {
                 processedCount++;
+                
+                // Progress logging for large files - reduce frequency
+                if (processedCount % 2000 === 0) {
+                    console.log(`Processed ${processedCount} rows...`);
+                }
+                
                 try {
                     // Extract data from row with fallbacks for different column names
-                    const sales_date = new Date(row['Tanggal']);
+                    const dateInput = row['Tanggal'] || row['Date'] || row['sales_date'];
+                    let sales_date;
+                    
+                    // Enhanced date parsing with multiple format support
+                    if (dateInput) {
+                        // Try different date formats
+                        sales_date = parseDateFlexible(dateInput);
+                        if (!sales_date || isNaN(sales_date.getTime())) {
+                            errors.push({ row: processedCount, error: `Invalid date format: ${dateInput}` });
+                            return;
+                        }
+                    } else {
+                        errors.push({ row: processedCount, error: 'Date field is required' });
+                        return;
+                    }
+                    
                     const code_product = normalizeProductCode(row['Kode Bara'] || row['Kode Barang'] || row['code_product']);
                     const name_product = row['Nama Bar'] || row['Nama Barang'] || row['name_product'] || null;
                     const quantity = parseInt(row['Qty'] || row['Jumlah Barang'] || row['quantity']);
@@ -411,10 +688,7 @@ export const importSalesFromCSV = async (req, res) => {
                         errors.push({ row: processedCount, error: 'Invalid subtotal' });
                         return;
                     }
-                    if (isNaN(sales_date.getTime())) {
-                        errors.push({ row: processedCount, error: 'Invalid date format' });
-                        return;
-                    }
+                    // Date validation already done above, no need to re-validate
                     
                     // Check if receipt number is provided but empty
                     const receiptNumber = row['NO.Nota'] || null;
@@ -470,110 +744,189 @@ export const importSalesFromCSV = async (req, res) => {
         fs.unlinkSync(req.file.path);
 
         if (salesData.length === 0) {
-            await t.rollback();
             return res.status(400).json({
                 msg: "No valid data found in CSV",
                 errors
             });
         }
 
-        // Group sales by date
-        const salesByDate = groupSalesByDate(salesData);
+        console.log(`CSV parsing completed. Processing ${salesData.length} valid rows in batches...`);
 
-        // Validate all stock before processing
-        const allItems = Object.values(salesByDate).flatMap(sale => sale.items);
-        const normalizedAllItems = await normalizeItemsWithFallback(allItems, t);
-        const stockValidation = await validateStockAvailability(normalizedAllItems, t);
-        // Filter hanya yang stok cukup
-        const sufficientItems = normalizedAllItems.filter(item => {
-            const found = stockValidation.find(v => (v.code_product === item.code_product || v.name_product === item.name_product));
-            return found && found.sufficient;
-        });
-        // Jika tidak ada item yang valid sama sekali, rollback
-        if (sufficientItems.length === 0) {
-            await t.rollback();
-            return res.status(400).json({
-                msg: "No valid sales to import (all insufficient stock or not found)",
-                details: stockValidation.filter(v => !v.sufficient)
-            });
-        }
-        // Group ulang hanya yang valid
-        const validSalesByDate = groupSalesByDate(sufficientItems);
-        // Process each day's or receipt's sales (hanya yang valid)
-        const results = [];
-        for (const [key, saleData] of Object.entries(validSalesByDate)) {
-            try {
-                // Check if we've already processed a sale with this receipt number (if one exists)
-                if (saleData.receipt_number) {
-                    const existingReceiptSales = results.filter(r => r.receipt_number === saleData.receipt_number);
-                    if (existingReceiptSales.length > 0) {
-                        console.log(`Skipping duplicate receipt number: ${saleData.receipt_number}`);
-                        continue; // Skip this sale as we already processed one with this receipt number
-                    }
-                }
-                
-                const normalizedItems = await normalizeItemsWithFallback(saleData.items, t);
-                const sale = await createSingleSale(
-                    { 
-                        sales_date: saleData.sales_date,
-                        receipt_number: saleData.receipt_number // Pass the receipt number
-                    },
-                    req.user?.user_id,
-                    normalizedItems,
-                    t
-                );
-                // Add receipt number to the result for tracking
-                results.push({
-                    ...sale, 
-                    receipt_number: saleData.receipt_number
-                });
-                successCount++;
-            } catch (error) {
-                errors.push({
-                    date,
-                    error: `Error processing sale: ${error.message}`
-                });
-            }
-        }
-
-        // Jika ada produk yang gagal, tetap tampilkan di errors
-        const failedProducts = stockValidation.filter(v => !v.sufficient);
-        if (failedProducts.length > 0) {
-            errors.push({
-                row: processedCount,
-                error: `Some products were not found or insufficient in stock`,
-                details: failedProducts
-            });
-        }
-
-        // If we have any successful imports but some failed, we still commit
-        if (successCount > 0) {
-            await t.commit();
-        } else {
-            await t.rollback();
-            return res.status(400).json({
-                msg: "No sales were successfully imported",
-                errors
-            });
+        // Process data in batches to handle large datasets
+        const results = await processSalesInBatches(salesData, user_id, BATCH_SIZE, MAX_CONCURRENT_BATCHES);
+        
+        successCount = results.successCount;
+        const allSkippedItems = results.skippedItems;
+        
+        // Add any processing errors to the errors array
+        if (results.errors && results.errors.length > 0) {
+            errors.push(...results.errors);
         }
 
         const elapsed = (Date.now() - startTime) / 1000;
+        console.log(`Import completed in ${elapsed.toFixed(2)} seconds`);
+        console.log(`Performance: ${(successCount / elapsed).toFixed(1)} sales/second`);
+        
         return res.json({
             msg: `Import completed: ${successCount} sales created from ${processedCount} rows`,
             success_count: successCount,
             total_rows: processedCount,
             error_count: errors.length,
+            skipped_inactive_count: allSkippedItems ? allSkippedItems.length : 0,
+            skipped_inactive_items: allSkippedItems && allSkippedItems.length > 0 ? allSkippedItems : null,
             elapsed_time: `${elapsed.toFixed(2)} seconds`,
+            performance: `${(successCount / elapsed).toFixed(1)} sales/second`,
             errors: errors.length > 0 ? errors : null
         });
 
     } catch (error) {
-        await t.rollback();
         console.error('Import error:', error);
         return res.status(500).json({
             msg: error.message,
             stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
         });
+    }
+};
+
+// New function to process sales in batches
+const processSalesInBatches = async (salesData, user_id, batchSize, maxConcurrentBatches) => {
+    const allSkippedItems = [];
+    let successCount = 0;
+    const errors = [];
+
+    // Group sales by date first
+    const salesByDate = groupSalesByDate(salesData);
+    const salesEntries = Object.entries(salesByDate);
+    
+    // Process in batches
+    const totalBatches = Math.ceil(salesEntries.length / batchSize);
+    console.log(`Processing ${salesEntries.length} sale groups in ${totalBatches} batches`);
+
+    for (let i = 0; i < salesEntries.length; i += batchSize) {
+        const batch = salesEntries.slice(i, i + batchSize);
+        const batchNumber = Math.floor(i / batchSize) + 1;
+        
+        console.log(`Processing batch ${batchNumber}/${totalBatches} (${batch.length} sale groups)`);
+        
+        // Create a new transaction for each batch
+        const batchTransaction = await db.transaction();
+        
+        try {
+            const batchResults = [];
+            
+            // Process current batch
+            for (const [key, saleData] of batch) {
+                try {
+                    // Normalize items and check for inactive products
+                    const { normalized: normalizedItems, skippedItems } = await normalizeItemsWithFallback(saleData.items, batchTransaction);
+                    
+                    if (skippedItems && skippedItems.length > 0) {
+                        allSkippedItems.push(...skippedItems);
+                    }
+                    
+                    // Skip if no valid items after filtering inactive products
+                    if (normalizedItems.length === 0) {
+                        continue;
+                    }
+                    
+                    // Validate stock availability
+                    const stockValidation = await validateStockAvailability(normalizedItems, batchTransaction);
+                    const sufficientItems = normalizedItems.filter(item => {
+                        const found = stockValidation.find(v => (v.code_product === item.code_product || v.name_product === item.name_product));
+                        return found && found.sufficient;
+                    });
+                    
+                    // Skip if no sufficient stock
+                    if (sufficientItems.length === 0) {
+                        continue;
+                    }
+                    
+                    // Create the sale
+                    const sale = await createSingleSale(
+                        { 
+                            sales_date: saleData.sales_date,
+                            receipt_number: saleData.receipt_number
+                        },
+                        user_id,
+                        sufficientItems,
+                        batchTransaction
+                    );
+                    
+                    batchResults.push({
+                        ...sale, 
+                        receipt_number: saleData.receipt_number
+                    });
+                    
+                } catch (error) {
+                    console.error(`Error processing sale in batch ${batchNumber}:`, error);
+                    errors.push({
+                        batch: batchNumber,
+                        key,
+                        error: `Error processing sale: ${error.message}`
+                    });
+                }
+            }
+            
+            // Commit batch transaction
+            await batchTransaction.commit();
+            successCount += batchResults.length;
+            
+            console.log(`Batch ${batchNumber} completed: ${batchResults.length} sales created`);
+            
+        } catch (error) {
+            // Rollback batch transaction on error
+            await batchTransaction.rollback();
+            console.error(`Batch ${batchNumber} failed:`, error);
+            errors.push({
+                batch: batchNumber,
+                error: `Batch processing failed: ${error.message}`
+            });
+        }
+        
+        // Add a small delay between batches to prevent overwhelming the database
+        if (i + batchSize < salesEntries.length) {
+            await new Promise(resolve => setTimeout(resolve, 10)); // Reduce delay from 50ms to 10ms
+        }
+    }
+
+    return {
+        successCount,
+        skippedItems: allSkippedItems,
+        errors
+    };
+};
+
+// Helper function for bulk stock updates
+const updateStockInBulk = async (salesDetailsData, transaction) => {
+    try {
+        // Group by batch_code to aggregate quantities
+        const stockUpdates = {};
+        
+        salesDetailsData.forEach(detail => {
+            if (stockUpdates[detail.batch_code]) {
+                stockUpdates[detail.batch_code] += detail.quantity;
+            } else {
+                stockUpdates[detail.batch_code] = detail.quantity;
+            }
+        });
+        
+        // Execute bulk stock updates
+        const updatePromises = Object.entries(stockUpdates).map(([batch_code, totalQuantity]) => {
+            return db.query(
+                'UPDATE batch_stock SET stock_quantity = stock_quantity - ? WHERE batch_code = ?', // Fix: use batch_stock table and stock_quantity column
+                {
+                    replacements: [totalQuantity, batch_code],
+                    type: db.QueryTypes.UPDATE,
+                    transaction
+                }
+            );
+        });
+        
+        await Promise.all(updatePromises);
+        
+    } catch (error) {
+        console.error('Error in bulk stock update:', error);
+        throw error;
     }
 };
 
@@ -603,7 +956,16 @@ export const createSale = async (req, res) => {
         }
 
         // Normalize items with fallback
-        const normalizedItems = await normalizeItemsWithFallback(items, t);
+        const { normalized: normalizedItems, skippedItems } = await normalizeItemsWithFallback(items, t);
+        
+        // If all items were skipped due to inactive status, return error
+        if (normalizedItems.length === 0 && skippedItems.length > 0) {
+            await t.rollback();
+            return res.status(400).json({ 
+                msg: "No valid items to process. All products are inactive.",
+                skippedItems 
+            });
+        }
 
         // Validate stock
         const stockValidation = await validateStockAvailability(normalizedItems, t);
@@ -707,7 +1069,6 @@ export const getSales = async (req, res) => {
         const includeOptions = [
             {
                 model: User,
-                as: "User",
                 attributes: ['user_id', 'name', 'email', 'role']
             },
             {

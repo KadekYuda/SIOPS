@@ -63,6 +63,7 @@ const Product = () => {
   const [totalItems, setTotalItems] = useState(0);
   const [expandedRow, setExpandedRow] = useState(null);
   const [categoryFilter, setCategoryFilter] = useState("all");
+  const [statusFilter, setStatusFilter] = useState("all");
   const [isStockHovered, setIsStockHovered] = useState(null);
   const [categoryOptions, setCategoryOptions] = useState([]);
 
@@ -135,9 +136,14 @@ const Product = () => {
         limit: limit.toString(),
       });
 
-      // Tambahkan parameter category jika bukan "all"
+      // Add category filter if not "all"
       if (categoryFilter && categoryFilter !== "all") {
         params.append("category", categoryFilter);
+      }
+
+      // Add status filter if not "all"
+      if (statusFilter && statusFilter !== "all") {
+        params.append("status", statusFilter);
       }
 
       const response = await api.get(`/products?${params}`);
@@ -155,7 +161,7 @@ const Product = () => {
       });
       setLoading(false);
     }
-  }, [search, page, limit, categoryFilter]);
+  }, [search, page, limit, categoryFilter, statusFilter]);
 
   const fetchCategories = useCallback(async () => {
     try {
@@ -263,9 +269,12 @@ const Product = () => {
           });
         }
       }
+      // Reset form and close modal only on success
+      resetForm();
       setShowModal(false);
       fetchProducts();
     } catch (error) {
+      // Don't close modal or reset form on error - let user fix and retry
       setAlertModal({
         isOpen: true,
         message: error.response?.data?.message || "Failed to save product",
@@ -291,21 +300,39 @@ const Product = () => {
     [categories]
   );
 
-  const handleDelete = async (code_product) => {
+  const [statusConfirmModal, setStatusConfirmModal] = useState({
+    isOpen: false,
+    product: null,
+    newStatus: "",
+  });
+
+  const showStatusConfirm = (product) => {
+    const newStatus = product.status === "active" ? "inactive" : "active";
+    setStatusConfirmModal({
+      isOpen: true,
+      product: product,
+      newStatus: newStatus,
+    });
+  };
+
+  const toggleProductStatus = async (product) => {
     try {
-      await api.delete(`/products/${code_product}`);
+      // Use the new patch endpoint for toggling status
+      await api.patch(`/products/status/${product.code_product}`);
+
       setSuccessModal({
         isOpen: true,
-        message: "Product deleted successfully",
+        message: `Product status changed successfully`,
       });
       fetchProducts();
     } catch (error) {
       setAlertModal({
         isOpen: true,
-        message: error.response?.data?.message || "Failed to delete product",
+        message:
+          error.response?.data?.message || "Failed to update product status",
       });
     }
-    setDeleteConfirmModal({ isOpen: false, product: null });
+    setStatusConfirmModal({ isOpen: false, product: null, newStatus: "" });
   };
 
   const handleFileChange = (e) => {
@@ -521,7 +548,28 @@ const Product = () => {
               options={categoryOptions}
               placeholder="All Categories"
               isClearable={false}
-              className="text-sm"
+              className="text-sm w-48 mr-2"
+            />
+
+            {/* Status Filter */}
+            <Select
+              value={[
+                { value: "all", label: "All Status" },
+                { value: "active", label: "Active" },
+                { value: "inactive", label: "Inactive" },
+              ].find((option) => option.value === statusFilter)}
+              onChange={(selectedOption) => {
+                setStatusFilter(selectedOption.value);
+                setPage(0);
+              }}
+              options={[
+                { value: "all", label: "All Status" },
+                { value: "active", label: "Active" },
+                { value: "inactive", label: "Inactive" },
+              ]}
+              placeholder="All Status"
+              isClearable={false}
+              className="text-sm w-40"
             />
           </div>
         </div>
@@ -650,31 +698,46 @@ const Product = () => {
                       </div>
                     </div>
 
-                    {isAdmin && (
-                      <div className="flex flex-row justify-end gap-2 mt-3">
-                        <CrudButton
-                          icon={Edit2}
-                          onClick={() => {
-                            setFormData(prepareEditData(product));
-                            setModalMode("edit");
-                            setShowModal(true);
-                          }}
-                          buttonStyle="primary"
-                          buttonType="product"
-                          actionType="edit"
-                        />
-                        <CrudButton
-                          icon={Trash2}
-                          onConfirm={() => handleDelete(product.code_product)}
-                          buttonStyle="danger"
-                          buttonType="product"
-                          actionType="delete"
-                          confirmMessage="Are you sure you want to delete this product?"
-                          dataMessage="This action will permanently delete this product and cannot be undone."
-                          title="Delete Product"
-                        />
-                      </div>
-                    )}
+                    <div className="flex flex-row justify-end gap-2 mt-3">
+                      <CrudButton
+                        icon={Edit2}
+                        onClick={() => {
+                          setFormData(prepareEditData(product));
+                          setModalMode("edit");
+                          setShowModal(true);
+                        }}
+                        buttonStyle="primary"
+                        buttonType="product"
+                        actionType="edit"
+                      />
+                      {isAdmin && (
+                        <button
+                          onClick={() => showStatusConfirm(product)}
+                          className={`flex items-center justify-center w-9 h-9 rounded-full ${
+                            product.status === "inactive"
+                              ? "bg-red-100 text-red-600 hover:bg-red-200"
+                              : "bg-green-100 text-green-600 hover:bg-green-200"
+                          }`}
+                          title={
+                            product.status === "inactive"
+                              ? "Inactive (click to activate)"
+                              : "Active (click to deactivate)"
+                          }
+                        >
+                          <div className="w-4 h-4 flex items-center justify-center">
+                            {product.status === "inactive" ? (
+                              <span className="text-red-600 text-xs font-bold">
+                                OFF
+                              </span>
+                            ) : (
+                              <span className="text-green-600 text-xs font-bold">
+                                ON
+                              </span>
+                            )}
+                          </div>
+                        </button>
+                      )}
+                    </div>
                   </div>
                 )}
               </div>
@@ -758,6 +821,28 @@ const Product = () => {
               </div>
 
               <div className="w-full md:w-40">
+                <Select
+                  value={[
+                    { value: "all", label: "All Status" },
+                    { value: "active", label: "Active" },
+                    { value: "inactive", label: "Inactive" },
+                  ].find((option) => option.value === statusFilter)}
+                  onChange={(selectedOption) => {
+                    setStatusFilter(selectedOption.value);
+                    setPage(0);
+                  }}
+                  options={[
+                    { value: "all", label: "All Status" },
+                    { value: "active", label: "Active" },
+                    { value: "inactive", label: "Inactive" },
+                  ]}
+                  placeholder="Status"
+                  isClearable={false}
+                  className="text-sm"
+                />
+              </div>
+
+              <div className="w-full md:w-40">
                 <select
                   value={limit}
                   onChange={(e) => {
@@ -805,11 +890,10 @@ const Product = () => {
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-900 uppercase tracking-wider w-32 ">
                     Stock
                   </th>
-  
-                    <th className="px-4 py-3 text-right text-xs font-medium text-gray-900 uppercase tracking-wider w-1">
-                      Actions
-                    </th>
-                  
+
+                  <th className="px-4 py-3 text-right text-xs font-medium text-gray-900 uppercase tracking-wider w-1">
+                    Actions
+                  </th>
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
@@ -915,34 +999,48 @@ const Product = () => {
                         </div>
                       </td>
 
-                        <td className="px-4 py-4 text-sm ">
-                          <div className="flex justify-end gap-3">
-                            <CrudButton
-                              icon={Edit2}
-                              onClick={() => {
-                                setFormData(prepareEditData(product));
-                                setModalMode("edit");
-                                setShowModal(true);
-                              }}
-                              buttonStyle="primary"
-                              buttonType="product"
-                              actionType="edit"
-                            />
-                                                  {isAdmin && (<CrudButton
-                              icon={Trash2}
-                              onConfirm={() =>
-                                handleDelete(product.code_product)
+                      <td className="px-4 py-4 text-sm ">
+                        <div className="flex justify-end gap-3">
+                          <CrudButton
+                            icon={Edit2}
+                            onClick={() => {
+                              setFormData(prepareEditData(product));
+                              setModalMode("edit");
+                              setShowModal(true);
+                            }}
+                            buttonStyle="primary"
+                            buttonType="product"
+                            actionType="edit"
+                          />
+                          {isAdmin && (
+                            <button
+                              onClick={() => showStatusConfirm(product)}
+                              className={`flex items-center justify-center w-9 h-9 rounded-full ${
+                                product.status === "inactive"
+                                  ? "bg-red-100 text-red-600 hover:bg-red-200"
+                                  : "bg-green-100 text-green-600 hover:bg-green-200"
+                              }`}
+                              title={
+                                product.status === "inactive"
+                                  ? "Inactive (click to activate)"
+                                  : "Active (click to deactivate)"
                               }
-                              buttonStyle="danger"
-                              buttonType="product"
-                              actionType="delete"
-                              confirmMessage="Are you sure you want to delete this product?"
-                              dataMessage="This action will permanently delete this product and cannot be undone."
-                              title="Delete Product"
-                            />  )}
-                          </div>
-                        </td>
-                    
+                            >
+                              <div className="w-4 h-4 flex items-center justify-center">
+                                {product.status === "inactive" ? (
+                                  <span className="text-red-600 text-xs font-bold">
+                                    OFF
+                                  </span>
+                                ) : (
+                                  <span className="text-green-600 text-xs font-bold">
+                                    ON
+                                  </span>
+                                )}
+                              </div>
+                            </button>
+                          )}
+                        </div>
+                      </td>
                     </tr>
                   ));
                 })()}
@@ -968,9 +1066,11 @@ const Product = () => {
         isOpen={showModal}
         onClose={() => {
           setShowModal(false);
-          resetForm();
+          // Don't reset form automatically - let user decide
+          // resetForm();
         }}
         onSubmit={handleSubmitProduct}
+        onAlert={(message) => setAlertModal({ isOpen: true, message })}
         modalMode={modalMode}
         initialData={modalMode === "add" ? {} : prepareEditData(formData)}
         categories={categories}
@@ -1058,6 +1158,64 @@ const Product = () => {
         message={alertModal.message}
         onClose={() => setAlertModal({ isOpen: false, message: "" })}
       />
+
+      {/* Status Confirmation Modal */}
+      {statusConfirmModal.isOpen && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 max-w-md w-full">
+            <h3 className="text-xl font-semibold mb-4">
+              {statusConfirmModal.newStatus === "active" ? (
+                <span className="text-green-600">Activate Product</span>
+              ) : (
+                <span className="text-red-600">Deactivate Product</span>
+              )}
+            </h3>
+            <p className="text-gray-700 mb-6">
+              Are you sure you want to{" "}
+              {statusConfirmModal.newStatus === "active"
+                ? "activate"
+                : "deactivate"}{" "}
+              product{" "}
+              <span className="font-semibold">
+                {statusConfirmModal.product?.name_product}
+              </span>
+              ?
+              <br />
+              <span className="text-sm text-gray-500 mt-2 block">
+                {statusConfirmModal.newStatus === "active"
+                  ? "The product will be visible and available for sales."
+                  : "The product will be hidden from sales and inventory operations."}
+              </span>
+            </p>
+            <div className="flex justify-end gap-3">
+              <button
+                onClick={() =>
+                  setStatusConfirmModal({
+                    isOpen: false,
+                    product: null,
+                    newStatus: "",
+                  })
+                }
+                className="px-4 py-2 border rounded-md hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => toggleProductStatus(statusConfirmModal.product)}
+                className={`px-4 py-2 text-white rounded-md ${
+                  statusConfirmModal.newStatus === "active"
+                    ? "bg-green-600 hover:bg-green-700"
+                    : "bg-red-600 hover:bg-red-700"
+                }`}
+              >
+                {statusConfirmModal.newStatus === "active"
+                  ? "Activate"
+                  : "Deactivate"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

@@ -5,7 +5,7 @@ import BatchStock from "./BatchstockModel.js";
 
 const { DataTypes } = Sequelize;
 
-const Opname = db.define('opnames', {
+const Opname = db.define('stock_opname', {
     opname_id: { 
         type: DataTypes.INTEGER, 
         autoIncrement: true, 

@@ -20,6 +20,7 @@ import {
   Database,
 } from "lucide-react";
 import Pagination from "../Product/Pagination";
+import AlertModal from "../../modal/AlertModal";
 
 export default function ReportPage() {
   const [reportType, setReportType] = useState("stock");
@@ -43,6 +44,7 @@ export default function ReportPage() {
     status: "unknown",
     message: "Checking API connection...",
   });
+  const [alertModal, setAlertModal] = useState({ isOpen: false, message: "" });
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -1015,7 +1017,7 @@ export default function ReportPage() {
 
   const exportPDF = () => {
     if (filteredData.length === 0) {
-      alert("No data to export");
+      setAlertModal({ isOpen: true, message: "No data to export" });
       return;
     }
 
@@ -2538,6 +2540,13 @@ export default function ReportPage() {
           )}
         </div>
       </div>
+
+      {/* Alert Modal */}
+      <AlertModal
+        isOpen={alertModal.isOpen}
+        message={alertModal.message}
+        onClose={() => setAlertModal({ isOpen: false, message: "" })}
+      />
     </div>
   );
 }

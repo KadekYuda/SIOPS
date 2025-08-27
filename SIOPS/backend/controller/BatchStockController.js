@@ -23,7 +23,7 @@ export const getBatchStok = async (req, res) => {
             where: whereCondition,
             include: [{
                 model: Products,
-                attributes: ['code_product', 'name_product', 'code_categories'],
+                attributes: ['code_product', 'name_product', 'code_categories', 'min_stock', 'status'],
                 required: false,
                 include: [{
                     model: Categories,
@@ -35,7 +35,7 @@ export const getBatchStok = async (req, res) => {
             where: whereCondition,
             include: [{
                 model: Products,
-                attributes: ['code_product', 'name_product', 'code_categories'],
+                attributes: ['code_product', 'name_product', 'code_categories', 'min_stock', 'status'],
                 required: false,
                 include: [{
                     model: Categories,
@@ -144,7 +144,7 @@ export const getBatchStokByProductCode = async (req, res) => {
             },
             include: [{
                 model: Products,
-                attributes: ['code_product', 'name_product']
+                attributes: ['code_product', 'name_product', 'status']
             }],
             order: [['exp_date', 'ASC']]
         });
@@ -164,9 +164,12 @@ export const getBatchStokByProductCode = async (req, res) => {
 
 export const getMinimumStockAlert = async (req, res) => {
     try {
-        // Fetch all products with their categories
+        // Fetch only active products with their categories
         const products = await Products.findAll({
-            attributes: ['code_product', 'name_product', 'min_stock', 'code_categories', 'sell_price']
+            attributes: ['code_product', 'name_product', 'min_stock', 'code_categories', 'sell_price'],
+            where: {
+                status: 'active' // Only include active products
+            }
         });
 
         const alerts = [];
@@ -186,7 +189,7 @@ export const getMinimumStockAlert = async (req, res) => {
                 return acc + initialStock + stockQuantity;
             }, 0);
 
-            // Include in alerts if stock is at or below minimum
+            // Only include in alerts if stock is at or below min_stock
             if (totalStock <= product.min_stock) {
                 alerts.push({
                     code_product: product.code_product,

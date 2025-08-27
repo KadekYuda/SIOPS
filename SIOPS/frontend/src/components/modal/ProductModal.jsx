@@ -6,6 +6,7 @@ const ProductModal = ({
   isOpen,
   onClose,
   onSubmit,
+  onAlert,
   modalMode = "add",
   initialData = {
     code_product: "",
@@ -121,21 +122,7 @@ const ProductModal = ({
     };
   }, [categoryDropdownOpen]);
 
-  // Close modal when clicking outside
-  useEffect(() => {
-    function handleClickOutsideModal(event) {
-      if (modalRef.current && !modalRef.current.contains(event.target)) {
-        onClose();
-      }
-    }
-
-    if (isOpen) {
-      document.addEventListener("mousedown", handleClickOutsideModal);
-    }
-    return () => {
-      document.removeEventListener("mousedown", handleClickOutsideModal);
-    };
-  }, [isOpen, onClose]);
+  // Removed: Close modal when clicking outside - Now only closable via X button
 
   const validateForm = () => {
     const errors = {};
@@ -156,9 +143,25 @@ const ProductModal = ({
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
+
+    // Cegah input 0 untuk min_stock
+    if (name === "min_stock" && Number(value) === 0) {
+      setFormErrors((prev) => ({
+        ...prev,
+        min_stock: "Minimum stock must be at least 1",
+      }));
+      return;
+    }
+
     setFormData((prev) => ({
       ...prev,
       [name]: value,
+    }));
+
+    // Hapus error jika valid
+    setFormErrors((prev) => ({
+      ...prev,
+      [name]: "",
     }));
     setIsFormEdited(true);
 
@@ -244,11 +247,11 @@ const ProductModal = ({
   const handleCsvUpload = async (e) => {
     e.preventDefault();
     if (!csvFile) {
-      alert("Please select a CSV file");
+      onAlert && onAlert("Please select a CSV file");
       return;
     }
     if (!csvFile.name.endsWith(".csv")) {
-      alert("Please select a valid CSV file");
+      onAlert && onAlert("Please select a valid CSV file");
       return;
     }
     setUploadLoading(true);
@@ -258,7 +261,8 @@ const ProductModal = ({
       onClose();
     } catch (error) {
       console.error("Error uploading CSV:", error);
-      alert(error.response?.data?.message || "Failed to import products");
+      onAlert &&
+        onAlert(error.response?.data?.message || "Failed to import products");
     } finally {
       setUploadLoading(false);
     }
@@ -275,7 +279,8 @@ const ProductModal = ({
   };
 
   const handleDownloadTemplate = () => {
-    const csvContent = "code_product,barcode,name_product,code_categories,sell_price,min_stock\nPROD001,1234567890123,Sample Product,CAT001,10000,5";
+    const csvContent =
+      "code_product,barcode,name_product,code_categories,sell_price,min_stock\nPROD001,1234567890123,Sample Product,CAT001,10000,5";
     const blob = new Blob([csvContent], { type: "text/csv" });
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -296,16 +301,21 @@ const ProductModal = ({
   if (!isOpen) return null;
 
   return createPortal(
-    <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 p-2 sm:p-4">
+    <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-[100] p-2 sm:p-4">
       <div
         ref={modalRef}
         className="bg-white rounded-xl w-full max-w-[90vw] sm:max-w-2xl shadow-2xl transform transition-all animate-fadeIn flex flex-col max-h-[90vh]"
+        onClick={(e) => e.stopPropagation()} // Prevent closing when clicking inside modal
       >
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center p-4 sm:p-6 border-b border-gray-200 bg-gradient-to-r from-blue-50 to-white rounded-t-xl gap-4 sm:gap-2">
           <div className="flex items-center justify-between sm:justify-start">
             <h2 className="text-lg sm:text-xl md:text-2xl font-bold text-gray-800 truncate mr-2">
-              {csvMode ? "Import Products from CSV" : modalMode === "add" ? "Add New Product" : "Edit Product"}
+              {csvMode
+                ? "Import Products from CSV"
+                : modalMode === "add"
+                ? "Add New Product"
+                : "Edit Product"}
             </h2>
             <button
               onClick={onClose}
@@ -315,7 +325,7 @@ const ProductModal = ({
               <X size={20} className="text-gray-500" />
             </button>
           </div>
-          
+
           <div className="flex items-center justify-between">
             {modalMode === "add" && (
               <div className="flex items-center bg-gray-100 rounded-full p-1 flex-1 sm:flex-none">
@@ -323,7 +333,9 @@ const ProductModal = ({
                   type="button"
                   onClick={toggleMode}
                   className={`px-3 py-1 sm:px-4 sm:py-2 rounded-full transition-all text-xs sm:text-sm font-medium flex-1 sm:flex-none ${
-                    !csvMode ? "bg-white shadow-sm text-blue-600" : "text-gray-600"
+                    !csvMode
+                      ? "bg-white shadow-sm text-blue-600"
+                      : "text-gray-600"
                   }`}
                 >
                   Manual Entry
@@ -332,7 +344,9 @@ const ProductModal = ({
                   type="button"
                   onClick={toggleMode}
                   className={`px-3 py-1 sm:px-4 sm:py-2 rounded-full transition-all text-xs sm:text-sm font-medium flex-1 sm:flex-none ${
-                    csvMode ? "bg-blue-600 text-white shadow-sm" : "text-gray-600"
+                    csvMode
+                      ? "bg-blue-600 text-white shadow-sm"
+                      : "text-gray-600"
                   }`}
                 >
                   Import CSV
@@ -370,7 +384,9 @@ const ProductModal = ({
                   </div>
                   {csvFile ? (
                     <div className="text-center">
-                      <p className="text-base sm:text-lg font-semibold text-gray-800">{csvFile.name}</p>
+                      <p className="text-base sm:text-lg font-semibold text-gray-800">
+                        {csvFile.name}
+                      </p>
                       <p className="text-xs sm:text-sm text-gray-500">
                         {(csvFile.size / 1024).toFixed(1)} KB
                       </p>
@@ -380,7 +396,9 @@ const ProductModal = ({
                       <p className="text-base sm:text-lg font-medium text-gray-700">
                         Drag and drop your CSV file here
                       </p>
-                      <p className="text-xs sm:text-sm text-gray-500 mt-2">or click to browse</p>
+                      <p className="text-xs sm:text-sm text-gray-500 mt-2">
+                        or click to browse
+                      </p>
                       <button
                         type="button"
                         onClick={handleBrowseClick}
@@ -432,7 +450,9 @@ const ProductModal = ({
                         <div className="bg-white/60 rounded px-2 py-1 font-mono text-xs">
                           code_product, name_product, sell_price, min_stock
                         </div>
-                        <p className="text-xs text-blue-600 mt-2">Optional: barcode, code_categories</p>
+                        <p className="text-xs text-blue-600 mt-2">
+                          Optional: barcode, code_categories
+                        </p>
                       </div>
                     </div>
                   </div>
@@ -472,9 +492,15 @@ const ProductModal = ({
               </div>
             </div>
           ) : (
-            <form onSubmit={handleSubmit} id="product-form" className="space-y-6 sm:space-y-8">
+            <form
+              onSubmit={handleSubmit}
+              id="product-form"
+              className="space-y-6 sm:space-y-8"
+            >
               <div className="bg-gray-50 p-4 sm:p-6 rounded-lg shadow-sm">
-                <h3 className="text-base sm:text-lg font-semibold text-gray-800 mb-4">Product Details</h3>
+                <h3 className="text-base sm:text-lg font-semibold text-gray-800 mb-4">
+                  Product Details
+                </h3>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
                   <div>
                     <label
@@ -498,7 +524,9 @@ const ProductModal = ({
                       disabled={modalMode === "edit"}
                     />
                     {formErrors.code_product && (
-                      <p className="mt-2 text-xs sm:text-sm text-red-500">{formErrors.code_product}</p>
+                      <p className="mt-2 text-xs sm:text-sm text-red-500">
+                        {formErrors.code_product}
+                      </p>
                     )}
                   </div>
                   <div>
@@ -539,10 +567,15 @@ const ProductModal = ({
                       placeholder="Enter product name"
                     />
                     {formErrors.name_product && (
-                      <p className="mt-2 text-xs sm:text-sm text-red-500">{formErrors.name_product}</p>
+                      <p className="mt-2 text-xs sm:text-sm text-red-500">
+                        {formErrors.name_product}
+                      </p>
                     )}
                   </div>
-                  <div className="sm:col-span-2 relative" ref={categoryDropdownRef}>
+                  <div
+                    className="sm:col-span-2 relative"
+                    ref={categoryDropdownRef}
+                  >
                     <label
                       htmlFor="category"
                       className="block text-xs sm:text-sm font-medium text-gray-700 mb-2"
@@ -551,9 +584,15 @@ const ProductModal = ({
                     </label>
                     <div
                       className="w-full px-3 py-2 sm:px-4 sm:py-3 border border-gray-300 rounded-lg shadow-sm flex items-center justify-between cursor-pointer hover:border-blue-400 focus:ring-2 focus:ring-blue-500 transition-all duration-200 text-xs sm:text-sm"
-                      onClick={() => setCategoryDropdownOpen(!categoryDropdownOpen)}
+                      onClick={() =>
+                        setCategoryDropdownOpen(!categoryDropdownOpen)
+                      }
                     >
-                      <span className={formData.category_name ? "" : "text-gray-400"}>
+                      <span
+                        className={
+                          formData.category_name ? "" : "text-gray-400"
+                        }
+                      >
                         {formData.category_name || "Select category (optional)"}
                       </span>
                       <ChevronDown size={16} className="text-gray-500" />
@@ -575,7 +614,9 @@ const ProductModal = ({
                             <div
                               key={cat.code_categories}
                               className={`px-3 py-2 sm:px-4 sm:py-3 cursor-pointer hover:bg-blue-50 transition-colors text-xs sm:text-sm ${
-                                formData.code_categories === cat.code_categories ? "bg-blue-100" : ""
+                                formData.code_categories === cat.code_categories
+                                  ? "bg-blue-100"
+                                  : ""
                               }`}
                               onClick={() => {
                                 handleCategorySelect(cat);
@@ -597,7 +638,9 @@ const ProductModal = ({
               </div>
 
               <div className="bg-gray-50 p-4 sm:p-6 rounded-lg shadow-sm">
-                <h3 className="text-base sm:text-lg font-semibold text-gray-800 mb-4">Pricing & Stock</h3>
+                <h3 className="text-base sm:text-lg font-semibold text-gray-800 mb-4">
+                  Pricing & Stock
+                </h3>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
                   <div>
                     <label
@@ -607,7 +650,9 @@ const ProductModal = ({
                       Selling Price <span className="text-red-500">*</span>
                     </label>
                     <div className="relative">
-                      <span className="absolute left-3 top-2 sm:top-3.5 text-gray-500 text-xs sm:text-sm">Rp</span>
+                      <span className="absolute left-3 top-2 sm:top-3.5 text-gray-500 text-xs sm:text-sm">
+                        Rp
+                      </span>
                       <input
                         id="sell_price"
                         name="sell_price"
@@ -624,7 +669,9 @@ const ProductModal = ({
                       />
                     </div>
                     {formErrors.sell_price && (
-                      <p className="mt-2 text-xs sm:text-sm text-red-500">{formErrors.sell_price}</p>
+                      <p className="mt-2 text-xs sm:text-sm text-red-500">
+                        {formErrors.sell_price}
+                      </p>
                     )}
                   </div>
                   <div>
@@ -639,6 +686,7 @@ const ProductModal = ({
                       name="min_stock"
                       type="number"
                       inputMode="numeric"
+                      min={1}
                       value={formData.min_stock}
                       onChange={handleInputChange}
                       className={`w-full px-3 py-2 sm:px-4 sm:py-3 border rounded-lg shadow-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 text-xs sm:text-sm ${
@@ -649,7 +697,9 @@ const ProductModal = ({
                       placeholder="0"
                     />
                     {formErrors.min_stock && (
-                      <p className="mt-2 text-xs sm:text-sm text-red-500">{formErrors.min_stock}</p>
+                      <p className="mt-2 text-xs sm:text-sm text-red-500">
+                        {formErrors.min_stock}
+                      </p>
                     )}
                   </div>
                 </div>
@@ -695,7 +745,9 @@ const ProductModal = ({
                 onClick={handleCsvUpload}
                 disabled={uploadLoading}
                 className={`px-6 py-2 sm:px-8 sm:py-3 bg-blue-600 text-white rounded-lg flex items-center gap-2 font-medium shadow-md transition-all duration-200 text-xs sm:text-sm ${
-                  uploadLoading ? "opacity-50 cursor-not-allowed" : "hover:bg-blue-700"
+                  uploadLoading
+                    ? "opacity-50 cursor-not-allowed"
+                    : "hover:bg-blue-700"
                 }`}
               >
                 {uploadLoading ? (

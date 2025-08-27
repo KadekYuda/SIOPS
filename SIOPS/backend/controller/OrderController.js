@@ -63,6 +63,11 @@ export const createOrder = async (req, res) => {
                 throw new Error(`Product with code ${detail.code_product} not found`);
             }
             
+            // Check if product is active
+            if (product.status === 'inactive') {
+                throw new Error(`Product "${product.name_product}" is inactive and cannot be ordered`);
+            }
+            
             // Create order detail with the batch_id
             const orderDetail = await OrderDetail.create({
                 order_id: newOrder.order_id,
@@ -615,6 +620,13 @@ export const getAvailableBatchesByProductCode = async (req, res) => {
         const product = await Product.findByPk(productCode);
         if (!product) {
             return res.status(404).json({ msg: "Product not found" });
+        }
+        
+        // Check if product is active
+        if (product.status === 'inactive') {
+            return res.status(400).json({ 
+                msg: `Product "${product.name_product}" is inactive and cannot be ordered` 
+            });
         }
         
         // Dapatkan semua batch yang tersedia untuk product ini

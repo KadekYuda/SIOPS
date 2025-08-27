@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import api from "../../../service/api";
 import LoadingComponent from "../../LoadingComponent";
+import AlertModal from "../../modal/AlertModal";
 
 const UserProfile = () => {
   const [userData, setUserData] = useState(null);
@@ -24,6 +25,7 @@ const UserProfile = () => {
     role: "",
   });
   const [allowPastDateScheduling, setAllowPastDateScheduling] = useState(false);
+  const [alertModal, setAlertModal] = useState({ isOpen: false, message: "" });
 
   useEffect(() => {
     const fetchUserProfile = async () => {
@@ -96,7 +98,10 @@ const UserProfile = () => {
       setIsEditing(false);
     } catch (error) {
       console.error("Error updating profile:", error);
-      alert(error.response?.data?.msg || "Error updating profile");
+      setAlertModal({
+        isOpen: true,
+        message: error.response?.data?.msg || "Error updating profile",
+      });
     }
   };
 
@@ -332,6 +337,13 @@ const UserProfile = () => {
           )}
         </div>
       </div>
+
+      {/* Alert Modal */}
+      <AlertModal
+        isOpen={alertModal.isOpen}
+        message={alertModal.message}
+        onClose={() => setAlertModal({ isOpen: false, message: "" })}
+      />
     </div>
   );
 };

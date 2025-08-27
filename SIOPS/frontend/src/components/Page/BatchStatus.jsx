@@ -52,7 +52,7 @@ const BatchStatus = ({ stockQuantity, expDate, batchId }) => {
     if (diffDays <= 0) {
       expText = `Expired (${formattedDate})`;
       expColor = "text-red-500 bg-red-50";
-    } else if (diffDays <= 30) {
+    } else if (diffDays <= 60) {
       expText = `${diffDays} days left (${formattedDate})`;
       expColor = "text-amber-500 bg-amber-50";
     } else if (diffDays <= 90) {

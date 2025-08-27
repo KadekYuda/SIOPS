@@ -53,6 +53,8 @@ const OpnameDetail = () => {
       try {
         setLoading(true);
         const response = await api.get(`/opname/${opnameId}/details`);
+        console.log("Opname detail response:", response.data);
+        console.log("User data:", response.data.User);
         setOpnameData(response.data);
       } catch (err) {
         console.error("Error fetching opname detail:", err);
@@ -156,7 +158,6 @@ const OpnameDetail = () => {
 
   // Extract data we need from the response
   const {
-    opname_id,
     status,
     batchStock,
     batch_stock,
@@ -219,9 +220,19 @@ const OpnameDetail = () => {
             </div>
             <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
               <h3 className="text-sm font-medium text-gray-500 mb-2">
-                Opname ID
+                Input By
               </h3>
-              <p className="font-mono text-gray-800">{opname_id}</p>
+              <p
+                className={`font-medium px-2 py-1 rounded-lg inline-block ${
+                  opnameData.User?.role === "staff"
+                    ? "text-blue-800 bg-blue-100"
+                    : opnameData.User?.role === "admin"
+                    ? "text-green-800 bg-green-100"
+                    : "text-gray-800 bg-gray-100"
+                }`}
+              >
+                {opnameData.User?.name || "Unknown"}
+              </p>
             </div>
             <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
               <h3 className="text-sm font-medium text-gray-500 mb-2">
