@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import {
   Package,
   Users,
@@ -32,6 +32,16 @@ const DashboardAdmin = () => {
     sales: { total_transactions: 0, total_amount: 0 },
     orders: { total_orders: 0, total_amount: 0 },
     inventory: { total_batches: 0, expired_batches: 0, near_expiry_batches: 0 },
+  });
+  const [isLoading, setIsLoading] = useState(true);
+  const [dataLoaded, setDataLoaded] = useState({
+    orders: false,
+    users: false,
+    sales: false,
+    products: false,
+    categories: false,
+    opnames: false,
+    batchStocks: false,
   });
 
   // For time-based filtering of summary card data
@@ -137,42 +147,8 @@ const DashboardAdmin = () => {
   const [errorModalOpen, setErrorModalOpen] = useState(false);
   const [modalMessage, setModalMessage] = useState("");
 
-  useEffect(() => {
-    fetchAllData();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  const fetchAllData = async () => {
-    try {
-      await Promise.all([
-        getRole(),
-        fetchOrderData(),
-        fetchUserData(),
-        fetchRecentSales(),
-        fetchProducts(),
-        fetchCategories(),
-        fetchOpnames(),
-        fetchBatchStocks(),
-      ]);
-      // Calculate system stats after all data is loaded
-      calculateSummaryData();
-      fetchSystemStats();
-    } catch (error) {
-      console.error("Error fetching dashboard data:", error);
-    }
-  };
-
-  const getRole = async () => {
-    try {
-      const response = await api.get("/users/verify-token");
-      setRole(response.data.user.role);
-    } catch (error) {
-      console.error("Error fetching user role:", error);
-    }
-  };
-
   // Menghitung data summary langsung dari data batch stock yang sudah diambil
-  const calculateSummaryData = () => {
+  const calculateSummaryData = useCallback(() => {
     try {
       console.log("Calculating summary data from batch stocks and products");
 
@@ -249,64 +225,9 @@ const DashboardAdmin = () => {
     } catch (error) {
       console.error("Error calculating summary data:", error);
     }
-  };
+  }, [batchStocks, products, sales, orders]);
 
-  const fetchRecentSales = async () => {
-    try {
-      const response = await api.get("/sales");
-      const allSales = response.data;
-      setSales(allSales);
-    } catch (error) {
-      console.error("Error fetching recent sales:", error);
-    }
-  };
-
-  const fetchProducts = async () => {
-    try {
-      const response = await api.get("/products");
-      setProducts(response.data.result || response.data);
-    } catch (error) {
-      console.error("Error fetching products:", error);
-    }
-  };
-
-  const fetchCategories = async () => {
-    try {
-      const response = await api.get("/categories");
-      setCategories(response.data.result || response.data);
-      console.log("Categories fetched:", response.data);
-    } catch (error) {
-      console.error("Error fetching categories:", error);
-    }
-  };
-
-  const fetchOpnames = async () => {
-    try {
-      const response = await api.get("/opname/all");
-      console.log("Opname data fetched:", response.data);
-      setOpnames(response.data || []);
-    } catch (error) {
-      console.error("Error fetching opnames:", error);
-    }
-  };
-
-  const fetchBatchStocks = async () => {
-    try {
-      // Ambil semua batch stock dengan limit yang besar untuk memastikan semua data terambil
-      const response = await api.get("/batch/stock?limit=2500");
-      const batchData = response.data.result || response.data;
-      setBatchStocks(batchData);
-      console.log(`Fetched ${batchData.length} batch stocks`);
-
-      // Gunakan endpoint minstock untuk mendapatkan produk yang low stock
-      const minStockResponse = await api.get("/batch/minstock");
-      console.log("Min stock alert:", minStockResponse.data);
-    } catch (error) {
-      console.error("Error fetching batch stocks:", error);
-    }
-  };
-
-  const fetchSystemStats = async () => {
+  const fetchSystemStats = useCallback(async () => {
     try {
       // Calculate today's stats
       const todaySales = sales.filter(
@@ -342,6 +263,126 @@ const DashboardAdmin = () => {
     } catch (error) {
       console.error("Error calculating system stats:", error);
     }
+  }, [sales, orders, users]);
+
+  useEffect(() => {
+    fetchAllData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Calculate summary data when all required data is loaded
+  useEffect(() => {
+    const allDataLoaded = Object.values(dataLoaded).every(loaded => loaded);
+    if (allDataLoaded) {
+      calculateSummaryData();
+      fetchSystemStats();
+      setIsLoading(false);
+    }
+  }, [dataLoaded, calculateSummaryData, fetchSystemStats]);
+
+  const fetchAllData = async () => {
+    setIsLoading(true);
+    try {
+      // Reset data loaded state
+      setDataLoaded({
+        orders: false,
+        users: false,
+        sales: false,
+        products: false,
+        categories: false,
+        opnames: false,
+        batchStocks: false,
+      });
+
+      // Fetch all data in parallel but track completion individually
+      await Promise.allSettled([
+        getRole(),
+        fetchOrderData(),
+        fetchUserData(),
+        fetchRecentSales(),
+        fetchProducts(),
+        fetchCategories(),
+        fetchOpnames(),
+        fetchBatchStocks(),
+      ]);
+    } catch (error) {
+      console.error("Error fetching dashboard data:", error);
+      setIsLoading(false);
+    }
+  };
+
+  const getRole = async () => {
+    try {
+      const response = await api.get("/users/verify-token");
+      setRole(response.data.user.role);
+    } catch (error) {
+      console.error("Error fetching user role:", error);
+    }
+  };
+
+  const fetchRecentSales = async () => {
+    try {
+      const response = await api.get("/sales");
+      const allSales = response.data;
+      setSales(allSales);
+      setDataLoaded(prev => ({ ...prev, sales: true }));
+    } catch (error) {
+      console.error("Error fetching recent sales:", error);
+      setDataLoaded(prev => ({ ...prev, sales: true })); // Mark as loaded even on error
+    }
+  };
+
+  const fetchProducts = async () => {
+    try {
+      const response = await api.get("/products");
+      setProducts(response.data.result || response.data);
+      setDataLoaded(prev => ({ ...prev, products: true }));
+    } catch (error) {
+      console.error("Error fetching products:", error);
+      setDataLoaded(prev => ({ ...prev, products: true })); // Mark as loaded even on error
+    }
+  };
+
+  const fetchCategories = async () => {
+    try {
+      const response = await api.get("/categories");
+      setCategories(response.data.result || response.data);
+      setDataLoaded(prev => ({ ...prev, categories: true }));
+      console.log("Categories fetched:", response.data);
+    } catch (error) {
+      console.error("Error fetching categories:", error);
+      setDataLoaded(prev => ({ ...prev, categories: true })); // Mark as loaded even on error
+    }
+  };
+
+  const fetchOpnames = async () => {
+    try {
+      const response = await api.get("/opname/all");
+      console.log("Opname data fetched:", response.data);
+      setOpnames(response.data || []);
+      setDataLoaded(prev => ({ ...prev, opnames: true }));
+    } catch (error) {
+      console.error("Error fetching opnames:", error);
+      setDataLoaded(prev => ({ ...prev, opnames: true })); // Mark as loaded even on error
+    }
+  };
+
+  const fetchBatchStocks = async () => {
+    try {
+      // Ambil semua batch stock dengan limit yang besar untuk memastikan semua data terambil
+      const response = await api.get("/batch/stock?limit=2500");
+      const batchData = response.data.result || response.data;
+      setBatchStocks(batchData);
+      console.log(`Fetched ${batchData.length} batch stocks`);
+      setDataLoaded(prev => ({ ...prev, batchStocks: true }));
+
+      // Gunakan endpoint minstock untuk mendapatkan produk yang low stock
+      const minStockResponse = await api.get("/batch/minstock");
+      console.log("Min stock alert:", minStockResponse.data);
+    } catch (error) {
+      console.error("Error fetching batch stocks:", error);
+      setDataLoaded(prev => ({ ...prev, batchStocks: true })); // Mark as loaded even on error
+    }
   };
 
   const fetchOrderData = async () => {
@@ -351,9 +392,11 @@ const DashboardAdmin = () => {
         (a, b) => new Date(b.tgl_order) - new Date(a.tgl_order)
       );
       setOrders(sortedOrders);
+      setDataLoaded(prev => ({ ...prev, orders: true }));
     } catch (error) {
       console.error("Error fetching order data:", error);
       setOrders([]);
+      setDataLoaded(prev => ({ ...prev, orders: true })); // Mark as loaded even on error
     }
   };
 
@@ -361,10 +404,12 @@ const DashboardAdmin = () => {
     try {
       const response = await api.get("/users");
       setUsers(response.data);
+      setDataLoaded(prev => ({ ...prev, users: true }));
     } catch (error) {
       console.error("Error fetching user data:", error);
       setModalMessage("Gagal mengambil data staff");
       setErrorModalOpen(true);
+      setDataLoaded(prev => ({ ...prev, users: true })); // Mark as loaded even on error
     }
   };
 

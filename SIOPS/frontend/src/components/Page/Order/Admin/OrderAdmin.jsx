@@ -1264,7 +1264,7 @@ const OrderAdmin = () => {
                                               />
                                               Cancel
                                             </button>
-                                            <button
+                                            {/* <button
                                               onClick={() =>
                                                 handleDeleteClick(order)
                                               }
@@ -1275,7 +1275,7 @@ const OrderAdmin = () => {
                                                 className="inline mr-1"
                                               />
                                               Delete
-                                            </button>
+                                            </button> */}
                                           </>
                                         )}
                                         {order.order_status === "approved" && (
@@ -1381,7 +1381,7 @@ const OrderAdmin = () => {
                                         <X size={12} className="inline mr-1" />
                                         Cancel
                                       </button>
-                                      <button
+                                      {/* <button
                                         onClick={() => handleDeleteClick(order)}
                                         className="text-xs bg-red-50 text-red-600 px-2 py-1 rounded hover:bg-red-100"
                                       >
@@ -1390,7 +1390,7 @@ const OrderAdmin = () => {
                                           className="inline mr-1"
                                         />
                                         Delete
-                                      </button>
+                                      </button> */}
                                     </>
                                   )}
                                   {order.order_status === "approved" && (
@@ -1861,7 +1861,7 @@ const OrderAdmin = () => {
                                             </div>
                                             <div>
                                               <span className="text-gray-500">
-                                                Expiry:{" "}
+                                                Expired:{" "}
                                               </span>
                                               <span className="text-gray-900 font-medium">
                                                 {batch.exp_date

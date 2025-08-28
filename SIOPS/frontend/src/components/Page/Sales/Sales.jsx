@@ -914,10 +914,12 @@ const Sales = () => {
                                         Stock: {batch.totalStock || 0}
                                       </div>
                                       <div className="text-gray-600">
-                                        Expires:{" "}
-                                        {new Date(
-                                          batch.exp_date
-                                        ).toLocaleDateString()}
+                                        Expired:{" "}
+                                        {batch.exp_date && batch.exp_date !== ""
+                                          ? new Date(
+                                              batch.exp_date
+                                            ).toLocaleDateString()
+                                          : "N/A"}
                                       </div>
                                     </div>
                                   </div>
