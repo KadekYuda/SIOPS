@@ -40,7 +40,7 @@ export const upload = multer({
 export const importProductsFromCSV = async (req, res) => {
   try {
     if (!req.file) {
-      return res.status(400).json({ message: "File tidak ditemukan" });
+      return res.status(400).json({ message: "File not found" });
     }
 
     const errors = [];
@@ -50,7 +50,7 @@ export const importProductsFromCSV = async (req, res) => {
     const BATCH_SIZE = 100; // Increased batch size for better performance
     const startTime = Date.now();
 
-    console.log('Memulai proses impor...');
+    console.log('Starting import process...');
 
     // Siapkan cache untuk kategori
     const categoryCache = new Map();
@@ -64,12 +64,11 @@ export const importProductsFromCSV = async (req, res) => {
         .pipe(parse({
           delimiter: ",",
           columns: (header) => {
-            csvColumns = header.map(h => h.trim());
-            console.log('Kolom CSV terdeteksi:', csvColumns);
+            csvColumns = header.map(h => h.trim());            console.log('CSV columns detected:', csvColumns);
             
             if (!csvColumns.includes('KdBar')) {
-              console.error('Kolom KdBar tidak ditemukan di CSV');
-              reject(new Error('Format CSV tidak valid: Kolom KdBar tidak ditemukan'));
+              console.error('KdBar column not found in CSV');
+              reject(new Error('Invalid CSV format: KdBar column not found'));
               return false;
             }
             return csvColumns;
@@ -85,8 +84,7 @@ export const importProductsFromCSV = async (req, res) => {
           console.error('Error parsing CSV:', error);
           reject(error);
         })
-        .on("end", () => {
-          console.log(`File CSV dibaca: ${allRows.length} baris`);
+        .on("end", () => {          console.log(`CSV file read: ${allRows.length} rows`);
           resolve();
         });
     });
@@ -146,15 +144,14 @@ export const importProductsFromCSV = async (req, res) => {
           min_stock: Math.floor(Math.random() * 10) + 1,
           purchase_price: parseFloat((row.HBeli || '0').toString().replace(',', '.')) || 0.0,
           initial_stock: parseInt(row.StAwal || '0') || 0,
-          stock_quantity: parseInt(row.StMasuk || '0') || 0,
+          stock_quantity: parseInt(row.StMasuk || '0') + parseInt(row.StAwal || '0'),
         };
 
         // Validasi field wajib
         if (!transformedRow.code_product) {
           errors.push({
-            row: processedCount,
-            code_product: row.KdBar,
-            error: `Baris ${processedCount}: Kode produk wajib diisi`
+            row: processedCount,            code_product: row.KdBar,
+            error: `Row ${processedCount}: Product code is required`
           });
           validationErrors.add(processedCount); // Using validationErrors instead of errorRows
           continue; // Skip this row
@@ -171,17 +168,16 @@ export const importProductsFromCSV = async (req, res) => {
         errors.push({ 
           row: processedCount,
           code_product: row.KdBar,
-          error: `Error transformasi baris ${processedCount}: ${error.message}` 
+          error: `Error transforming row ${processedCount}: ${error.message}` 
         });
         validationErrors.add(processedCount); // Using validationErrors instead of errorRows
       }
     }
     
-    // Actually using the Set we created to provide statistics
-    console.log(`Total baris dengan error validasi: ${validationErrors.size}`);
+    // Actually using the Set we created to provide statistics    console.log(`Total rows with validation errors: ${validationErrors.size}`);
     
-    // Proses semua kategori sekaligus (single DB operation)
-    console.log(`Memproses ${uniqueCategories.size} kategori unik...`);
+    // Process all categories at once (single DB operation)
+    console.log(`Processing ${uniqueCategories.size} unique categories...`);
     try {
       // Cari kategori yang sudah ada
       const existingCategories = await Categories.findAll({
@@ -215,17 +211,16 @@ export const importProductsFromCSV = async (req, res) => {
         }
       }
       
-      if (categoriesToCreate.length > 0) {
-        console.log(`Membuat ${categoriesToCreate.length} kategori baru...`);
+      if (categoriesToCreate.length > 0) {        console.log(`Creating ${categoriesToCreate.length} new categories...`);
         const createdCategories = await Categories.bulkCreate(categoriesToCreate);
         createdCategories.forEach(category => {
           categoryCache.set(category.code_categories, category);
         });
       }
     } catch (error) {
-      console.error('Error saat memproses kategori:', error);
+      console.error('Error while processing categories:', error);
       errors.push({
-        error: `Error saat memproses kategori: ${error.message}`
+        error: `Error while processing categories: ${error.message}`
       });
       // Lanjutkan meski ada error kategori
     }
@@ -246,14 +241,13 @@ export const importProductsFromCSV = async (req, res) => {
       existingProducts.forEach(product => {
         existingProductMap.set(product.code_product, product);
       });
-      
-      console.log(`Ditemukan ${existingProducts.length} produk yang sudah ada`);
+        console.log(`Found ${existingProducts.length} existing products`);
     } catch (error) {
-      console.error('Error saat mencari produk yang sudah ada:', error);
+      console.error('Error while searching for existing products:', error);
       errors.push({
-        error: `Error saat mencari produk yang sudah ada: ${error.message}`
+        error: `Error while searching for existing products: ${error.message}`
       });
-      // Lanjutkan meski ada error
+      // Continue despite error
     }
     
     // Dapatkan hitungan batch untuk semua produk sekaligus
@@ -275,12 +269,11 @@ export const importProductsFromCSV = async (req, res) => {
         const count = batchCountMap.get(batch.code_product) || 0;
         batchCountMap.set(batch.code_product, count + 1);
       });
-      
-      console.log(`Mendapatkan informasi batch untuk ${batchCountMap.size} produk`);
+        console.log(`Getting batch information for ${batchCountMap.size} products`);
     } catch (error) {
-      console.error('Error saat mendapatkan data batch:', error);
+      console.error('Error while getting batch data:', error);
       errors.push({
-        error: `Error saat mendapatkan data batch: ${error.message}`
+        error: `Error while getting batch data: ${error.message}`
       });
       // Lanjutkan meski ada error
     }
@@ -290,15 +283,14 @@ export const importProductsFromCSV = async (req, res) => {
     
     // Track products that were successfully created
     const successfulProducts = new Map(); // Changed to Map to store both product and its creation status
-    
-    // First pass: Create or update all products
-    console.log(`Memproses ${transformedRows.length} produk...`);
+      // First pass: Create or update all products
+    console.log(`Processing ${transformedRows.length} products...`);
     
     // Optimize by doing bulk operations where possible
     const productsToCreate = [];
     
     for (const row of transformedRows) {
-      // Siapkan objek produk dasar
+      // Prepare basic product object
       const productData = {
         ...row,
         code_categories: row.code_categories || null,
@@ -320,8 +312,7 @@ export const importProductsFromCSV = async (req, res) => {
     
     // Create all new products in one bulk operation if possible
     if (productsToCreate.length > 0) {
-      try {
-        console.log(`Mencoba membuat ${productsToCreate.length} produk baru dalam bulk operation`);
+      try {        console.log(`Attempting to create ${productsToCreate.length} new products in bulk operation`);
         const createdProducts = await Product.bulkCreate(productsToCreate);
         
         // Mark successfully created products
@@ -333,7 +324,7 @@ export const importProductsFromCSV = async (req, res) => {
           });
         });
         
-        console.log(`Berhasil membuat ${createdProducts.length} produk baru`);
+        console.log(`Successfully created ${createdProducts.length} new products`);
       } catch (bulkError) {
         console.error(`Bulk create failed, falling back to individual creates:`, bulkError);
         
@@ -356,15 +347,19 @@ export const importProductsFromCSV = async (req, res) => {
         }
       }
     }
-    
+     // Calculate duplicate count and handle existing products
+    const duplicateCount = transformedRows.filter(row => 
+      existingProductMap.has(row.code_product)
+    ).length;
+    console.log(`Found ${duplicateCount} duplicate products`);
+
     // Update existing products in batches
     const productsToUpdate = transformedRows.filter(row => 
       existingProductMap.has(row.code_product) && 
       !successfulProducts.has(row.code_product)
     );
-    
-    if (productsToUpdate.length > 0) {
-      console.log(`Memperbarui ${productsToUpdate.length} produk yang sudah ada`);
+      if (productsToUpdate.length > 0) {
+      console.log(`Updating ${productsToUpdate.length} existing products`);
       
       for (let i = 0; i < productsToUpdate.length; i += BATCH_SIZE) {
         const batch = productsToUpdate.slice(i, i + BATCH_SIZE);
@@ -413,11 +408,102 @@ export const importProductsFromCSV = async (req, res) => {
       return new Date(randomTimestamp);
     };
 
-    const getRandomExpDate = (arrivalDate) => {
+    // Categories that don't have expiration dates
+    const nonExpiringCategories = ['ACC', 'ATL', 'BK', 'BTI', 'GNTG', 'JAS', 'KRT', 'KRTS', 'KRK', 'LBN', 'LMP', 'LL', 'PEN', 'PL', 'PS', 'SDL', 'SG', 'STR', 'PY'];
+    
+    
+    const longExpiringCategories = ['RK', 'AIR'];
+    
+    // Track how many batches in each expiration category
+    let alreadyExpiredCount = 0;
+    const MAX_ALREADY_EXPIRED = 150; 
+    
+    // Track expiring soon products
+    let expiringSoonCount = 0;
+    const TARGET_EXPIRING_SOON = 200; // Target untuk produk yang akan kadaluarsa dalam 30 hari
+    
+    // Aturan penentuan tanggal kadaluarsa:
+    // 1. Kategori nonExpiringCategories tidak memiliki tanggal kadaluarsa
+    // 2. Kategori longExpiringCategories memiliki masa kadaluarsa yang panjang (1-2 tahun)
+    // 3. Produk dengan stok > 50:
+    //    - 15% akan kadaluarsa dalam 10-60 hari (masuk kategori "expiring soon")
+    //    - 85% diberi tanggal kadaluarsa yang jauh (1-2 tahun)
+    // 4. Produk lainnya:
+    //    - 30% kemungkinan sudah kadaluarsa (hingga MAX_ALREADY_EXPIRED produk)
+    //    - 20% akan kadaluarsa dalam 1-60 hari (hingga TARGET_EXPIRING_SOON produk)
+    //    - Sisanya akan kadaluarsa dalam 1-5 tahun
+    
+
+    const getRandomExpDate = (arrivalDate, categoryCode, batch = null) => {
+      // For categories that don't expire, return null
+      if (nonExpiringCategories.includes(categoryCode)) {
+        console.log(`Product in category ${categoryCode} has no expiration date`);
+        return null;
+      }
+      
+    
+      if (longExpiringCategories.includes(categoryCode)) {
+        const randomYears = 1 + Math.floor(Math.random() * 2); 
+        const longExpDate = new Date(arrivalDate);
+        longExpDate.setFullYear(longExpDate.getFullYear() + randomYears);
+        console.log(`Product in category ${categoryCode} has long expiration (${randomYears} years)`);
+        return longExpDate;
+      }
+      
+      const now = new Date();
       const expDate = new Date(arrivalDate);
-      // Random between 3-12 months after arrival
-      const randomMonths = Math.floor(Math.random() * 10) + 3;
-      expDate.setMonth(expDate.getMonth() + randomMonths);
+      
+     
+      const stockQty = parseInt(batch?.stock_quantity) || 0;
+      if (stockQty > 50) {
+        console.log(`Product has high stock (${stockQty} > 50)`);
+        
+        // 15% produk dengan stok tinggi juga bisa masuk "expiring soon" category
+        const highStockRandom = Math.random();
+        if (highStockRandom < 0.15) {
+          // Set tanggal kadaluarsa 10-60 hari dari sekarang
+          const daysToExpire = 10 + Math.floor(Math.random() * 51); // 10-60 hari
+          const expiringSoonDate = new Date(now);
+          expiringSoonDate.setDate(expiringSoonDate.getDate() + daysToExpire);
+          console.log(`High stock product (${stockQty}) expiring soon in ${daysToExpire} days: ${expiringSoonDate}`);
+          return expiringSoonDate;
+        }
+        
+        // Sisanya diberi tanggal kadaluarsa yang jauh
+        const distantYears = 1 + Math.floor(Math.random() * 2); 
+        expDate.setFullYear(expDate.getFullYear() + distantYears);
+        console.log(`High stock product with distant expiration (${distantYears} years)`);
+        return expDate;
+      }
+      
+      // Benar-benar random: gunakan Math.random() untuk menentukan expired atau tidak
+      // regardless of counter to avoid patterns
+      const randomValue = Math.random(); // 0-1 nilai acak
+      
+      // 30% chance to be expired (completely random)
+      if (randomValue < 0.3 && alreadyExpiredCount < MAX_ALREADY_EXPIRED) {
+        // Random date between arrival date and now (already expired)
+        const randomExpiredTime = arrivalDate.getTime() + 
+          Math.random() * (now.getTime() - arrivalDate.getTime()) * 0.8;
+        alreadyExpiredCount++;
+        console.log(`Creating already expired product: ${alreadyExpiredCount}/${MAX_ALREADY_EXPIRED}`);
+        return new Date(randomExpiredTime);
+      }
+      
+      // 20% chance to be expiring soon (akan kadaluarsa dalam 1-60 hari)
+      if (randomValue >= 0.3 && randomValue < 0.5 && expiringSoonCount < TARGET_EXPIRING_SOON) {
+        expiringSoonCount++;
+        const daysToExpire = 1 + Math.floor(Math.random() * 60); // 1-60 hari
+        const expiringSoonDate = new Date(now);
+        expiringSoonDate.setDate(expiringSoonDate.getDate() + daysToExpire);
+        console.log(`Creating product expiring soon in ${daysToExpire} days: ${expiringSoonDate} (${expiringSoonCount}/${TARGET_EXPIRING_SOON})`);
+        return expiringSoonDate;
+      }
+      
+      // Rest have normal expiration (1-5 years)
+      const randomYears = 1 + Math.floor(Math.random() * 5); // 1-5 years
+      expDate.setFullYear(expDate.getFullYear() + randomYears);
+      console.log(`Creating product with ${randomYears}-year expiration: ${new Date(expDate)}`);
       return expDate;
     };
     
@@ -426,47 +512,79 @@ export const importProductsFromCSV = async (req, res) => {
     
     const batchStocksToCreate = [];
     
+    // Get existing batch codes to prevent duplicates
+    const existingBatchCodes = new Set();
+    try {
+        const existingBatches = await BatchStock.findAll({
+            attributes: ['batch_code'],
+            where: {
+                code_product: {
+                    [Op.in]: Array.from(successfulProducts.keys())
+                }
+            }
+        });
+        existingBatches.forEach(batch => {
+            existingBatchCodes.add(batch.batch_code);
+        });
+    } catch (error) {
+        console.error('Error fetching existing batch codes:', error);
+    }
+    
     // Prepare all batch stocks
     for (const [code_product, productInfo] of successfulProducts.entries()) {
-      try {
-        const row = productInfo.data;
-        
-        // // Skip if no stock to add
-        // if (row.initial_stock <= 0 && row.stock_quantity <= 0) {
-        //   continue;
-        // }
-        
-        // Siapkan batch code
-        const batchCount = batchCountMap.get(code_product) || 0;
-        const newBatchNumber = String(batchCount + 1).padStart(3, '0');
-        const productNameClean = (row.name_product || code_product)
-          .trim()
-          .replace(/[^a-zA-Z0-9 ]/g, ''); // Hanya huruf, angka, dan spasi
-        const batch_code = `${productNameClean}-${newBatchNumber}`;
-        
-        // Generate random arrival and expiration dates
-        const arrivalDate = getRandomArrivalDate();
-        const expDate = getRandomExpDate(arrivalDate);
-        
-        // Siapkan data batch stock with randomized dates
-        batchStocksToCreate.push({
-          code_product,
-          batch_code,
-          purchase_price: row.purchase_price,
-          initial_stock: row.initial_stock,
-          stock_quantity: row.stock_quantity,
-          arrival_date: arrivalDate,
-          exp_date: expDate,
-          created_at: now,
-          updated_at: now,
-        });
-      } catch (error) {
-        console.error(`Error preparing batch stock for ${code_product}:`, error);
-        errors.push({
-          code_product,
-          error: `Error preparing batch stock: ${error.message}`
-        });
-      }
+        try {
+            const row = productInfo.data;
+            const productNameClean = (row.name_product || code_product)
+                .trim()
+                .replace(/[^a-zA-Z0-9 ]/g, '');
+            
+            // Only create new batch if one doesn't exist with same code and product
+            const batch_code = `${productNameClean}-001`;
+            
+            if (!existingBatchCodes.has(batch_code)) {
+                const arrivalDate = getRandomArrivalDate();
+                const batchData = {
+                    code_product,
+                    batch_code,
+                    purchase_price: row.purchase_price,
+                    initial_stock: row.initial_stock,
+                    stock_quantity: row.stock_quantity,
+                };
+                const expDate = getRandomExpDate(arrivalDate, row.code_categories, batchData);
+                
+                batchStocksToCreate.push({
+                    code_product,
+                    batch_code,
+                    purchase_price: row.purchase_price,
+                    initial_stock: row.initial_stock,
+                    stock_quantity: row.stock_quantity,
+                    arrival_date: arrivalDate,
+                    exp_date: expDate,
+                    created_at: now,
+                    updated_at: now,
+                });
+            } else {
+                // Update existing batch stock instead of creating new one
+                await BatchStock.update(
+                    {
+                        stock_quantity: row.stock_quantity,
+                        updated_at: now
+                    },
+                    {
+                        where: { 
+                            code_product,
+                            batch_code
+                        }
+                    }
+                );
+            }
+        } catch (error) {
+            console.error(`Error preparing batch stock for ${code_product}:`, error);
+            errors.push({
+                code_product,
+                error: `Error preparing batch stock: ${error.message}`
+            });
+        }
     }
     
     // Create batch stocks in larger chunks
@@ -479,7 +597,7 @@ export const importProductsFromCSV = async (req, res) => {
       
       for (let i = 0; i < batchStocksToCreate.length; i += BATCH_STOCK_CHUNK_SIZE) {
         const batchStockChunk = batchStocksToCreate.slice(i, i + BATCH_STOCK_CHUNK_SIZE);
-        
+          
         try {
           const createdBatchStocks = await BatchStock.bulkCreate(batchStockChunk);
           batchStockSuccessCount += createdBatchStocks.length;
@@ -512,23 +630,22 @@ export const importProductsFromCSV = async (req, res) => {
     // Final counts
     successCount = successfulProducts.size;
     
-    console.log(`Proses impor selesai dalam ${elapsed.toFixed(2)} detik`);
-    console.log(`Total data diproses: ${processedCount}, Sukses: ${successCount}, Error: ${errors.length}`);
+    console.log(`Import process completed in ${elapsed.toFixed(2)} seconds`);
+    console.log(`Total data processed: ${processedCount}, Successful: ${successCount}, Error: ${errors.length}`);
     
     // Add validation errors count to the response
     res.json({
-      message: `Import selesai: ${successCount} berhasil dari total ${processedCount} data dengan ${errors.length} error`,
+      message: `Import completed: ${successCount} successful out of ${processedCount} total data with ${errors.length} errors`,
       total_data: processedCount,
       success_count: successCount,
       error_count: errors.length,
       validation_errors: validationErrors.size,
-      batch_stock_count: batchStocksToCreate.length,
-      elapsed_time: `${elapsed.toFixed(2)} detik`,
+      batch_stock_count: batchStocksToCreate.length,      elapsed_time: `${elapsed.toFixed(2)} seconds`,
       errors: errors.length > 0 ? errors.slice(0, 20) : null,
     });
 
   } catch (error) {
-    console.error('Error utama:', error);
+    console.error('Main error:', error);
     res.status(500).json({ 
       message: error.message,
       stack: process.env.NODE_ENV === 'development' ? error.stack : undefined 
@@ -540,21 +657,48 @@ export const importProductsFromCSV = async (req, res) => {
 export const getProducts = async (req, res) => {
   try {
     const page = parseInt(req.query.page) || 0;
-    const limit = parseInt(req.query.limit) || 3000;
+    const limit = parseInt(req.query.limit) || 2500; 
     const search = req.query.search || "";
-    const code_categories = req.query.code_categories || "";
+    const category = req.query.category || "";
+    const status = req.query.status || "";
+
     const offset = limit * page;
 
-    const { count, rows } = await Product.findAndCountAll({
-      where: {
-        [Op.or]: [
-          { code_product: { [Op.like]: `%${search}%` } },
-          { name_product: { [Op.like]: `%${search}%` } },
-          { barcode: { [Op.like]: `%${search}%` } },
-        ],
-        ...(code_categories && { code_categories }),
-        deleted_at: null,
-      },
+    // Base where condition
+    const whereCondition = {
+      [Op.or]: [
+        { code_product: { [Op.like]: `%${search}%` } },
+        { name_product: { [Op.like]: `%${search}%` } },
+        { barcode: { [Op.like]: `%${search}%` } },
+      ],
+    };
+
+    // Add category filter if provided and not "all"
+    if (category && category !== "all") {
+      whereCondition.code_categories = category;
+    }
+    
+    // Add status filter if provided and not "all"
+    if (status && status !== "all") {
+      whereCondition.status = status;
+    }
+    // No default status filter - show all products
+
+    // Get total count first
+    const totalCount = await Product.count({
+      where: whereCondition,
+      distinct: true,
+      include: [
+        {
+          model: Categories,
+          attributes: ["code_categories", "name_categories"],
+        },
+      ],
+    });
+
+    // Get paginated products
+    const products = await Product.findAll({
+      where: whereCondition,
       include: [
         {
           model: Categories,
@@ -564,16 +708,62 @@ export const getProducts = async (req, res) => {
       offset: offset,
       limit: limit,
       order: [["name_product", "ASC"]],
+      distinct: true,
+    });
+
+    // Get batch stocks for products
+    const productCodes = products.map(p => p.code_product);
+    const batchStocks = await BatchStock.findAll({
+      where: {
+        code_product: {
+          [Op.in]: productCodes
+        }
+      },
+      attributes: ['code_product', 'initial_stock', 'stock_quantity']
+    });
+
+    // Calculate total stock for each product
+    const stockMap = {};
+    const initialStockMap = {};
+    batchStocks.forEach(batch => {
+      const codeProduct = batch.code_product;
+      if (!stockMap[codeProduct]) {
+        stockMap[codeProduct] = 0;
+        initialStockMap[codeProduct] = 0;
+      }      // Add stock_quantity to total stock
+      stockMap[codeProduct] += parseInt(batch.stock_quantity || 0);
+    });
+
+    // Add total stock to products
+    const productsWithStock = products.map(product => {
+      const plainProduct = product.get({ plain: true });
+      // Use total from stock_quantity only
+      const totalStock = stockMap[plainProduct.code_product] || 0;
+      const minStock = plainProduct.min_stock || 0;
+
+      if (plainProduct.code_product) {
+        plainProduct.code_product = String(plainProduct.code_product);
+      }
+      if (plainProduct.barcode) {
+        plainProduct.barcode = String(plainProduct.barcode);
+      }
+
+      return {
+        ...plainProduct,
+        totalStock: totalStock,
+        stock_status: totalStock <= minStock ? 'danger' : totalStock <= minStock + 5 ? 'warning' : 'success'
+      };
     });
 
     res.json({
-      result: rows,
+      result: productsWithStock,
       page: page,
       limit: limit,
-      totalRows: count,
-      totalPages: Math.ceil(count / limit),
+      totalRows: totalCount,
+      totalPages: Math.ceil(totalCount / limit),
     });
   } catch (error) {
+    console.error('Error in getProducts:', error);
     res.status(500).json({ message: error.message });
   }
 };
@@ -584,7 +774,6 @@ export const getProductById = async (req, res) => {
     const product = await Product.findOne({
       where: {
         code_product: req.params.code_product,
-        deleted_at: null,
       },
       include: [
         {
@@ -653,7 +842,7 @@ export const updateProduct = async (req, res) => {
     const product = await Product.findOne({
       where: {
         code_product: req.params.code_product,
-        deleted_at: null,
+        status: 'active',
       },
     });
 
@@ -686,13 +875,48 @@ export const updateProduct = async (req, res) => {
   }
 };
 
+// Toggle product status
+export const toggleProductStatus = async (req, res) => {
+  try {
+    const product = await Product.findOne({
+      where: {
+        code_product: req.params.code_product,
+      },
+    });
+
+    if (!product) {
+      return res.status(404).json({ message: "Product not found" });
+    }
+
+    // Toggle status between 'active' and 'inactive'
+    const newStatus = product.status === 'active' ? 'inactive' : 'active';
+
+    await Product.update(
+      { 
+        status: newStatus,
+        updated_at: new Date()
+      },
+      { 
+        where: { code_product: req.params.code_product } 
+      }
+    );
+
+    res.json({
+      message: `Product status changed to ${newStatus} successfully`,
+      status: newStatus
+    });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
 // Soft delete product
 export const deleteProduct = async (req, res) => {
   try {
     const product = await Product.findOne({
       where: {
         code_product: req.params.code_product,
-        deleted_at: null,
+        status: 'active',
       },
     });
 
@@ -701,7 +925,7 @@ export const deleteProduct = async (req, res) => {
     }
 
     await Product.update(
-      { deleted_at: new Date() },
+      { status: 'inactive', updated_at: new Date() },
       { where: { code_product: req.params.code_product } }
     );
 
@@ -716,11 +940,13 @@ export const deleteProduct = async (req, res) => {
 // Get all categories
 export const getCategories = async (req, res) => {
   try {
+    // Base where condition
+    const whereCondition = {};
+    
     const categories = await Categories.findAll({
       attributes: ["code_categories", "name_categories"],
-      where: {
-        deleted_at: null,
-      },
+      where: whereCondition,
+      order: [["name_categories", "ASC"]],
     });
 
     res.json({
@@ -737,7 +963,6 @@ export const getCategoryById = async (req, res) => {
     const category = await Categories.findOne({
       where: {
         code_categories: req.params.code_categories,
-        deleted_at: null,
       },
     });
 
@@ -781,7 +1006,6 @@ export const updateCategory = async (req, res) => {
     const category = await Categories.findOne({
       where: {
         code_categories: req.params.code_categories,
-        deleted_at: null,
       },
     });
 
@@ -802,33 +1026,6 @@ export const updateCategory = async (req, res) => {
       message: "Category updated successfully",
     });
   } catch (error) {
-    res.status(500).json({ message: error.message });
-  }
-};
-
-// Soft delete category
-export const deleteCategory = async (req, res) => {
-  try {
-    const category = await Categories.findOne({
-      where: {
-        code_categories: req.params.code_categories,
-        deleted_at: null,
-      },
-    });
-
-    if (!category) {
-      return res.status(404).json({ message: "Category not found" });
-    }
-
-    await Categories.update(
-      { deleted_at: new Date() },
-      { where: { code_categories: req.params.code_categories } }
-    );
-
-    res.json({
-      message: "Category deleted successfully",
-    });
-  } catch (error) {
-    res.status(500).json({ message: error.message });
+    res.status (500).json({ message: error.message });
   }
 };

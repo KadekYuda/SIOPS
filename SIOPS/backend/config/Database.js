@@ -72,6 +72,6 @@ export const testConnection = async () => {
     }
 };
 
-export const initDB = syncDatabase; // Tambahkan ini
+export const initDB = syncDatabase; 
 
 export default db;

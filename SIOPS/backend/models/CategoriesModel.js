@@ -15,12 +15,11 @@ const Categories = db.define('categories', {
     },
     created_at: DataTypes.DATE,
     updated_at: DataTypes.DATE, 
-    deleted_at: {
-        type: DataTypes.DATE,
-        allowNull: true
-    },
+    
 }, {
     freezeTableName: true,
+    timestamps: true,
+    paranoid: false, 
 });
 
 export default Categories;

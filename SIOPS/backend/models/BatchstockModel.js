@@ -46,8 +46,8 @@ const BatchStock = db.define('batch_stock', {
         
     },
     exp_date: {
-        type: DataTypes.DATE,
-        allowNull: false,
+        type: DataTypes.DATE,   
+        allowNull: true,
         
     },
     created_at: DataTypes.DATE,
@@ -55,6 +55,8 @@ const BatchStock = db.define('batch_stock', {
      
 }, {
     freezeTableName: true,
+    paranoid: false,
+    timestamps: true,
 });
 
 export default BatchStock;

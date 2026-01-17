@@ -18,19 +18,18 @@ const OrderDetail = db.define('order_details', {
         references: { model: Order , key: 'order_id' }
     },
     code_product:{
-        type:DataTypes.STRING(13),
-        allowNull:true,
+        type: DataTypes.STRING(13),
+        allowNull: false,
         references: { model: Product, key: 'code_product'}
     }, 
-
     batch_id: { 
         type: DataTypes.INTEGER, 
-        allowNull: false,
+        allowNull: true,
         references: { model: BatchStock, key: 'batch_id' }
     },
     quantity: { 
         type: DataTypes.INTEGER, 
-        allowNull: false 
+        allowNull: false,
     },
     ordered_price: { 
         type: DataTypes.DECIMAL(12,2), 
@@ -42,9 +41,14 @@ const OrderDetail = db.define('order_details', {
     },
     created_at: DataTypes.DATE,
     updated_at: DataTypes.DATE,
-}, { freezeTableName: true });
+}, { 
+    freezeTableName: true,
+    timestamps: false,
+    paranoid: false,
+});
 
-
-
+OrderDetail.belongsTo(Order, { foreignKey: 'order_id' });
+OrderDetail.belongsTo(Product, { foreignKey: 'code_product' });
+OrderDetail.belongsTo(BatchStock, { foreignKey: 'batch_id' });
 
 export default OrderDetail;

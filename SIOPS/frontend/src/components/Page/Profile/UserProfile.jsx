@@ -1,7 +1,19 @@
 import React, { useState, useEffect } from "react";
 import { motion } from "framer-motion";
-import { User, Mail, Phone, Lock, Edit, Save, X } from "lucide-react";
+import {
+  User,
+  Mail,
+  Phone,
+  Lock,
+  Edit,
+  Save,
+  X,
+  Calendar,
+  Settings,
+} from "lucide-react";
 import api from "../../../service/api";
+import LoadingComponent from "../../LoadingComponent";
+import AlertModal from "../../modal/AlertModal";
 
 const UserProfile = () => {
   const [userData, setUserData] = useState(null);
@@ -12,6 +24,8 @@ const UserProfile = () => {
     phone_number: "",
     role: "",
   });
+  const [allowPastDateScheduling, setAllowPastDateScheduling] = useState(false);
+  const [alertModal, setAlertModal] = useState({ isOpen: false, message: "" });
 
   useEffect(() => {
     const fetchUserProfile = async () => {
@@ -19,16 +33,16 @@ const UserProfile = () => {
         // Get complete profile data in a single call
         const response = await api.get("/users/profile");
         const userData = response.data.user ?? response.data;
-        
+
         console.log("Complete profile data:", userData);
-        
+
         setUserData({
           user_id: userData.user_id || "",
           name: userData.name || "No name",
           email: userData.email || "No email",
           role: userData.role || "No role",
           phone_number: userData.phone_number || "No phone",
-          status: userData.status || "active"
+          status: userData.status || "active",
         });
 
         setFormData({
@@ -37,13 +51,25 @@ const UserProfile = () => {
           phone_number: userData.phone_number || "",
           role: userData.role || "",
         });
+
+        // Load admin setting for past date scheduling
+        if (userData.role === "admin") {
+          const savedSetting = localStorage.getItem("allowPastDateScheduling");
+          setAllowPastDateScheduling(savedSetting === "true");
+        }
       } catch (error) {
         console.error("Error fetching user profile:", error);
       }
     };
-  
+
     fetchUserProfile();
   }, []);
+
+  const handleTogglePastDateScheduling = () => {
+    const newValue = !allowPastDateScheduling;
+    setAllowPastDateScheduling(newValue);
+    localStorage.setItem("allowPastDateScheduling", newValue.toString());
+  };
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
@@ -57,9 +83,7 @@ const UserProfile = () => {
   const handleUpdateProfile = async (e) => {
     e.preventDefault();
     try {
-      const response = await api.put(`/users/${userData.user_id}`,
-        formData,
-      );
+      const response = await api.put(`/users/${userData.user_id}`, formData);
 
       const updatedUser = response.data.user;
 
@@ -74,16 +98,15 @@ const UserProfile = () => {
       setIsEditing(false);
     } catch (error) {
       console.error("Error updating profile:", error);
-      alert(error.response?.data?.msg || "Error updating profile");
+      setAlertModal({
+        isOpen: true,
+        message: error.response?.data?.msg || "Error updating profile",
+      });
     }
   };
 
   if (!userData) {
-    return (
-      <div className="flex justify-center items-center h-full">
-        <p className="text-gray-500">Loading...</p>
-      </div>
-    );
+    return <LoadingComponent />;
   }
 
   return (
@@ -114,7 +137,7 @@ const UserProfile = () => {
             <form onSubmit={handleUpdateProfile} className="space-y-6">
               <div className="grid grid-cols-2 gap-6">
                 <div>
-                  <label className="block text-gray-700 font-semibold mb-3 flex items-center">
+                  <label className="text-gray-700 font-semibold mb-3 flex items-center">
                     <User className="mr-3 text-gray-500" size={20} />
                     Name
                   </label>
@@ -129,7 +152,7 @@ const UserProfile = () => {
                 </div>
 
                 <div>
-                  <label className="block text-gray-700 font-semibold mb-3 flex items-center">
+                  <label className="text-gray-700 font-semibold mb-3 flex items-center">
                     <Mail className="mr-3 text-gray-500" size={20} />
                     Email
                   </label>
@@ -146,7 +169,7 @@ const UserProfile = () => {
 
               <div className="grid grid-cols-2 gap-6">
                 <div>
-                  <label className="block text-gray-700 font-semibold mb-3 flex items-center">
+                  <label className="text-gray-700 font-semibold mb-3 flex items-center">
                     <Phone className="mr-3 text-gray-500" size={20} />
                     Phone Number
                   </label>
@@ -160,7 +183,7 @@ const UserProfile = () => {
                 </div>
 
                 <div>
-                  <label className="block text-gray-700 font-semibold mb-3 flex items-center">
+                  <label className="text-gray-700 font-semibold mb-3 flex items-center">
                     <Lock className="mr-3 text-gray-500" size={20} />
                     Role
                   </label>
@@ -172,6 +195,48 @@ const UserProfile = () => {
                     className="w-full px-4 py-3 border rounded-lg bg-gray-100 cursor-not-allowed"
                   />
                 </div>
+
+                {/* Admin Settings */}
+                {userData.role === "admin" && (
+                  <div className="col-span-2">
+                    <label className="text-gray-700 font-semibold mb-3 flex items-center">
+                      <Settings className="mr-3 text-gray-500" size={20} />
+                      Admin Settings
+                    </label>
+                    <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center">
+                          <Calendar className="mr-3 text-blue-600" size={20} />
+                          <div>
+                            <h4 className="text-sm font-semibold text-blue-900">
+                              Allow Past Date Scheduling
+                            </h4>
+                            <p className="text-xs text-blue-700">
+                              Enable to schedule opname tasks for past dates
+                            </p>
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={handleTogglePastDateScheduling}
+                          className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                            allowPastDateScheduling
+                              ? "bg-blue-600"
+                              : "bg-gray-300"
+                          }`}
+                        >
+                          <span
+                            className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                              allowPastDateScheduling
+                                ? "translate-x-6"
+                                : "translate-x-1"
+                            }`}
+                          />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
 
               <div className="flex justify-end space-x-4">
@@ -196,43 +261,89 @@ const UserProfile = () => {
                 </motion.button>
               </div>
             </form>
-          ) :(
+          ) : (
             <div className="grid grid-cols-2 gap-6">
-            <div className="flex items-center space-x-4 bg-gray-50 p-4 rounded-lg">
-              <User className="text-blue-500" size={24} />
-              <div>
-                <p className="text-sm text-gray-500">Name</p>
-                <p className="text-base font-semibold">{userData.name}</p>
+              <div className="flex items-center space-x-4 bg-gray-50 p-4 rounded-lg">
+                <User className="text-blue-500" size={24} />
+                <div>
+                  <p className="text-sm text-gray-500">Name</p>
+                  <p className="text-base font-semibold">{userData.name}</p>
+                </div>
               </div>
-            </div>
 
-            <div className="flex items-center space-x-4 bg-gray-50 p-4 rounded-lg">
-              <Mail className="text-green-500" size={24} />
-              <div>
-                <p className="text-sm text-gray-500">Email</p>
-                <p className="text-base font-semibold">{userData.email}</p>
+              <div className="flex items-center space-x-4 bg-gray-50 p-4 rounded-lg">
+                <Mail className="text-green-500" size={24} />
+                <div>
+                  <p className="text-sm text-gray-500">Email</p>
+                  <p className="text-base font-semibold">{userData.email}</p>
+                </div>
               </div>
-            </div>
 
-            <div className="flex items-center space-x-4 bg-gray-50 p-4 rounded-lg">
-              <Phone className="text-purple-500" size={24} />
-              <div>
-                <p className="text-sm text-gray-500">Phone Number</p>
-                <p className="text-base font-semibold">{userData.phone_number}</p>
+              <div className="flex items-center space-x-4 bg-gray-50 p-4 rounded-lg">
+                <Phone className="text-purple-500" size={24} />
+                <div>
+                  <p className="text-sm text-gray-500">Phone Number</p>
+                  <p className="text-base font-semibold">
+                    {userData.phone_number}
+                  </p>
+                </div>
               </div>
-            </div>
 
-            <div className="flex items-center space-x-4 bg-gray-50 p-4 rounded-lg">
-              <Lock className="text-red-500" size={24} />
-              <div>
-                <p className="text-sm text-gray-500">Role</p>
-                <p className="text-base font-semibold">{userData.role}</p>
+              <div className="flex items-center space-x-4 bg-gray-50 p-4 rounded-lg">
+                <Lock className="text-red-500" size={24} />
+                <div>
+                  <p className="text-sm text-gray-500">Role</p>
+                  <p className="text-base font-semibold">{userData.role}</p>
+                </div>
               </div>
+
+              {/* Admin Settings - View Mode */}
+              {userData.role === "admin" && (
+                <div className="col-span-2 bg-blue-50 p-4 rounded-lg border border-blue-200">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center space-x-4">
+                      <Settings className="text-blue-500" size={24} />
+                      <div>
+                        <p className="text-sm text-gray-500">Admin Settings</p>
+                        <p className="text-base font-semibold">
+                          Past Date Scheduling
+                        </p>
+                        <p className="text-xs text-blue-700">
+                          {allowPastDateScheduling
+                            ? "Can schedule for past dates"
+                            : "Cannot schedule for past dates"}
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleTogglePastDateScheduling}
+                      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                        allowPastDateScheduling ? "bg-blue-600" : "bg-gray-300"
+                      }`}
+                    >
+                      <span
+                        className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                          allowPastDateScheduling
+                            ? "translate-x-6"
+                            : "translate-x-1"
+                        }`}
+                      />
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
-          </div>
-        )}
+          )}
         </div>
       </div>
+
+      {/* Alert Modal */}
+      <AlertModal
+        isOpen={alertModal.isOpen}
+        message={alertModal.message}
+        onClose={() => setAlertModal({ isOpen: false, message: "" })}
+      />
     </div>
   );
 };

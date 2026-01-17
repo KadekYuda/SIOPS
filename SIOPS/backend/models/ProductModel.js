@@ -39,14 +39,17 @@ const Product = db.define('products', {
         allowNull: false,
         defaultValue: 0
     },
-    created_at: DataTypes.DATE,
-    updated_at: DataTypes.DATE, 
-    deleted_at: {
-        type: DataTypes.DATE,
-        allowNull: true
+    status: {
+        type: DataTypes.ENUM('active', 'inactive'),
+        allowNull: false,
+        defaultValue: 'active'
     },
+    created_at: DataTypes.DATE,
+    updated_at: DataTypes.DATE
 }, {
     freezeTableName: true,
+    timestamps: true,
+    paranoid: false,
     
 });
 

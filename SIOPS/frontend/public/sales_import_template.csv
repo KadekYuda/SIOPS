@@ -1,0 +1,5 @@
+NO.Nota,Tanggal,Kasir,Kode Barang,Barcode,Nama Barang,Satuan,Qty,Harga Jual,Jumlah
+1,2025-05-09,Admin,PRD001,8991234567890,Paracetamol,Tablet,2,50000,100000
+2,2025-05-09,Admin,PRD002,8991234567891,Amoxicillin,Tablet,1,75000,75000
+3,2025-05-09,Staff,PRD001,8991234567890,Paracetamol,Tablet,3,50000,150000
+4,2025-05-09,Staff,PRD003,8991234567892,Ibuprofen,Tablet,2,25000,50000

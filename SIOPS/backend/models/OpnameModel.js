@@ -5,7 +5,7 @@ import BatchStock from "./BatchstockModel.js";
 
 const { DataTypes } = Sequelize;
 
-const Opname = db.define('opnames', {
+const Opname = db.define('stock_opname', {
     opname_id: { 
         type: DataTypes.INTEGER, 
         autoIncrement: true, 
@@ -27,35 +27,40 @@ const Opname = db.define('opnames', {
             key: 'batch_id'
         }
     },
-    system_stock: { 
-        type: DataTypes.INTEGER, 
-        allowNull: false 
+  scheduled_date: {type: DataTypes.DATEONLY,
+    allowNull: true,
+  },
+  opname_date: {type: DataTypes.DATEONLY,
+    allowNull: true,
+  },  
+  system_stock: {
+    type: DataTypes.INTEGER,
+    allowNull: false
+  },
+  physical_stock: DataTypes.INTEGER,
+  expired_stock: DataTypes.INTEGER,
+  damaged_stock: DataTypes.INTEGER,
+  difference: {
+    type: DataTypes.INTEGER,
+    allowNull: true,
+    set() {
+      if (this.physical_stock !== null && this.system_stock !== null) {
+        this.setDataValue('difference', this.system_stock - this.physical_stock);
+      }
     },
-    physical_stock: { 
-        type: DataTypes.INTEGER, 
-        allowNull: false 
-    },
-    difference: { 
-        type: DataTypes.INTEGER, 
-        allowNull: false 
-    },
-    expired_stock: { 
-        type: DataTypes.INTEGER, 
-        allowNull: false 
-    },
-    damaged_stock: { 
-        type: DataTypes.INTEGER, 
-        allowNull: false 
-    },
-    opname_date: { 
-        type: DataTypes.DATE, 
-        allowNull: false, 
-        defaultValue: Sequelize.NOW 
-    },
-    created_at: DataTypes.DATE,
-    updated_at: DataTypes.DATE,
+  },
+  status: {
+    type: DataTypes.ENUM('scheduled', 'submitted', 'adjusted'),
+    defaultValue: 'scheduled'
+  },
+  notes: DataTypes.STRING,
+  edit_requested: {
+    type: DataTypes.BOOLEAN,
+    defaultValue: false
+  },
 }, { 
-    freezeTableName: true 
+    freezeTableName: true,
+    paranoid: false
 });
 
 export default Opname;
